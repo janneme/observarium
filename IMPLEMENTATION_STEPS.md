@@ -17,7 +17,7 @@ files, their licences, download URLs and any known quirks.
 
 ---
 
-### Step 2: Project skeleton
+### Step 2: Project skeleton ✅
 
 **Deliverable:** Repository with directory layout, root `Makefile` skeleton,
 `README.md` and `IMPLEMENTATION_STEPS.md` committed.

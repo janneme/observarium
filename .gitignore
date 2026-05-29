@@ -1,0 +1,29 @@
+# Raw downloaded catalogues and uncompressed processed data are large and
+# reproducible — never commit them.
+data_prep/sources/
+data_prep/output/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.ruff_cache/
+.mypy_cache/
+
+# Node / client build
+client/node_modules/
+client/dist/
+client/.svelte-kit/
+
+# Terraform state (local backend — keep tfstate out of source control)
+infra/.terraform/
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/.terraform.lock.hcl
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/settings.json

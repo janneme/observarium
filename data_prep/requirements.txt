@@ -1,0 +1,3 @@
+# Data preparation dependencies.
+# Pin versions before the first production run.
+skyfield>=1.49
