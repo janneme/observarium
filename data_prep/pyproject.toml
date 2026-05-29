@@ -1,0 +1,38 @@
+[project]
+name = "observarium-data-prep"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "skyfield>=1.49",
+    "astroquery>=0.4.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.9",
+    "pylint>=3.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Adds data_prep/ itself to sys.path so tests can import stars, config, etc.
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "S", "B"]
+ignore = [
+    "S310",  # urlopen with validated HTTPS URL — not user-supplied input
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # assert is idiomatic in pytest
+
+[tool.pylint.main]
+disable = [
+    "missing-module-docstring",
+    "too-few-public-methods",  # acceptable for single-responsibility pipeline classes
+]
