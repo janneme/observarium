@@ -1,6 +1,6 @@
 # 1. About
 
-Observarium is a clent-server web application for amateur astronomers intended to
+Observarium is a client-server web application for amateur astronomers intended to
 be used primarily from a mobile phone. It helps to:
 
 - Identify interesting objects on the sky
@@ -42,14 +42,14 @@ For each object (whenever relevant and known) we store:
 4. Type (spiral galaxy, elliptical galaxy, open cluster, globular cluster,
    planetary nebula, reflection nebula, emission nebula, dark nebula, variable
    star, double star)
-5. Coordinates (RA/Dec) and holding contellation.
+5. Coordinates (RA/Dec) and containing constellation.
 6. Apparent magnitude
 7. Size (either radius or width x height)
 8. Orientation (for non-circular objects)
 9. Data specific for individual objects:
     9a. Apparent magnitude range for variable stars
     9b. Central star magnitude for planetary nebulae
-    9c. Star classificastion using the Harvard spectral system
+    9c. Star classification using the Harvard spectral system
 10. Images of the most interesting objects in resolution up to 400x400 and medium
     JPG quality (like 70%) to save space.
 11. Short text information highlighting specifics of this object (like
@@ -59,34 +59,35 @@ For each object (whenever relevant and known) we store:
 ## 2.2 User Interface
 
 a. The app is intended to be used primarily during nightly observations, so the
-UI must not break eye accomodation to the darkness. But sometimes the app is
+UI must not break eye accommodation to the darkness. But sometimes the app is
 used also in daily light. Therefore the app supports two color schemes:
 
 - Daily (colourful)
 - Nightly - only black, red and blue allowed (NO green). For content it uses
   mostly red as it has better readability than blue in low screen brightness.
 
-b. The app is taking the time and geographical location into account. It does not
-work with compass and gyroscope data, device orientation is ignored.
+b. The app takes the time and geographical location into account. Location is
+obtained automatically via the browser's geolocation API (GPS). The app does
+not work with compass and gyroscope data; device orientation is ignored.
 
 c. The application always starts in a full screen mode and disables zooming and
 scrolling (allowed only in some screens, e. g. "Object Details").
 
-d. Because of the nigtly mode the app implements its own on-screen keyboard. It
+d. Because of the nightly mode the app implements its own on-screen keyboard. It
 supports two layouts - Czech and English.
 
 e. For any delete operation there must be a confirmation dialog.
 
 f. Whenever the app is about to contact the server (object data or observation data
-synchronization) and the app does not have valid token, the user is asked to
-enter the password.
+synchronization) and the app does not have a valid token, the user is asked to
+enter their username and password.
 
 g. Before starting of any quiz the user is asked to select between global/local
 quiz (local quiz works only with objects near the center of current view in the
 Main screen) and quiz difficulty (easy/medium/hard) - the higher
 difficulty the less bright objects are included in the quiz. There is no
-score of a quiz - instead the quiz runs till it seems that the users answers
-all the questions correctly. After each incorrect answer in the quiz the
+score of a quiz — instead the quiz runs until the user has answered every
+question in the quiz correctly at least once. After each incorrect answer in the quiz the
 correct answer is shown.
 
 ## 2.3 Storage
@@ -99,7 +100,7 @@ Both object data and observation data are stored in the browser IndexedDB.
 
 ### 3.1.1 Client
 
-A ligthweight Svelte (with Vite) application with JavaScript (no
+A lightweight Svelte (with Vite) application with JavaScript (no
 TypeScript) built as a single page app. Object data are not part of the
 app built - this data should be fetched from the server and stored in
 the browser IndexedDB (including object images).
@@ -134,8 +135,8 @@ components:
 
 ### 3.2.1 Lambda
 
-A lambda exposing the server API without API Gateway. The lambda should cover
-the following operation:
+A Lambda exposed via a Lambda Function URL (no API Gateway). The Lambda covers
+the following operations:
 
 - user login (generates a JWT to be used by other API calls)
 - read objects (a big JSON transfered compressed)
@@ -157,14 +158,14 @@ S3 for storing
 
 Used for user management. The client app still can be used without authentication.
 The authentication is only needed for syncing the data (reading object data,
-reading/writing user observations). AWS Cognito is used only as a backend -
-user fills in the password in the application when requested).
+reading/writing user observations). AWS Cognito is used only as a backend —
+the user fills in their username and password in the application when requested.
 
 ### 3.2.4 IAM Role
 
 IAM role for the lambda function.
 
-### 3.2.4 CloudWatch
+### 3.2.5 CloudWatch
 
 A named log group for the lambda function.
 
@@ -172,9 +173,10 @@ A named log group for the lambda function.
 
 ## 4.1 Top Bar
 
-The top bar is present on all screns and contains:
+The top bar is present on all screens and contains:
 
-- Date and time (the time is editable - we can change it to see the sky in different time).
+- Date and time (editable — tapping opens a custom date-time picker styled for
+  the current color scheme, allowing the sky to be viewed at a different time).
 - FOV (only on the Main Screen or Finder View)
 - In case some object is selected, display:
     - Icon representing object type
@@ -215,13 +217,13 @@ The menu has the following items (each one represented by a suitable SVG icon):
 
 The Welcome screen is shown when the IndexedDB is not found. It contains:
 
-- Welcomes message
+- Welcome message
 - Application name including app version date
 - Information about application
-- A password input
+- A username and password input
 - A button "Load Application Data".
 
-After filling the password and pressing the button the app laods the data
+After filling in the credentials and pressing the button the app loads the data
 in the following order:
 
 a. Object data
@@ -234,7 +236,7 @@ currently loading and the size of the data transferred.
 ## 5.2 Main Screen
 
 The main screen displays a rendered sky fragment in Zenith corresponding to
-DEFAULT_FOV (30 degress by default) and current date and time. In the default
+DEFAULT_FOV (30 degrees by default) and current date and time. In the default
 setup the following elements are rendered:
 
 - Stars and planets up to magnitude NORMAL_VIEW_MAX_STAR_MAGNITUDE (5 by default)
@@ -252,10 +254,10 @@ The following input operations are supported:
 - Zooming by two fingers gesture. The zoom range is
   limited by NORMAL_VIEW_MIN_FOV (2 degrees by default) and NORMAL_VIEW_MAX_FOV
   (60 degrees by default).
-- Zapping on an object to select/deselect it. The operation is accepted only
-  if the there are no near objects (with respect to current zoom level) and therefore
-  the target object is well identified and there is low riks of confusion with
-  another object.
+- Tapping on an object to select/deselect it. The operation is accepted only
+  if there are no nearby objects (with respect to the current zoom level) and therefore
+  the target object is well identified and there is low risk of confusion with
+  another object. If multiple nearby objects cause ambiguity, the tap is silently rejected with no feedback.
 
 The limiting magnitudes are changed intelligently
 according to the FOV. Neither the swipe nor the zoom should allow the user
@@ -266,7 +268,7 @@ it is not visible from Europe).
 
 The finder view is displayed in a round view and FOV FINDER_FOV degrees (7.5 by
 default, corresponding to an 8x50 finder scope). In the finder view we
-can only swipe, zoom is not allowed. Constellation lines and boundaris are not
+can only swipe, zoom is not allowed. Constellation lines and boundaries are not
 shown irrespective of setup.
 
 Below (or next to in a landscape mode) the finder view there are the following buttons:
@@ -275,6 +277,23 @@ Below (or next to in a landscape mode) the finder view there are the following b
 - Search object
 - Guide to find the object
 - Record guide to find object
+
+### 5.3.1 Guide to Find the Object
+
+The button is only rendered if we have previously searched for an object
+for which at least one finding path is defined. If we click the button and
+more finding paths are defined the user is first asked to select from
+the possible starting points (with an additional option "Cancel"). After the
+user selects the start point (or it is clear as there is just one finding
+path) the scope view is moved to the start point and the vector of the
+first step (optionally with the multiplier if it is not 1) is drawn in the finder view.
+
+Near the finder view these icon buttons are rendered:
+- Next step (if there is the next step)
+- Previous step (if there is the previous step)
+- Cancel (returns to the previous context)
+
+When we reach the final step, the position of the target object is marked.
 
 ## 5.4 Search Object
 
@@ -287,18 +306,18 @@ The Search Object screen consists of:
 - Top search results (no paging)
 
 When we start to type, it instantly displays (and refreshes) the most relevant results.
-The search should be accross object names and catalogue numbers.
-The search result have the form "OBJECT_NAME (CONSTELLATION_NAME)". If
+The search should be across object names and catalogue numbers.
+Search results have the form "OBJECT_NAME (CONSTELLATION_NAME)". If
 the match is by catalogue number, it should display CATALOGUE_NUMBER instead
 of OBJECT_NAME. In case of search by catalogue number we need not to provide
-catalgue name (e. g. "NGC 6543" is found even if we search for "6543").
+catalogue name (e. g. "NGC 6543" is found even if we search for "6543").
 
 For each search result there are the following icons:
 - "Accept"
 - "Details"
 - "Finding Paths"
 
-If we click on "Details", we are send to "Object Details" screen.
+If we click on "Details", we are sent to "Object Details" screen.
 If we click on "Accept" we are returned to the previous context and the view
 is moved to bring the searched object to the center. "Finding Paths" lead to
 the "Object Finding Paths" screen.
@@ -334,10 +353,10 @@ must be prevented and a warning message should be displayed.
 
 ## 5.7 Finder Scope Quiz
 
-At hte beiginning the quiz select bright named stars. In each step it
+At the beginning the quiz selects bright named stars. In each step it
 displays star name and renders 4 finder views in a 2x2 matrix, each one
-having a bright star in the center (onde of those selected). The user
-has select the finder view that corresponds to the star name. The rotation
+having a bright star in the center (one of those selected). The user
+must select the finder view that corresponds to the star name. The rotation
 of the view rendered in the finder has to be changed randomly.
 
 Difficulty levels:
@@ -353,10 +372,10 @@ the difficulty level.
 
 In each step a star from the selected set is chosen and a square sky fragment
 is rendered with CONSTELLATION_QUIZ_FOV FOV (without constellation schemas,
-randomly changing rotatation) in such way that the target constellation
-schema is in the center. The selected star is highlighted and for options
-are displayed - each and having a star name and the parent constellating.
-The user is expected to chose the right combination. If user answers incorrectly,
+randomly changing rotation) in such way that the target constellation
+schema is in the center. The selected star is highlighted and four options
+are displayed — each having a star name and the parent constellation.
+The user is expected to choose the right combination. If the user answers incorrectly,
 along with showing the correct answer the constellation lines are shown.
 
 Difficulties:
@@ -381,13 +400,13 @@ Same as the Finder Scope quiz, but for deep sky objects.
 
 ### 5.9.2 Image
 
-Renders four deeps sky images in a 2x2 matrix and let use select the image
+Renders four deep sky images in a 2x2 matrix and lets the user select the image
 corresponding to the displayed name or catalogue number (here catalogue
 numbers are used only for objects without a nickname).
 
-### 5.9.2 Object types
+### 5.9.3 Object types
 
-Displays and object name and four possible object types.
+Displays an object name and four possible object types.
 
 ## 5.10 Find planet quiz
 
@@ -407,13 +426,13 @@ Difficulty levels:
 
 A Moon is rendered and a set of quiz objects is randomly selected. In each step
 a crater or a mare is highlighted, four possible names of the highlighted
-feature are displayed and the user is expected to select the right name. Io
+feature are displayed and the user is expected to select the right name. In
 global mode all objects are taken into account, in local mode only the objects
 near to the actual Moon terminator.
 
 ## 5.12 Object Finding Paths
 
-First let us define what is the "object finding path". It consist of:
+First let us define what is the "object finding path". It consists of:
 
 - a starting point (a bright star)
 - sequence of movements in the finder, each one consisting of a vector which has
@@ -424,7 +443,7 @@ First let us define what is the "object finding path". It consist of:
        and vector x multiplier cannot exceed 2x the FINDER_FOV.
 
 The start and end point is either a star or just a point in the sky represented
-by its coordinates (typically a well memorable point amount stars in the 8x50
+by its coordinates (typically a well memorable point among stars in the 8x50
 finder scope view)
 
 We can record more object finding paths for the same object that differ by the
@@ -438,7 +457,7 @@ The UI for the Screen consists of the following elements:
 a. A finder scope view
 b. Expandable list of finding paths already defined each one labeled as
 "STAR_NAME (CONSTELLATION_NAME)" (the starting point) with a "Delete" icon.
-Here only one path can be expanded at a time (exapnding one path
+Here only one path can be expanded at a time (expanding one path
 collapses the previously expanded path).
 c. "Add" icon to add a new path.
 
@@ -458,10 +477,13 @@ is drawn in the finder view as an arrow and it is labeled with the multiplier
 if the multiplier is not 1 (like "2x").
 
 For each step there are buttons:
-- Delete (if we delete a step all susbsequent steps are deleted too)
+- Delete (if we delete a step all subsequent steps are deleted too)
 - Edit start point (not for the first step)
 - Edit end point
 - Set multiplier
+
+For the last step we can define just the start point which will be then
+interpreted as the location of the searched object.
 
 If we enter editing of the start or end point, the vector and multiplier is
 removed from the finder view and we are allowed to select a point in the finder
@@ -469,7 +491,7 @@ by tapping. If we tap again, the position is just updated.
 The indicator of the selected position has two modes:
   a. object selected - the position is identified as an object
   b. just a position - there is no object bright enough (magnitude 7 at most)
-     the the position selected
+     at the position selected
 
 In the starting/end point selection mode
 we can also zoom the finder view by two fingers to allow for more precise
@@ -486,10 +508,10 @@ There is also a button "Add" below existing steps to add the next step.
 
 ## 5.13 Update object data
 
-The screen displays date of the last sycnhronization / check and a
-"Synchronize" button. Before fetching the data server is asked for a hash
-and that is compared with current data related hash to determine whether
-synchronzation is needed. If it is not needed your is informed. The check
+The screen displays date of the last synchronization / check and a
+"Synchronize" button. Before fetching the data the server is asked for a hash
+and that is compared with the current data hash to determine whether
+synchronization is needed. If it is not needed the user is informed. The check
 is done independently for object data and images. If the data are updated,
 the progress bar is displayed during the download like in the Welcome screen.
 
@@ -504,7 +526,7 @@ the button data are sent to the server and operation status is displayed.
 
 The screen consists of:
 
-- Aplication name and version date
+- Application name and version date
 - Short information about application
 - Object data size (separately per object data, images and user data)
 - Object statistics (number of stars, number of deep sky objects)
@@ -523,12 +545,12 @@ The screen consists of:
 - "Observed" icon button
 
 In case of Moon we want to see the moon image in the current phase.
-Information about phase % should displayed for moon and inner planets.
+Information about phase % should be displayed for Moon and inner planets.
 
 If we press "Observed" a new observation with current date and location will be
-created (if it does not exists yet) or the existing data for today's observation
+created (if it does not exist yet) or the existing data for today's observation
 are updated (there is always at most one observation record, typically with multiple
-observed objects, per date). A form consisting of the the following items is
+observed objects, per date). A form consisting of the following items is
 displayed:
 
 - Date (prefilled with current date and time, but we can override it; if we override the
@@ -537,7 +559,7 @@ displayed:
 - List of available telescopes, each with options (displayed as selectable
   exclusive icons):
     - Seen
-    - Unseen (we tried to to see the object in the instrument but we did not succeed)
+    - Unseen (we tried to see the object in the instrument but we did not succeed)
   If we select "Seen" for a telescope that needs an eyepiece, an optional selection
   of eyepiece is offered - here we select just one choice (the
   eyepiece that we used and it brought the best result among all eyepieces we tried).
