@@ -11,7 +11,8 @@ import argparse
 from collections.abc import Callable
 from pathlib import Path
 
-from config import VAR_MAX_MAG
+from config import NON_MESSIER_NUM, VAR_MAX_MAG
+from dso import DsoPipeline
 from stars import StarPipeline
 from variable_stars import VariableStarPipeline
 
@@ -76,6 +77,14 @@ def parse_args() -> argparse.Namespace:
         help="Skip variable-star enrichment when processing stars.",
     )
     parser.add_argument(
+        "--non-messier-num",
+        type=int,
+        default=NON_MESSIER_NUM,
+        metavar="INT",
+        dest="non_messier_num",
+        help="Number of brightest non-Messier DSOs to include (default: %(default)s).",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         default=False,
@@ -112,6 +121,14 @@ def main() -> None:
             _SOURCES_DIR, args.var_max_mag
         ).run(),
         "stars": _run_stars,
+        "dso": lambda: DsoPipeline(
+            _SOURCES_DIR,
+            _OUTPUT_DIR,
+            non_messier_num=args.non_messier_num,
+            debug=args.debug,
+        ).run(
+            object_id=args.object
+        ),
     }
     for target in targets:
         runner = runners.get(target)

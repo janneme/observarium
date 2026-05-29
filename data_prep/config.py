@@ -37,3 +37,24 @@ ATHYG_FULL_FILENAMES: tuple[str, str] = ("athyg_v33-1.csv.gz", "athyg_v33-2.csv.
 
 #: max_mag threshold above which the full catalogue is used instead of the m11 subset.
 ATHYG_FULL_MAG_THRESHOLD: float = 11.0
+
+# ---------------------------------------------------------------------------
+# Deep sky objects (OpenNGC)
+# ---------------------------------------------------------------------------
+
+#: OpenNGC main catalogue CSV.
+DSO_MAIN_URL: str = (
+    "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master"
+    "/database_files/NGC.csv"
+)
+DSO_MAIN_FILENAME: str = "openngc_ngc.csv"
+
+#: OpenNGC addendum CSV (non-NGC objects and updates).
+DSO_ADDENDUM_URL: str = (
+    "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master"
+    "/database_files/addendum.csv"
+)
+DSO_ADDENDUM_FILENAME: str = "openngc_addendum.csv"
+
+#: Number of brightest non-Messier DSOs to include.
+NON_MESSIER_NUM: int = 250
