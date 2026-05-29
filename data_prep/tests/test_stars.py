@@ -1,8 +1,20 @@
 """Unit tests for the star catalogue pipeline (stars.py)."""
 
+from pathlib import Path
+
 import pytest
 
-from stars import _build_star, _is_variable, spectral_colour
+from stars import (
+    StarPipeline,
+    _auto_note,
+    _bayer_letter,
+    _build_star,
+    _is_variable,
+    _load_notes,
+    _parse_lum_class,
+    _parse_spec_class,
+    spectral_colour,
+)
 
 # ---------------------------------------------------------------------------
 # spectral_colour
@@ -201,3 +213,215 @@ class TestBuildStar:
         star = _build_star(_SIRIUS_ROW)
         assert star is not None
         assert star["dist"] == pytest.approx(2.637)
+
+
+# ---------------------------------------------------------------------------
+# _load_notes
+# ---------------------------------------------------------------------------
+
+
+class TestLoadNotes:
+    def test_returns_empty_dict_when_file_absent(self, tmp_path: Path):
+        assert _load_notes(tmp_path / "no_such_file.csv") == {}
+
+    def test_loads_hip_note_pairs(self, tmp_path: Path):
+        csv_file = tmp_path / "notes_stars.csv"
+        csv_file.write_text("hip,note\n32349,Brightest star\n27989,Red supergiant\n")
+        notes = _load_notes(csv_file)
+        assert notes == {32349: "Brightest star", 27989: "Red supergiant"}
+
+    def test_skips_rows_with_empty_note(self, tmp_path: Path):
+        csv_file = tmp_path / "notes_stars.csv"
+        csv_file.write_text("hip,note\n32349,\n27989,Red supergiant\n")
+        notes = _load_notes(csv_file)
+        assert 32349 not in notes
+        assert notes[27989] == "Red supergiant"
+
+    def test_skips_rows_with_invalid_hip(self, tmp_path: Path):
+        csv_file = tmp_path / "notes_stars.csv"
+        csv_file.write_text("hip,note\nnot_a_number,Some note\n32349,Valid\n")
+        notes = _load_notes(csv_file)
+        assert len(notes) == 1
+        assert notes[32349] == "Valid"
+
+
+# ---------------------------------------------------------------------------
+# _bayer_letter
+# ---------------------------------------------------------------------------
+
+
+class TestBayerLetter:
+    def test_standard_three_letter(self):
+        assert _bayer_letter("Alp") == "α"
+        assert _bayer_letter("Del") == "δ"
+        assert _bayer_letter("Ome") == "ω"
+
+    def test_two_letter_abbreviations(self):
+        assert _bayer_letter("Mu") == "μ"
+        assert _bayer_letter("Nu") == "ν"
+        assert _bayer_letter("Pi") == "π"
+        assert _bayer_letter("Xi") == "ξ"
+
+    def test_numbered_bayer_uses_superscript(self):
+        assert _bayer_letter("Kap-1") == "κ¹"
+        assert _bayer_letter("Bet-2") == "β²"
+
+    def test_empty_returns_none(self):
+        assert _bayer_letter("") is None
+
+    def test_unrecognised_returns_none(self):
+        assert _bayer_letter("Xyz") is None
+
+
+# ---------------------------------------------------------------------------
+# _parse_spec_class
+# ---------------------------------------------------------------------------
+
+
+class TestParseSpecClass:
+    def test_b_type(self):
+        assert _parse_spec_class("B7III") == "hot blue-white"
+
+    def test_m_type(self):
+        assert _parse_spec_class("M2IA") == "red"
+
+    def test_k_type_no_lum_class(self):
+        assert _parse_spec_class("K5") == "orange"
+
+    def test_a_type_main_sequence(self):
+        assert _parse_spec_class("A0V") == "white"
+
+    def test_wolf_rayet(self):
+        assert _parse_spec_class("WC7") == "Wolf-Rayet"
+
+    def test_empty_returns_none(self):
+        assert _parse_spec_class("") is None
+
+    def test_unrecognised_returns_none(self):
+        assert _parse_spec_class("XYZ") is None
+
+
+# ---------------------------------------------------------------------------
+# _parse_lum_class
+# ---------------------------------------------------------------------------
+
+
+class TestParseLumClass:
+    def test_supergiant_ia(self):
+        assert _parse_lum_class("M2IA") == "luminous supergiant"
+
+    def test_supergiant_ib(self):
+        assert _parse_lum_class("F5IB") == "supergiant"
+
+    def test_giant(self):
+        assert _parse_lum_class("B7III") == "giant"
+
+    def test_main_sequence(self):
+        assert _parse_lum_class("A0V") == "main-sequence star"
+
+    def test_subgiant(self):
+        assert _parse_lum_class("G2IV") == "subgiant"
+
+    def test_composite_spectral_type_uses_first_class(self):
+        # F5IB-G1IB: first component is "IB" → supergiant
+        assert _parse_lum_class("F5IB-G1IB") == "supergiant"
+
+    def test_no_lum_class_returns_none(self):
+        assert _parse_lum_class("K5") is None
+
+    def test_empty_returns_none(self):
+        assert _parse_lum_class("") is None
+
+
+# ---------------------------------------------------------------------------
+# _auto_note
+# ---------------------------------------------------------------------------
+
+
+class TestAutoNote:
+    def test_supergiant_generates_note(self):
+        note = _auto_note("K2Ib", -1.4, 200.0)
+        assert note is not None
+        assert "supergiant" in note.lower()
+
+    def test_supergiant_includes_luminosity(self):
+        # absmag=-1.4 → ~200 L_sun ≥ 50 threshold
+        note = _auto_note("K2Ib", -1.4, 200.0)
+        assert note is not None
+        assert "\u00d7 the Sun's luminosity" in note
+
+    def test_luminous_supergiant(self):
+        note = _auto_note("M2IA", -5.5, 200.0)
+        assert note is not None
+        assert "luminous supergiant" in note.lower()
+        assert "\u00d7 the Sun's luminosity" in note
+
+    def test_o_type_generates_note(self):
+        note = _auto_note("O9V", -4.0, 500.0)
+        assert note is not None
+        assert "extremely hot blue" in note.lower()
+
+    def test_nearby_star_generates_note(self):
+        # dist=2.0 pc → 6.5 ly < 33 ly threshold
+        note = _auto_note("K5V", 6.0, 2.0)
+        assert note is not None
+        assert "light-years from Earth" in note
+
+    def test_regular_giant_returns_none(self):
+        assert _auto_note("K2III", 0.48, 200.0) is None
+
+    def test_main_sequence_far_returns_none(self):
+        assert _auto_note("G5V", 5.0, 50.0) is None
+
+    def test_supergiant_distant_omits_distance(self):
+        # Supergiant far away → no distance note
+        note = _auto_note("F5Ib", -4.5, 200.0)
+        assert note is not None
+        assert "light-years" not in note
+
+    def test_low_luminosity_supergiant_omits_lsun(self):
+        # absmag=2.0 → ~6 L_sun < 50 threshold; still generates note as supergiant
+        note = _auto_note("M2Ia", 2.0, 200.0)
+        assert note is not None
+        assert "\u00d7 the Sun's luminosity" not in note
+
+    def test_first_letter_capitalised(self):
+        note = _auto_note("M2IA", -5.5, 500.0)
+        assert note is not None
+        assert note[0].isupper()
+
+    def test_empty_spect_returns_none(self):
+        assert _auto_note("", -2.0, 100.0) is None
+
+
+# ---------------------------------------------------------------------------
+# StarPipeline._cap_luminosity_notes
+# ---------------------------------------------------------------------------
+
+
+def _lsun_star(lsun: int) -> dict:
+    phrase = f"~{lsun:,}\u00d7 the Sun's luminosity"
+    return {"note": f"Type desc; {phrase}", "_lsun": float(lsun), "_lsun_phrase": phrase}
+
+
+class TestCapLuminosityNotes:
+    def test_top_five_keep_luminosity_phrase(self):
+        stars = [_lsun_star(lsun) for lsun in [100_000, 50_000, 20_000, 10_000, 5_000]]
+        stars.append({"note": "No lsun note"})
+        StarPipeline._cap_luminosity_notes(stars)
+        for s in stars[:5]:
+            assert "\u00d7 the Sun's luminosity" in s["note"]
+
+    def test_sixth_loses_luminosity_phrase(self):
+        stars = [_lsun_star(lsun) for lsun in [100_000, 50_000, 20_000, 10_000, 5_000, 1_000]]
+        StarPipeline._cap_luminosity_notes(stars)
+        without = [s for s in stars if "\u00d7 the Sun's luminosity" not in s["note"]]
+        assert len(without) == 1
+        assert "Type desc" in without[0]["note"]
+
+    def test_temp_fields_removed_after_cap(self):
+        stars = [_lsun_star(lsun) for lsun in [100_000, 50_000, 20_000, 10_000, 5_000, 1_000]]
+        StarPipeline._cap_luminosity_notes(stars)
+        for s in stars:
+            assert "_lsun" not in s
+            assert "_lsun_phrase" not in s
