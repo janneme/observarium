@@ -76,6 +76,17 @@ scrolling (allowed only in some screens, e. g. "Object Details").
 d. Because of the nightly mode the app implements its own on-screen keyboard. It
 supports two layouts - Czech and English.
 
+   The keyboard is implemented using on-screen buttons and a custom text renderer
+   (a styled `<div>`) rather than a real `<input>` or `<textarea>`. Form values are
+   passed via `<input type="hidden">` elements. Since no focusable input is visible,
+   Android Chrome does not trigger the system keyboard. Known limitations:
+   - The cursor can only be moved using on-screen arrow buttons, not by tapping into text.
+   - Clipboard paste is not supported.
+   - Native autocorrect and autocomplete are disabled (intentional for astronomical names).
+   - Multi-line inputs (observation notes) scroll vertically within a fixed-height area.
+   Any UI component that renders a real `<input>` internally (e.g. date pickers) must
+   follow the same pattern to prevent the system keyboard from flashing on focus.
+
 e. For any delete operation there must be a confirmation dialog.
 
 f. Whenever the app is about to contact the server (object data or observation data
@@ -88,7 +99,17 @@ Main screen) and quiz difficulty (easy/medium/hard) - the higher
 difficulty the less bright objects are included in the quiz. There is no
 score of a quiz — instead the quiz runs until the user has answered every
 question in the quiz correctly at least once. After each incorrect answer in the quiz the
-correct answer is shown.
+correct answer is shown. A "Back" button is always available to exit the quiz at any time.
+
+   A progress indicator is displayed throughout the quiz. It reflects how close
+   the user is to completing the quiz: a correct answer increases it, an incorrect
+   answer decreases it (it cannot drop below zero). The indicator is calculated as
+   a weighted ratio of mastered questions to the total question pool.
+
+   Quiz state is saved to local storage. If the user exits and later starts a quiz
+   of the same type and difficulty, they are presented with the usual global/local
+   selection screen plus an additional option: "Continue previous quiz". If the user
+   does not choose to continue, the saved state is discarded and a new quiz begins.
 
 ## 2.3 Storage
 
@@ -139,8 +160,8 @@ A Lambda exposed via a Lambda Function URL (no API Gateway). The Lambda covers
 the following operations:
 
 - user login (generates a JWT to be used by other API calls)
-- read objects (a big JSON transfered compressed)
-- read images (fetches all images as one binary content)
+- read objects (a big JSON transferred as a ZIP file with DEFLATE compression)
+- read images (fetches all images as one ZIP file)
 - read user observation (JSON with all observations)
 - add/modify/delete observations
 
@@ -150,9 +171,10 @@ S3 for storing
 
 - Object data (JSON)
 - User observation data (JSON per each user)
-- Image data (all images in one binary file - we don't need incremental fetch
-  of images; the client will fetch all images in one batch, split it and
-  store individually in the IndexedDB)
+- Image data (all images bundled in one ZIP file with STORE method (no re-compression,
+  since JPEG is already compressed) - we don't need incremental fetch
+  of images; the client will fetch all images in one batch, unzip them using JSZip
+  and store each image individually in the IndexedDB)
 
 ### 3.2.3 AWS Cognito
 
@@ -199,6 +221,7 @@ The menu has the following items (each one represented by a suitable SVG icon):
 - Toggle deep sky objects
 - Toggle horizon boundary
 - Toggle normal view / finder view
+- Toggle FOV circle (on by default; shows the finder FOV footprint on the Main Screen)
 - Search
 - Observations
 - Telescopes
@@ -208,7 +231,7 @@ The menu has the following items (each one represented by a suitable SVG icon):
 - Find planet quiz
 - Moon quiz
 - Update object data
-- Synchronize observation data
+- Synchronize observation data (when unsynchronized changes exist, shows the count as a badge)
 - About
 
 # 5. Screens
@@ -257,7 +280,12 @@ The following input operations are supported:
 - Tapping on an object to select/deselect it. The operation is accepted only
   if there are no nearby objects (with respect to the current zoom level) and therefore
   the target object is well identified and there is low risk of confusion with
-  another object. If multiple nearby objects cause ambiguity, the tap is silently rejected with no feedback.
+  another object. If multiple nearby objects cause ambiguity, all ambiguous candidates
+  are briefly highlighted with a ring animation so the user understands they need to
+  zoom in further before selecting.
+- When the FOV circle toggle is on (see Menu), a dashed circle is drawn on the Main
+  Screen representing the footprint of the Finder FOV (FINDER_FOV degrees). This helps
+  the user build spatial intuition between the two views.
 
 The limiting magnitudes are changed intelligently
 according to the FOV. Neither the swipe nor the zoom should allow the user
@@ -295,6 +323,12 @@ Near the finder view these icon buttons are rendered:
 
 When we reach the final step, the position of the target object is marked.
 
+### 5.3.2 Record Guide to Find the Object
+
+The button is always rendered (regardless of whether a finding path already exists).
+Clicking it opens the "Object Finding Paths" screen (5.12) in the context of the
+currently searched object.
+
 ## 5.4 Search Object
 
 The Search Object screen consists of:
@@ -327,15 +361,15 @@ the "Object Finding Paths" screen.
 The screen displays expandable list of observations
 by date (sorted in descending order). Expanding the date we can see
 observation details and list of observed objects with all the details collected.
-For every item there is an "Edit" icon and "Delete" Icon. If we click on
-"Edit", the text information becomes editable and buttons "Accept" and "Cancel" appear.
+For every item there is an "Edit" icon and "Delete" icon. If we click on
+"Edit", the text field next to the Edit button becomes editable and buttons "Accept" and "Cancel" appear.
 
 ## 5.6 Telescopes
 
 Contains a list of telescopes, for each of them storing:
 
 - Name
-- Focal length in cm
+- Focal length in mm
 - Diameter in inches
 - Whether it needs eyepiece (typically unchecked for binoculars)
 
@@ -450,7 +484,9 @@ We can record more object finding paths for the same object that differ by the
 starting point, but only one per a starting point.
 
 The screen always has the context of the object for which we define the
-finding path (it is not entered in this screen).
+finding path (it is not entered in this screen). The screen is opened from:
+- The "Finding Paths" icon in search results (5.4)
+- The "Record guide to find object" button in the Finder View (5.3.2)
 
 The UI for the Screen consists of the following elements:
 
@@ -477,7 +513,9 @@ is drawn in the finder view as an arrow and it is labeled with the multiplier
 if the multiplier is not 1 (like "2x").
 
 For each step there are buttons:
-- Delete (if we delete a step all subsequent steps are deleted too)
+- Delete — triggers a confirmation dialog stating which steps will be removed
+  (e.g. "This will delete Step 2 and all subsequent steps. Continue?").
+  All subsequent steps are deleted along with the selected step.
 - Edit start point (not for the first step)
 - Edit end point
 - Set multiplier
@@ -541,8 +579,10 @@ The screen consists of:
 
 - Object image (if available)
 - All known object details
+- Rise, transit and set times for the current date and location
 - "Back" icon button
-- "Observed" icon button
+- "Observed" icon button — visually distinct (filled/checked state) if the object
+  is already recorded in today's observation
 
 In case of Moon we want to see the moon image in the current phase.
 Information about phase % should be displayed for Moon and inner planets.
@@ -555,7 +595,9 @@ displayed:
 
 - Date (prefilled with current date and time, but we can override it; if we override the
   date, the data are saved to observation of the overridden date)
-- Location (prefilled with current location, but we can override it)
+- Location (prefilled with the current GPS coordinates, with an option to clear it;
+  clearing is appropriate when the observation form is filled in retrospectively
+  and the current GPS position is no longer relevant)
 - List of available telescopes, each with options (displayed as selectable
   exclusive icons):
     - Seen
