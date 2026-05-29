@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from config import NON_MESSIER_NUM, VAR_MAX_MAG
+from constellations import ConstellationPipeline
 from dso import DsoPipeline
 from stars import StarPipeline
 from variable_stars import VariableStarPipeline
@@ -129,6 +130,9 @@ def main() -> None:
         ).run(
             object_id=args.object
         ),
+        "constellations": lambda: ConstellationPipeline(
+            _SOURCES_DIR, _OUTPUT_DIR, debug=args.debug
+        ).run(),
     }
     for target in targets:
         runner = runners.get(target)

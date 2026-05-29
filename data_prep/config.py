@@ -58,3 +58,14 @@ DSO_ADDENDUM_FILENAME: str = "openngc_addendum.csv"
 
 #: Number of brightest non-Messier DSOs to include.
 NON_MESSIER_NUM: int = 250
+
+# ---------------------------------------------------------------------------
+# Constellations (Stellarium modern IAU skyculture)
+# ---------------------------------------------------------------------------
+
+#: Stellarium modern IAU skyculture index with lines, names and B1875 boundaries.
+CONSTELLATIONS_IAU_URL: str = (
+    "https://raw.githubusercontent.com/Stellarium/stellarium/master"
+    "/skycultures/modern_iau/index.json"
+)
+CONSTELLATIONS_IAU_FILENAME: str = "stellarium_modern_iau_index.json"

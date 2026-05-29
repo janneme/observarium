@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "skyfield>=1.49",
     "astroquery>=0.4.6",
+    "astropy>=6.1",
 ]
 
 [project.optional-dependencies]
