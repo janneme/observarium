@@ -114,6 +114,8 @@ correct answer is shown. A "Back" button is always available to exit the quiz at
 ## 2.3 Storage
 
 Both object data and observation data are stored in the browser IndexedDB.
+The Cognito access token (obtained at login) is stored in sessionStorage and
+used for all subsequent API calls within the session.
 
 # 3. Architecture
 
@@ -128,9 +130,13 @@ the browser IndexedDB (including object images).
 
 ### 3.1.2 Server
 
-The server part is a Python lambda function (for AWS) with an option to run it
-locally using a lightweight wrapper (not something like AWS SAM). This API
-enables to read object data and images and read/write observation data.
+The server part is a Python Lambda function (for AWS) with an option to run it
+locally using a lightweight wrapper (not something like AWS SAM). The Lambda
+authenticates users against Cognito (returning the Cognito access token to the
+client), verifies the Cognito JWT on all subsequent calls using Cognito's JWKS
+endpoint, and returns pre-signed S3 URLs for large data fetches (object data,
+images). Observation data is read/written directly by the Lambda. The Lambda
+Function URL has CORS configured to allow requests from the client origin.
 
 ### 3.1.3 Data Preparation App
 
@@ -140,14 +146,24 @@ magnitude restrictions etc.) and converts it to a compact single
 JSON and properly sized images. There is a command line interface supporting
 various options to sync only part of the data (e. g. only stars, filter a
 specific object for a test run). The app must incrementally update the data
-already downloaded.
+already downloaded. Data is stored locally in uncompressed form to support
+incremental updates.
+
+`make deploy` detects which local data files have changed since the last
+deployment, compresses them into the appropriate ZIP files, and uploads them
+to S3. This covers both the object data ZIP (DEFLATE) and the image ZIP (STORE).
 
 ### 3.1.4 Terraform Deployment
 
-We will use terraform with a local tfstate to deploy to AWS. A make task
-`make deploy` should be supported from the root that performs a deployment
-with `AWS_PROFILE=personal`. `make deploy` should be used also to deploy
-updates in the lambda code (no CICD in scope).
+We will use Terraform with a local tfstate to deploy to AWS. A make task
+`make deploy` should be supported from the root with `AWS_PROFILE=personal`.
+It performs the following in order:
+1. Applies any Terraform infrastructure changes.
+2. Deploys updated Lambda code.
+3. Detects changed data files, re-zips them, and uploads to S3.
+4. Deploys the built Svelte client to the S3 static hosting bucket.
+
+No CI/CD in scope.
 
 ## 3.2 AWS Cloud Components
 
@@ -156,32 +172,41 @@ components:
 
 ### 3.2.1 Lambda
 
-A Lambda exposed via a Lambda Function URL (no API Gateway). The Lambda covers
-the following operations:
+A Lambda exposed via a Lambda Function URL (no API Gateway). CORS is configured
+on the Function URL to allow requests from the client's S3 static hosting origin.
+The Lambda covers the following operations:
 
-- user login (generates a JWT to be used by other API calls)
-- read objects (a big JSON transferred as a ZIP file with DEFLATE compression)
-- read images (fetches all images as one ZIP file)
-- read user observation (JSON with all observations)
-- add/modify/delete observations
+- user login: calls Cognito `InitiateAuth` with the supplied username and password
+  and returns the Cognito access token to the client
+- read objects: verifies the Cognito JWT, returns a short-lived pre-signed S3 URL
+  for the object data ZIP
+- read images: verifies the Cognito JWT, returns a short-lived pre-signed S3 URL
+  for the image ZIP
+- read user observations: verifies the Cognito JWT, reads and returns the user's
+  observation JSON from S3
+- add/modify/delete observations: verifies the Cognito JWT, updates the user's
+  observation JSON in S3
 
 ### 3.2.2 S3
 
-S3 for storing
+Two S3 buckets:
 
-- Object data (JSON)
-- User observation data (JSON per each user)
-- Image data (all images bundled in one ZIP file with STORE method (no re-compression,
-  since JPEG is already compressed) - we don't need incremental fetch
-  of images; the client will fetch all images in one batch, unzip them using JSZip
-  and store each image individually in the IndexedDB)
+**Data bucket** (private, accessed only via Lambda pre-signed URLs):
+- Object data ZIP (JSON compressed with DEFLATE, produced by `make deploy`)
+- Image ZIP (JPEG files bundled with STORE method, produced by `make deploy`)
+- User observation data (one JSON file per user)
+
+**Client bucket** (S3 static website hosting, public read):
+- Built Svelte SPA (HTML, JS, CSS assets)
 
 ### 3.2.3 AWS Cognito
 
-Used for user management. The client app still can be used without authentication.
-The authentication is only needed for syncing the data (reading object data,
-reading/writing user observations). AWS Cognito is used only as a backend —
-the user fills in their username and password in the application when requested.
+Used for user management. The client app can still be used without authentication.
+Authentication is only needed for syncing data (reading object data,
+reading/writing user observations). AWS Cognito is used only as an auth backend —
+the user fills in their username and password in the application, the Lambda calls
+Cognito's `InitiateAuth` API, and the returned Cognito access token is passed back
+to the client and stored in sessionStorage for the duration of the session.
 
 ### 3.2.4 IAM Role
 
