@@ -9,24 +9,11 @@ here; this document adds technical detail not present there.
 
 ## Phase 0 — Research & Project Skeleton
 
-### Step 1: Research astronomical data sources
+### Step 1: Research astronomical data sources ✅
 
-**Deliverable:** A short `data/SOURCES.md` note listing the chosen catalogue
+**Deliverable:** `data/SOURCES.md` — see that file for the confirmed catalogue
 files, their licences, download URLs and any known quirks.
 
-Investigate and confirm the following sources:
-
-| Data | Recommended source | Notes |
-|---|---|---|
-| Stars | [HYG Database v3](https://github.com/astronexus/HYG-Database) | Hipparcos + Yale + Gliese merged; has mag, spectral type, proper name, RA/Dec |
-| DSOs (Messier + NGC/IC) | [OpenNGC](https://github.com/mattiaverga/OpenNGC) | CSV, permissive licence; includes type, size, mag, coordinates |
-| Constellation lines | [Stellarium skycultures](https://github.com/Stellarium/stellarium/tree/master/skycultures/western) | JSON-friendly format; cross-reference star IDs to HYG HIP numbers |
-| Constellation boundaries | [IAU constellation boundaries](https://www.iau.org/public/themes/constellations/) | Delimited text, epoch 1875 — needs precession to J2000 |
-| Double stars | [Washington Double Star Catalog (WDS)](https://www.usno.navy.mil/USNO/astrometry/optical-IR-prod/wds/WDS) | Large; filter by separation, magnitude, colour contrast |
-| Solar system positions | [Skyfield](https://rhodesmill.org/skyfield/) (Python) with JPL DE421 ephemeris | Accurate enough for visual observation |
-| Asteroids | [MPC orbit database](https://www.minorplanetcenter.net/iau/MPCORB.html) | Filter by magnitude limit at runtime |
-| Moon features | [IAU Gazetteer of Planetary Nomenclature](https://planetarynames.wr.usgs.gov/) | Filter for Moon, types: crater, mare, lacus, sinus, palus |
-| Object images | [ESO image archive](https://www.eso.org/public/images/), NASA APOD | Check licence per image; build a manual curated list |
 
 ---
 
