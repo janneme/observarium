@@ -7,6 +7,8 @@ Usage examples:
     python main.py --object M42
 """
 
+# pylint: disable=duplicate-code
+
 import argparse
 from collections.abc import Callable
 from pathlib import Path
@@ -14,10 +16,12 @@ from pathlib import Path
 from config import NON_MESSIER_NUM, VAR_MAX_MAG
 from constellations import ConstellationPipeline
 from dso import DsoPipeline
+from moon_features import MoonFeaturePipeline
 from stars import StarPipeline
 from variable_stars import VariableStarPipeline
 
 _SOURCES_DIR = Path(__file__).parent / "sources"
+_CACHE_DIR = Path(__file__).parent / "cache"
 _OUTPUT_DIR = Path(__file__).parent / "output"
 
 _ALL_CATEGORIES = [
@@ -25,9 +29,9 @@ _ALL_CATEGORIES = [
     "stars",
     "dso",
     "constellations",
-    "double_stars",
     "solar_system",
     "moon_features",
+    "double_stars",
 ]
 
 
@@ -91,6 +95,14 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Print verbose diagnostic output (cache hits, counts loaded, …).",
     )
+    parser.add_argument(
+        "--min-double-star-sep",
+        type=float,
+        default=2.0,
+        metavar="FLOAT",
+        dest="min_double_star_sep",
+        help="Minimum double-star separation in arcsec for inclusion (default: %(default)s).",
+    )
     return parser.parse_args()
 
 
@@ -114,7 +126,12 @@ def main() -> None:
                 var_pipeline.run()
             var_index = var_pipeline.load_index()
         StarPipeline(
-            _SOURCES_DIR, _OUTPUT_DIR, debug=args.debug, **star_kwargs
+            _SOURCES_DIR,
+            _OUTPUT_DIR,
+            cache_dir=_CACHE_DIR,
+            debug=args.debug,
+            min_double_star_sep=args.min_double_star_sep,
+            **star_kwargs,
         ).run(var_index=var_index)
 
     runners: dict[str, Callable[[], None]] = {
@@ -125,14 +142,25 @@ def main() -> None:
         "dso": lambda: DsoPipeline(
             _SOURCES_DIR,
             _OUTPUT_DIR,
+            cache_dir=_CACHE_DIR,
             non_messier_num=args.non_messier_num,
             debug=args.debug,
         ).run(
             object_id=args.object
         ),
         "constellations": lambda: ConstellationPipeline(
-            _SOURCES_DIR, _OUTPUT_DIR, debug=args.debug
+            _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(),
+        "moon_features": lambda: MoonFeaturePipeline(_SOURCES_DIR, _OUTPUT_DIR).run(),
+        # Run the standalone double-star exporter; if the user provided
+        # `--max-mag` also produce a `stars.m{mag}.json` file so double-star
+        # metadata is available in the stars output as well.
+        "double_stars": lambda: __import__("double_stars_cli").main(
+            max_mag=args.max_mag,
+            min_sep=args.min_double_star_sep,
+            embed_into_stars=True,
+            only_mode=(args.only == "double_stars"),
+        ),
     }
     for target in targets:
         runner = runners.get(target)

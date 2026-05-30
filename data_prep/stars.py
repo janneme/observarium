@@ -18,6 +18,7 @@ from config import (
     MAX_STAR_MAGNITUDE,
     VARIABLE_THRESHOLD,
 )
+from double_stars import DoubleStarMatcher
 from downloader import Downloader
 
 # ---------------------------------------------------------------------------
@@ -305,15 +306,22 @@ class StarPipeline:
         self,
         sources_dir: Path,
         output_dir: Path,
+        cache_dir: Path | None = None,
         max_mag: float = MAX_STAR_MAGNITUDE,
         var_threshold: float = VARIABLE_THRESHOLD,
+        min_double_star_sep: float = 2.0,
         debug: bool = False,
     ) -> None:
         self._sources_dir = sources_dir
         self._output_dir = output_dir
         self._max_mag = max_mag
         self._var_threshold = var_threshold
-        self._downloader = Downloader(sources_dir, debug=debug)
+        self._min_double_star_sep = min_double_star_sep
+        # Use a dedicated cache directory for network downloads while keeping
+        # sidecar sources in `sources/` tracked in VCS.
+        cache = cache_dir or sources_dir
+        self._downloader = Downloader(cache, debug=debug)
+        self._double_matcher = DoubleStarMatcher(sources_dir, cache_dir=cache, debug=debug)
 
     def run(
         self,
@@ -332,10 +340,15 @@ class StarPipeline:
             ]
         else:
             csv_paths = [self._downloader.fetch(ATHYG_URL, ATHYG_FILENAME)]
-        notes_path = self._sources_dir.parent / "notes_stars.csv"
+        notes_path = self._sources_dir / "notes_stars.csv"
         notes = _load_notes(notes_path)
         stars, n_curated, n_auto = self._process(csv_paths, var_index or {}, notes)
-        return self._write(stars, n_curated, n_auto)
+        n_dbl_stars, n_dbl_pairs = self._double_matcher.attach(
+            stars,
+            max_mag=self._max_mag,
+            min_sep=self._min_double_star_sep,
+        )
+        return self._write(stars, n_curated, n_auto, n_dbl_stars, n_dbl_pairs)
 
     def _process_row(
         self,
@@ -446,8 +459,14 @@ class StarPipeline:
             s.pop("_lsun", None)
             s.pop("_lsun_phrase", None)
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def _write(
-        self, stars: list[dict[str, Any]], n_curated: int, n_auto: int
+        self,
+        stars: list[dict[str, Any]],
+        n_curated: int,
+        n_auto: int,
+        n_dbl_stars: int,
+        n_dbl_pairs: int,
     ) -> Path:
         """Group stars by constellation, write JSON, print stats, return path."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -467,6 +486,11 @@ class StarPipeline:
         notes_summary = " + ".join(note_parts) if note_parts else "none"
         print(f"Stars included : {len(stars):,} across {len(grouped):,} constellations")
         print(f"Variable stars : {n_variable} encoded with amplitude \u2265 {self._var_threshold}")
+        print(
+            f"Double stars   : {n_dbl_stars} stars with {n_dbl_pairs} pairs "
+            f"(sep >= {self._min_double_star_sep} arcsec)"
+        )
         print(f"Star notes     : {notes_summary}")
         print(f"Output         : {out} ({size_mb:.2f} MB)")
         return out
+    # pylint: enable=too-many-arguments,too-many-positional-arguments,too-many-locals

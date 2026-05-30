@@ -1,7 +1,7 @@
 # Raw downloaded catalogues and uncompressed processed data are large and
 # reproducible — never commit them.
-data_prep/sources/
 data_prep/output/
+data_prep/cache/
 
 # Python
 __pycache__/

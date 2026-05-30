@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 AWS_PROFILE   ?= personal
 
-.PHONY: help deploy dev-server dev-client data-prep data-upload
+.PHONY: help deploy dev-server dev-client data-prep data-upload test
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -28,6 +28,9 @@ data-prep: ## Run the data preparation pipeline
 
 data-upload: ## Detect changed data files, re-zip and upload to S3
 	@echo "data-upload: not yet implemented"
+
+test: ## Run the data-prep test suite
+	cd data_prep && uv run pytest
 
 # Internal targets (not advertised in help)
 _deploy-lambda:

@@ -27,10 +27,12 @@ any date and time.
 
 e. Constellations: the connectors between stars, boundaries and names.
 
-f. DOUBLE_STAR_NUM nicest double stars (especially those with color contrast of the components),
-   with their coordinates, component magnitude and separation (min apparent distance
-   and max apparent distance), information whether the pair is physical or optical.
-   If it is a multi star system, give the information about distances pair-wise.
+f. Double-star information is attached directly to stars in the `stars.mMAG.json`
+output. A pair is included only when both components are within the current
+`--max-mag` limit and separation is within a configurable observable range
+(`--min-double-star-sep` to 60 arcsec). For systems with more than two
+components (AB, AC, BC...) store all available pair-wise records. Where WDS
+notes indicate a physical pair, store this as `"phys": "AB"` (component id).
 
 g. Basic schematic map of the Moon.
 
@@ -47,9 +49,9 @@ For each object (whenever relevant and known) we store:
 7. Size (either radius or width x height)
 8. Orientation (for non-circular objects)
 9. Data specific for individual objects:
-    9a. Apparent magnitude range for variable stars
-    9b. Central star magnitude for planetary nebulae
-    9c. Star classification using the Harvard spectral system
+   9a. Apparent magnitude range for variable stars
+   9b. Central star magnitude for planetary nebulae
+   9c. Star classification using the Harvard spectral system
 10. Images of the most interesting objects in resolution up to 400x400 and medium
     JPG quality (like 70%) to save space.
 11. Short text information highlighting specifics of this object (like
@@ -76,16 +78,17 @@ scrolling (allowed only in some screens, e. g. "Object Details").
 d. Because of the nightly mode the app implements its own on-screen keyboard. It
 supports two layouts - Czech and English.
 
-   The keyboard is implemented using on-screen buttons and a custom text renderer
-   (a styled `<div>`) rather than a real `<input>` or `<textarea>`. Form values are
-   passed via `<input type="hidden">` elements. Since no focusable input is visible,
-   Android Chrome does not trigger the system keyboard. Known limitations:
-   - The cursor can only be moved using on-screen arrow buttons, not by tapping into text.
-   - Clipboard paste is not supported.
-   - Native autocorrect and autocomplete are disabled (intentional for astronomical names).
-   - Multi-line inputs (observation notes) scroll vertically within a fixed-height area.
-   Any UI component that renders a real `<input>` internally (e.g. date pickers) must
-   follow the same pattern to prevent the system keyboard from flashing on focus.
+The keyboard is implemented using on-screen buttons and a custom text renderer
+(a styled `<div>`) rather than a real `<input>` or `<textarea>`. Form values are
+passed via `<input type="hidden">` elements. Since no focusable input is visible,
+Android Chrome does not trigger the system keyboard. Known limitations:
+
+- The cursor can only be moved using on-screen arrow buttons, not by tapping into text.
+- Clipboard paste is not supported.
+- Native autocorrect and autocomplete are disabled (intentional for astronomical names).
+- Multi-line inputs (observation notes) scroll vertically within a fixed-height area.
+  Any UI component that renders a real `<input>` internally (e.g. date pickers) must
+  follow the same pattern to prevent the system keyboard from flashing on focus.
 
 e. For any delete operation there must be a confirmation dialog.
 
@@ -101,15 +104,15 @@ score of a quiz — instead the quiz runs until the user has answered every
 question in the quiz correctly at least once. After each incorrect answer in the quiz the
 correct answer is shown. A "Back" button is always available to exit the quiz at any time.
 
-   A progress indicator is displayed throughout the quiz. It reflects how close
-   the user is to completing the quiz: a correct answer increases it, an incorrect
-   answer decreases it (it cannot drop below zero). The indicator is calculated as
-   a weighted ratio of mastered questions to the total question pool.
+A progress indicator is displayed throughout the quiz. It reflects how close
+the user is to completing the quiz: a correct answer increases it, an incorrect
+answer decreases it (it cannot drop below zero). The indicator is calculated as
+a weighted ratio of mastered questions to the total question pool.
 
-   Quiz state is saved to local storage. If the user exits and later starts a quiz
-   of the same type and difficulty, they are presented with the usual global/local
-   selection screen plus an additional option: "Continue previous quiz". If the user
-   does not choose to continue, the saved state is discarded and a new quiz begins.
+Quiz state is saved to local storage. If the user exits and later starts a quiz
+of the same type and difficulty, they are presented with the usual global/local
+selection screen plus an additional option: "Continue previous quiz". If the user
+does not choose to continue, the saved state is discarded and a new quiz begins.
 
 ## 2.3 Storage
 
@@ -158,6 +161,7 @@ to S3. This covers both the object data ZIP (DEFLATE) and the image ZIP (STORE).
 We will use Terraform with a local tfstate to deploy to AWS. A make task
 `make deploy` should be supported from the root with `AWS_PROFILE=personal`.
 It performs the following in order:
+
 1. Applies any Terraform infrastructure changes.
 2. Deploys updated Lambda code.
 3. Detects changed data files, re-zips them, and uploads to S3.
@@ -192,11 +196,13 @@ The Lambda covers the following operations:
 Two S3 buckets:
 
 **Data bucket** (private, accessed only via Lambda pre-signed URLs):
+
 - Object data ZIP (JSON compressed with DEFLATE, produced by `make deploy`)
 - Image ZIP (JPEG files bundled with STORE method, produced by `make deploy`)
 - User observation data (one JSON file per user)
 
 **Client bucket** (S3 static website hosting, public read):
+
 - Built Svelte SPA (HTML, JS, CSS assets)
 
 ### 3.2.3 AWS Cognito
@@ -226,11 +232,11 @@ The top bar is present on all screens and contains:
   the current color scheme, allowing the sky to be viewed at a different time).
 - FOV (only on the Main Screen or Finder View)
 - In case some object is selected, display:
-    - Icon representing object type
-    - Object name or catalogue number
-    - Name of the constellation the object belongs to
-  If we click this the box with this information, we are sent to the "Object Details"
-  screen.
+  - Icon representing object type
+  - Object name or catalogue number
+  - Name of the constellation the object belongs to
+    If we click this the box with this information, we are sent to the "Object Details"
+    screen.
 - Menu toggle button
 - Battery status (if known)
 
@@ -292,12 +298,14 @@ setup the following elements are rendered:
 - Boundary of the horizon (corresponding to location and time)
 
 Notes:
+
 - Point size has to reflect the apparent magnitude.
 - Variable stars with magnitude range higher than 2 has to be marked graphically.
 
 By default no labels, no constellation lines and boundaries.
 
 The following input operations are supported:
+
 - Moving the view by swiping
 - Zooming by two fingers gesture. The zoom range is
   limited by NORMAL_VIEW_MIN_FOV (2 degrees by default) and NORMAL_VIEW_MAX_FOV
@@ -342,6 +350,7 @@ path) the scope view is moved to the start point and the vector of the
 first step (optionally with the multiplier if it is not 1) is drawn in the finder view.
 
 Near the finder view these icon buttons are rendered:
+
 - Next step (if there is the next step)
 - Previous step (if there is the previous step)
 - Cancel (returns to the previous context)
@@ -372,6 +381,7 @@ of OBJECT_NAME. In case of search by catalogue number we need not to provide
 catalogue name (e. g. "NGC 6543" is found even if we search for "6543").
 
 For each search result there are the following icons:
+
 - "Accept"
 - "Details"
 - "Finding Paths"
@@ -419,6 +429,7 @@ must select the finder view that corresponds to the star name. The rotation
 of the view rendered in the finder has to be changed randomly.
 
 Difficulty levels:
+
 - Easy: stars up to magnitude 2
 - Medium: stars up to magnitude 3
 - Hard: stars up to magnitude 4
@@ -438,6 +449,7 @@ The user is expected to choose the right combination. If the user answers incorr
 along with showing the correct answer the constellation lines are shown.
 
 Difficulties:
+
 - Easy: Only big constellations with bright stars, stars up to magnitude 2.
 - Medium: Constellations with one bright star at least, stars up to magnitude 3.
 - Hard: All constellations, stars up to magnitude 4.
@@ -477,6 +489,7 @@ brightness, marking them with labels 1, 2, 3, 4. The user is expected
 to reveal which point is not an existing star.
 
 Difficulty levels:
+
 - Easy: Added point is magnitude 1 or brighter
 - Medium: Added point is magnitude 2 or brighter
 - Hard: Added point is magnitude 4 or brighter
@@ -495,11 +508,11 @@ First let us define what is the "object finding path". It consists of:
 
 - a starting point (a bright star)
 - sequence of movements in the finder, each one consisting of a vector which has
-    a. a start point
-    b. an end point
-    c. and optionally a multiplier (how many times the vector is applied to move the
-       finderscope view to the next location). It must be a multiple of 0.5
-       and vector x multiplier cannot exceed 2x the FINDER_FOV.
+  a. a start point
+  b. an end point
+  c. and optionally a multiplier (how many times the vector is applied to move the
+  finderscope view to the next location). It must be a multiple of 0.5
+  and vector x multiplier cannot exceed 2x the FINDER_FOV.
 
 The start and end point is either a star or just a point in the sky represented
 by its coordinates (typically a well memorable point among stars in the 8x50
@@ -510,6 +523,7 @@ starting point, but only one per a starting point.
 
 The screen always has the context of the object for which we define the
 finding path (it is not entered in this screen). The screen is opened from:
+
 - The "Finding Paths" icon in search results (5.4)
 - The "Record guide to find object" button in the Finder View (5.3.2)
 
@@ -538,6 +552,7 @@ is drawn in the finder view as an arrow and it is labeled with the multiplier
 if the multiplier is not 1 (like "2x").
 
 For each step there are buttons:
+
 - Delete — triggers a confirmation dialog stating which steps will be removed
   (e.g. "This will delete Step 2 and all subsequent steps. Continue?").
   All subsequent steps are deleted along with the selected step.
@@ -552,9 +567,9 @@ If we enter editing of the start or end point, the vector and multiplier is
 removed from the finder view and we are allowed to select a point in the finder
 by tapping. If we tap again, the position is just updated.
 The indicator of the selected position has two modes:
-  a. object selected - the position is identified as an object
-  b. just a position - there is no object bright enough (magnitude 7 at most)
-     at the position selected
+a. object selected - the position is identified as an object
+b. just a position - there is no object bright enough (magnitude 7 at most)
+at the position selected
 
 In the starting/end point selection mode
 we can also zoom the finder view by two fingers to allow for more precise
@@ -625,11 +640,11 @@ displayed:
   and the current GPS position is no longer relevant)
 - List of available telescopes, each with options (displayed as selectable
   exclusive icons):
-    - Seen
-    - Unseen (we tried to see the object in the instrument but we did not succeed)
-  If we select "Seen" for a telescope that needs an eyepiece, an optional selection
-  of eyepiece is offered - here we select just one choice (the
-  eyepiece that we used and it brought the best result among all eyepieces we tried).
+  - Seen
+  - Unseen (we tried to see the object in the instrument but we did not succeed)
+    If we select "Seen" for a telescope that needs an eyepiece, an optional selection
+    of eyepiece is offered - here we select just one choice (the
+    eyepiece that we used and it brought the best result among all eyepieces we tried).
 - Observation details (details related to the observation session, like
   weather, seeing conditions etc.)
 - Object details

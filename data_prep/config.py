@@ -69,3 +69,42 @@ CONSTELLATIONS_IAU_URL: str = (
     "/skycultures/modern_iau/index.json"
 )
 CONSTELLATIONS_IAU_FILENAME: str = "stellarium_modern_iau_index.json"
+
+# ---------------------------------------------------------------------------
+# Double stars (WDS) and moon features
+# ---------------------------------------------------------------------------
+
+#: WDS TSV query via VizieR (HTTPS), requesting relevant columns only.
+WDS_VIZIER_URL: str = (
+    "https://vizier.cds.unistra.fr/viz-bin/asu-tsv?"
+    "-source=B/wds/wds"
+    "&-out.max=200000"
+    "&-out=WDS,Disc,Comp,Date,sep1,sep2,mag1,mag2,Notes,RAJ2000,DEJ2000"
+)
+WDS_FILENAME: str = "wds.tsv"
+
+# ORB6 (Sixth Catalog of Orbits of Visual Binary Stars) mirror via VizieR.
+# We'll fetch a compact master table with orbital periods (column `P`).
+ORB6_VIZIER_URL: str = (
+    "https://vizier.cds.unistra.fr/viz-bin/asu-tsv?"
+    "-source=J/MNRAS/517/2925/tablea3"
+    "&-out.max=200000"
+    "&-out=WDS,P"
+)
+ORB6_FILENAME: str = "orb6.tsv"
+
+#: Supported moon feature types.
+MOON_FEATURE_TYPES: tuple[str, ...] = (
+    "Catena",
+    "Crater",
+    "Lacus",
+    "Mare",
+    "Mons",
+    "Oceanus",
+    "Palus",
+    "Sinus",
+    "Vallis",
+)
+
+#: Local moon source filename expected in data_prep/sources.
+MOON_FEATURES_SOURCE_FILENAME: str = "moon_features.csv"

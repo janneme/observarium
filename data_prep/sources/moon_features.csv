@@ -1,0 +1,12 @@
+target,feature_type,name,lat,lon,diam_km
+Moon,Crater,Tycho,-43.31,-11.36,85
+Moon,Crater,Copernicus,9.62,-20.08,93
+Moon,Mare,Mare Imbrium,32.8,-15.6,1146
+Moon,Mare,Mare Tranquillitatis,8.5,31.4,873
+Moon,Mons,Mons Huygens,20.0,-2.8,45
+Moon,Oceanus,Oceanus Procellarum,18.4,-57.4,2568
+Moon,Sinus,Sinus Iridum,44.1,-31.5,249
+Moon,Palus,Palus Putredinis,27.4,1.7,180
+Moon,Vallis,Vallis Alpes,48.5,3.0,166
+Moon,Lacus,Lacus Somniorum,38.0,29.2,384
+Moon,Catena,Catena Davy,-11.0,-8.0,50

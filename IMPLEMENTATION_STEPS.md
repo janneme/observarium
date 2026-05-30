@@ -14,7 +14,6 @@ here; this document adds technical detail not present there.
 **Deliverable:** `data/SOURCES.md` — see that file for the confirmed catalogue
 files, their licences, download URLs and any known quirks.
 
-
 ---
 
 ### Step 2: Project skeleton ✅
@@ -61,34 +60,85 @@ list in **README §2.1** where applicable.
 
 ---
 
-### Step 3: Star catalogue pipeline
+### Step 3: Star catalogue pipeline ✅
 
-**README refs:** §2.1a, §2.1 fields 1–9c  
-**Deliverable:** `data_prep/output/stars.json` with all stars within magnitude
-`MAX_STAR_MAGNITUDE` observable from Europe.
-
-Technical notes:
-- **Europe visibility filter:** include stars with declination ≥ −35° (covers
-  southernmost European latitudes with some margin).
-- Source: HYG v3 CSV. Key columns: `hip` (HIP number), `proper` (name),
-  `ra`, `dec`, `mag`, `spect` (Harvard spectral class), `dist` (parsecs),
-  `var` (variability flag), `var_min`/`var_max`.
-- Derive `hd` and `sao` numbers from the HYG cross-reference columns.
-- Variable star flag: if `var_min` and `var_max` are present and
-  `var_max − var_min > 2`, mark for graphical distinction (README §5.2).
-- Spectral class maps to approximate B−V colour for rendering star colour on
-  canvas (O/B → blue-white, G/K → yellow, M → orange-red).
-- Distance accuracy indication: HYG marks estimated distances with a flag —
-  pass through to the JSON.
+**Deliverable:** `data_prep/output/stars.json` — produced by
+`make data-prep ARGS="--only stars"`. Source: HYG v4.2 (Codeberg). Filter:
+mag ≤ 8.0, dec ≥ −35°. Fields: `hip`, `hd`, `sao`, `name`, `ra`, `dec`,
+`mag`, `spect`, `clr` (CSS hex), `dist_pc`, `minmag`/`maxmag` (variable stars
+only), `const` (absent until Step 6). Null values omitted. 29 unit tests, ruff
+clean, pylint 10/10.
 
 ---
 
-### Step 4: Deep sky object pipeline
+### Step 3a: Full AT-HYG v3.3 catalogue + variable-star pipeline hardening ✅
+
+**Deliverable:** Star pipeline supports magnitude runs beyond V=11 by
+automatically switching from the 871k-star m11 subset to the full 2.5M-star
+AT-HYG v3.3 catalogue (two-part download) when `--max-mag > 11`.
+
+Changes made:
+
+- `config.py`: added `ATHYG_FULL_URLS`, `ATHYG_FULL_FILENAMES`,
+  `ATHYG_FULL_MAG_THRESHOLD` constants pointing to `athyg_v33-1.csv.gz` and
+  `athyg_v33-2.csv.gz` on Codeberg.
+- `stars.py` `run()`: selects full catalogue when `max_mag > 11`; downloads
+  both parts via `Downloader` (cached after first run).
+- `stars.py` `_process()`: handles the split-catalogue layout — part-2 has no
+  header row and is read with fieldnames inherited from part-1.
+- `stars.py` `_build_star()`: fixed spurious exclusion of stars with no
+  parallax distance in AT-HYG (e.g. μ Cep / Garnet Star); only `dist == 0.0`
+  (the Sun placeholder) is now excluded.
+- `main.py` `_run_stars()`: auto-fetches the variable-star CSV if absent,
+  removing the need to run `--only variable_stars` as a separate step.
+
+Verified outputs (all with `--var-max-mag` set appropriately):
+
+| `--max-mag` | Stars     | Variables encoded |
+| ----------- | --------- | ----------------- |
+| 5           | 1,207     | 10                |
+| 6           | 3,725     | 15                |
+| 7           | 11,632    | 18                |
+| 8           | 33,591    | 80                |
+| 9           | 91,734    | 108               |
+| 10          | 242,560   | 171               |
+| 11          | 634,257   | 185               |
+| 12          | 1,445,008 | 190               |
+
+---
+
+### Step 3b: Curated star notes ✅
+
+**README refs:** §2.1 field 11  
+**Deliverable:** Notable stars in `stars.json` gain a `note` field with a short
+plain-English description (e.g. "brightest star in the sky", "extremely red
+carbon star", "fastest-moving star visible to the naked eye").
+
+Technical notes:
+
+- Maintain the notes in `data_prep/notes_stars.csv` with columns:
+  `hip` (primary key), `note`.
+- `StarPipeline._process` loads the CSV once into a `dict[int, str]` and
+  merges it by `hip` during the main loop.
+- The field is omitted when absent (consistent with the null-omission policy).
+- No external download needed — the CSV is hand-authored and committed to the
+  repository.
+- Seed the file with at least the ~30 most recognisable named stars: Sirius,
+  Canopus, Arcturus, Vega, Capella, Rigel, Procyon, Achernar, Betelgeuse,
+  Hadar, Altair, Aldebaran, Antares, Spica, Pollux, Fomalhaut, Deneb, Mimosa,
+  Regulus, Adhara, Castor, Gacrux, Shaula, Bellatrix, Elnath, Miaplacidus,
+  Alnilam, Alnitak, Mintaka, Gamma Vel, Mira (also variable), Barnard's Star
+  (fastest proper motion), 61 Cygni (first star with measured parallax).
+
+---
+
+### Step 4: Deep sky object pipeline ✅
 
 **README refs:** §2.1b, §2.1c, §2.1 fields 1–11  
 **Deliverable:** `data_prep/output/dso.json`
 
 Technical notes:
+
 - Source: OpenNGC CSV. Filter: Messier objects (all) + brightest
   `NON_MESSIER_NUM` non-Messier objects excluding large diffuse nebulae
   (OpenNGC type `EN`, `RN`, `DN` with `maj_ax > 60'`).
@@ -102,15 +152,29 @@ Technical notes:
   objects — a CSV sidecar file `data_prep/notes_dso.csv` is sufficient.
 - Images will be linked by catalogue number in Step 8.
 
+Implementation notes:
+
+- Implemented in `data_prep/dso.py` with CLI integration in `data_prep/main.py`
+  (`python main.py --only dso`).
+- Writes `data_prep/output/dso.json` from OpenNGC main + addendum CSV files.
+- Includes all Messier objects and the brightest `NON_MESSIER_NUM` non-Messier
+  objects, excluding large diffuse nebulae (`EN`/`RN`/`DN` and equivalents)
+  with `maj_ax > 60'`.
+- Type mapping covers OpenNGC codes used by Messier and non-Messier entries;
+  uncommon Messier-only classes are mapped via a fallback to keep full Messier
+  coverage.
+- Curated notes are loaded from `data_prep/notes_dso.csv` (`id,note`).
+
 ---
 
-### Step 5: Constellation data pipeline
+### Step 5: Constellation data pipeline ✅
 
 **README refs:** §2.1e  
 **Deliverable:** `data_prep/output/constellations.json` with lines, boundaries
 and names.
 
 Technical notes:
+
 - **Lines:** Stellarium Western skyculture `constellation_lines.fab` file.
   Star IDs are HIP numbers — cross-reference to HYG to get RA/Dec coordinates.
   Store as arrays of `[hip_a, hip_b]` pairs; the client looks up star positions
@@ -121,31 +185,71 @@ Technical notes:
 - Assign each star its containing constellation (point-in-polygon test against
   IAU boundaries) and store on the star object — satisfies README field 5.
 
+Implementation notes:
+
+- Implemented in `data_prep/constellations.py` with CLI integration in
+  `data_prep/main.py` (`python main.py --only constellations`).
+- Source: Stellarium `modern_iau/index.json` downloaded to
+  `data_prep/sources/stellarium_modern_iau_index.json`.
+- Outputs `data_prep/output/constellations.json` as a dictionary keyed by IAU
+  abbreviation (e.g. `And`, `CMa`), each entry containing:
+  - `name` (native/IAU name)
+  - optional `common` (byname)
+  - `lines` as HIP edge pairs `[hip_a, hip_b]`
+  - `bounds` as boundary edge segments with J2000 coordinates
+    `[[ra_h1, dec_d1], [ra_h2, dec_d2]]`
+- Boundary edges are provided by Stellarium in B1875 and are precessed to
+  J2000/ICRS using `astropy.coordinates.FK5` -> `ICRS`.
+- Stars already carry constellation assignment from AT-HYG `con` and are
+  grouped by constellation in the star pipeline.
+
 ---
 
-### Step 6: Double star & Moon features pipeline
+### Step 6: Double star & Moon features pipeline ✅
 
 **README refs:** §2.1f, §2.1g  
-**Deliverables:** `data_prep/output/double_stars.json`,
-`data_prep/output/moon_features.json`
+**Deliverables:** double-star metadata embedded in
+`data_prep/output/stars.m*.json`, plus `data_prep/output/moon_features.json`
 
 **Double stars:**
-- Source: WDS. Filter criteria for "nicest": both components ≤ magnitude 8,
-  separation ≥ 1″ and ≤ 60″ (resolvable but not trivially split), and either
-  a notable colour index difference between components (`ΔB−V > 0.5`) or
-  well-known pairs. Select `DOUBLE_STAR_NUM` by this composite score.
-- WDS columns to capture: RA/Dec (J2000), magnitudes A/B, separation (current
-  epoch), position angle, physical pair flag (`P` or `O` in the notes column).
-- For multi-star systems: the WDS lists each pair separately (AB, AC, BC…) —
-  group by primary WDS identifier and store pairs as an array.
+
+- Source: WDS via VizieR HTTPS TSV export.
+- Inclusion is magnitude-driven: both pair components must be `<= --max-mag`
+  (same threshold as stars pipeline).
+- Add CLI parameter `--min-double-star-sep` (default `2.0`) and keep upper
+  bound at 60″ to represent practical visual pairs.
+- Separation is stored as scalar when one measure exists, otherwise as
+  `[min,max]` from observed/catalogued values.
+- For multi-star systems, keep all pair-wise entries (AB, AC, BC...).
+- Where known physical association exists in WDS notes, store
+  `"phys": "<components>"` (e.g. `"phys": "AB"`).
+ - Where WDS notes indicate a non-physical (visual/optical) pair, store
+   `"vis": "<components>"` (e.g. `"vis": "AB"`) so callers can
+   distinguish confirmed visual pairs from unknown/physical ones.
+ - When available, attach orbital period information (years) from the ORB6
+   orbit catalogue (fetched via VizieR) to pairs as `"period": <years>`.
 
 **Moon features:**
+
 - Source: IAU Gazetteer CSV. Filter: `target = "Moon"`, feature types:
   `Catena`, `Crater`, `Lacus`, `Mare`, `Mons`, `Oceanus`, `Palus`, `Sinus`,
   `Vallis`. Keep: `name`, `lat`, `lon`, `diam_km`, `feature_type`.
 - Longitude/latitude here are selenographic (Moon surface coordinates) —
   store as-is; the client renders the schematic Moon map directly (no
   coordinate transform needed).
+
+Implementation notes:
+
+- Implemented `data_prep/double_stars.py` and `data_prep/moon_features.py` with
+  CLI integration in `data_prep/main.py`.
+- Double-star matching is performed during stars pipeline execution and merged
+  into `stars.m*.json` under each star as `dbl` metadata.
+- Double stars are filtered by `--max-mag` and `--min-double-star-sep`.
+- Moon features currently read from local source file
+  `data_prep/sources/moon_features.csv` (columns: `target,feature_type,name,lat,lon,diam_km`),
+  then filtered to `target=Moon` and allowed feature types from README.
+- Output `data_prep/output/moon_features.json` stores selenographic
+  `lat`/`lon` as-is plus `diam_km` when available.
 
 ---
 
@@ -157,6 +261,7 @@ JSON. Instead, the client computes positions at runtime using a bundled
 lightweight ephemeris.
 
 Technical notes:
+
 - Use [Astronomy Engine](https://github.com/cosinekitty/astronomy) — it is a
   single JS file (no WASM, no server call) covering Sun, Moon, planets and
   can compute apparent magnitude. Include it in the Svelte client bundle.
@@ -176,6 +281,7 @@ Technical notes:
 named by catalogue number (e.g. `M042.jpg`, `NGC7293.jpg`).
 
 Technical notes:
+
 - Build a manifest CSV `data_prep/image_sources.csv` with columns:
   `catalogue_id`, `url`, `credit`, `licence`. Populate manually for the most
   interesting ~100–200 objects.
@@ -193,6 +299,7 @@ Technical notes:
 **Deliverable:** `make data-upload` uploads changed ZIPs to the S3 data bucket.
 
 Technical notes:
+
 - Merge all `data_prep/output/*.json` files into one `objects.json`. Use
   `json.dumps` with `separators=(',',':')` (no whitespace) to minimise size.
 - Create `objects.zip` using Python `zipfile` with `ZIP_DEFLATED` for
@@ -217,16 +324,16 @@ Function URL and client bucket website endpoint.
 
 Resources to define in `infra/main.tf`:
 
-| Resource | Key settings |
-|---|---|
-| `aws_s3_bucket` (data) | Private; no public access block override |
-| `aws_s3_bucket` (client) | Static website hosting enabled; public read bucket policy |
-| `aws_cognito_user_pool` | Password policy, no self-registration |
-| `aws_cognito_user_pool_client` | `ALLOW_USER_PASSWORD_AUTH` flow; no client secret (public client) |
-| `aws_iam_role` + policy | Lambda execution role: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on data bucket; `logs:*` on the log group |
-| `aws_cloudwatch_log_group` | `/aws/lambda/observarium`, retention 30 days |
-| `aws_lambda_function` | Python 3.12, handler `handler.lambda_handler`, env vars: `DATA_BUCKET`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION` |
-| `aws_lambda_function_url` | `authorization_type = "NONE"`, CORS: allow origin = client bucket website URL, methods GET/POST/DELETE/OPTIONS, headers Content-Type + Authorization |
+| Resource                       | Key settings                                                                                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aws_s3_bucket` (data)         | Private; no public access block override                                                                                                             |
+| `aws_s3_bucket` (client)       | Static website hosting enabled; public read bucket policy                                                                                            |
+| `aws_cognito_user_pool`        | Password policy, no self-registration                                                                                                                |
+| `aws_cognito_user_pool_client` | `ALLOW_USER_PASSWORD_AUTH` flow; no client secret (public client)                                                                                    |
+| `aws_iam_role` + policy        | Lambda execution role: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on data bucket; `logs:*` on the log group                                   |
+| `aws_cloudwatch_log_group`     | `/aws/lambda/observarium`, retention 30 days                                                                                                         |
+| `aws_lambda_function`          | Python 3.12, handler `handler.lambda_handler`, env vars: `DATA_BUCKET`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION`                |
+| `aws_lambda_function_url`      | `authorization_type = "NONE"`, CORS: allow origin = client bucket website URL, methods GET/POST/DELETE/OPTIONS, headers Content-Type + Authorization |
 
 Create initial Cognito user manually with `aws cognito-idp admin-create-user`
 (no self-service signup needed).
@@ -240,6 +347,7 @@ Create initial Cognito user manually with `aws cognito-idp admin-create-user`
 local dev server replicates the same behaviour.
 
 Technical notes:
+
 - `server/handler.py`: top-level router parses `event["rawPath"]` and
   `event["requestContext"]["http"]["method"]` to dispatch to handler functions.
 - `server/local_server.py`: `http.server.BaseHTTPRequestHandler` subclass that
@@ -260,6 +368,7 @@ Technical notes:
 **Deliverable:** `POST /login` returns a Cognito access token.
 
 Technical notes:
+
 - Call `boto3` `cognito-idp` `initiate_auth` with
   `AuthFlow="USER_PASSWORD_AUTH"` and `AuthParameters={"USERNAME": ..., "PASSWORD": ...}`.
 - On success return `{"access_token": ..., "expires_in": ...}`.
@@ -279,6 +388,7 @@ Technical notes:
 **Deliverable:** `GET /objects-url` and `GET /images-url` return pre-signed S3 URLs.
 
 Technical notes:
+
 - Both endpoints require a valid Cognito JWT (use the helper from Step 12).
 - Generate pre-signed URL with `boto3` S3 client
   `generate_presigned_url("get_object", ...)` with `ExpiresIn=300` (5 minutes).
@@ -294,6 +404,7 @@ Technical notes:
 **Deliverable:** Full observation sync API.
 
 Technical notes:
+
 - Storage: one JSON file per user in the data bucket at key
   `observations/{username}.json`. `username` is extracted from the verified
   Cognito JWT `sub` claim.
@@ -318,13 +429,14 @@ Technical notes:
 theme switching.
 
 Technical notes:
+
 - Scaffold: `npm create vite@latest client -- --template svelte`.
 - Color scheme: store active scheme in a Svelte writable store. Apply as a
   `data-theme="nightly"` attribute on `<body>`. Define all colours as CSS custom
   properties in two `:root[data-theme]` blocks. Nightly palette: background
   `#000`, primary content `#cc0000` (red), accent `#0000cc` (blue), no green.
 - Full-screen + no zoom: `<meta name="viewport" content="width=device-width,
-  initial-scale=1, maximum-scale=1, user-scalable=no">` plus CSS
+initial-scale=1, maximum-scale=1, user-scalable=no">` plus CSS
   `html, body { height: 100%; overflow: hidden; touch-action: none; }`.
 - `make dev-client` runs `npm --prefix client run dev`.
 
@@ -337,6 +449,7 @@ Technical notes:
 components that accept all text input without triggering the system keyboard.
 
 Technical notes:
+
 - Each component renders a styled `<div>` that displays the current value with
   a blinking cursor (CSS `animation: blink 1s step-end infinite`).
 - Internal state: `value` (string), `cursorPos` (integer index).
@@ -364,6 +477,7 @@ Technical notes:
 pre-signed URLs, unpacks ZIPs with JSZip, and stores everything in IndexedDB.
 
 Technical notes:
+
 - IndexedDB schema (use the `idb` npm library for a Promise-based wrapper):
   - Store `objects` — keyPath `id` (e.g. `"star_HIP71683"`), one record per
     object across all types.
@@ -389,6 +503,7 @@ Technical notes:
 onto a 2D canvas given a centre point, FOV, and rotation.
 
 Technical notes:
+
 - **Projection:** Gnomonic (tangent-plane) projection — standard for small-FOV
   star charts. Given centre `(RA₀, Dec₀)`, FOV, and canvas dimensions, map each
   star's `(RA, Dec)` to pixel `(x, y)`.
@@ -417,6 +532,7 @@ Technical notes:
 with horizon boundary and variable-star markers.
 
 Technical notes:
+
 - **Magnitude → radius:** `r = MAX_RADIUS · 10^(−0.2 · (mag − MIN_MAG))`,
   clamp to `[0.5, MAX_RADIUS]`. `MAX_RADIUS` ≈ 6 px, `MIN_MAG` = brightest
   star in dataset.
@@ -445,6 +561,7 @@ Technical notes:
 clamping all work on mobile.
 
 Technical notes:
+
 - **Touch events:** use `pointermove`/`pointerdown`/`pointerup` (works for
   mouse and touch). Track active pointer IDs to distinguish single-finger pan
   from two-finger pinch.
@@ -471,6 +588,7 @@ Technical notes:
 and navigation items.
 
 Technical notes:
+
 - Top bar layout: CSS Grid or Flexbox, two-row height on small screens
   (README §B2). Row 1: date-time | menu-toggle (centred) | battery.
   Row 2 (when object selected): object-type icon + name + constellation tap
@@ -497,6 +615,7 @@ Technical notes:
 the menu; all rendered on the sky canvas.
 
 Technical notes:
+
 - **Lines:** for each constellation, iterate its `[hip_a, hip_b]` pairs,
   project both stars, draw a line segment. Skip if either star is off-canvas
   or below horizon.
@@ -524,6 +643,7 @@ with `make deploy` and verify on a real Android device.
 navigation and its four action buttons.
 
 Technical notes:
+
 - Reuse `SkyCanvas` from Step 18 with `fov = FINDER_FOV`, `rotation = 0`
   (or match current Main Screen rotation). Clip to a circle using CSS
   `border-radius: 50%` on a square wrapper, or `clip-path: circle(50%)`.
@@ -546,6 +666,7 @@ Technical notes:
 keyboard and result action icons.
 
 Technical notes:
+
 - Search is performed client-side against the in-memory object index (load all
   object names and catalogue numbers into a `Map` on startup — typically < 5 MB).
 - Ranking: exact prefix match on proper name > prefix match on catalogue number
@@ -564,6 +685,7 @@ Technical notes:
 phase display and rise/transit/set times.
 
 Technical notes:
+
 - **Rise/transit/set:** use Astronomy Engine `SearchRiseSet()` and
   `SearchHourAngle()` for the current date and stored GPS location. Compute
   for the current calendar day (midnight to midnight local time). Display as
@@ -587,6 +709,7 @@ Technical notes:
 Screen and Finder View with correct positions for the current date/time.
 
 Technical notes:
+
 - Use Astronomy Engine to compute `(RA, Dec)` and apparent magnitude for each
   solar system body at the time stored in the app's time Svelte store (which may
   differ from wall clock time if the user adjusted it via the top-bar picker).
@@ -608,6 +731,7 @@ Technical notes:
 `meta` store under key `telescopes` and `eyepieces`.
 
 Technical notes:
+
 - Both lists are JSON arrays stored in the `meta` store. Assign a UUID to each
   item on creation (`crypto.randomUUID()`).
 - "In use" check before deletion: scan all `observations` records for any
@@ -624,6 +748,7 @@ creates/updates today's observation record in IndexedDB and marks the change
 as pending sync.
 
 Technical notes:
+
 - Observation record schema: `{ date, location: {lat, lon} | null, objects: [...] }`.
   Each object entry: `{ id, telescopeResults: [{telescopeId, seen, eyepieceId | null}], notes }`.
 - Location: use `navigator.geolocation.getCurrentPosition()` to prefill;
@@ -640,6 +765,7 @@ Technical notes:
 **Deliverable:** Expandable observation history sorted by date descending.
 
 Technical notes:
+
 - Editable field: each observation object entry has a free-text `notes` field.
   The Edit icon renders that specific `notes` field as a `<CustomTextarea>`;
   Accept writes back to IndexedDB and increments `pendingChanges`.
@@ -653,6 +779,7 @@ Technical notes:
 **Deliverable:** Hash-check screen that fetches fresh data only when needed.
 
 Technical notes:
+
 - Call `GET /data-hash` (Step 13) — returns ETags for `objects.zip` and
   `images.zip`. Compare against the `dataHash` values stored in the `meta`
   IndexedDB store after the last successful load.
@@ -669,6 +796,7 @@ Technical notes:
 **Deliverable:** One-shot observation sync screen.
 
 Technical notes:
+
 - Accessible from the menu only when `pendingChanges > 0` (README §5.14).
 - Display: list of dates with modified observation records before syncing.
 - On "Synchronize": call `POST /observations` with the full observation array
@@ -684,6 +812,7 @@ Technical notes:
 full four-step sequence end-to-end.
 
 Technical notes:
+
 - Stats are derived from IndexedDB on screen mount: count records in `objects`
   by type, count `observations`, count unique object IDs across all observations,
   count entries in `findingPaths`.
@@ -692,7 +821,7 @@ Technical notes:
 - `make deploy` steps (README §3.1.4): run `terraform apply`, then package and
   push Lambda zip (`zip -r lambda.zip server/ && aws lambda update-function-code`),
   then `make data-upload`, then `npm --prefix client run build && aws s3 sync
-  client/dist/ s3://CLIENT_BUCKET --delete`.
+client/dist/ s3://CLIENT_BUCKET --delete`.
 
 ---
 
@@ -705,6 +834,7 @@ Technical notes:
 list and all editing buttons.
 
 Technical notes:
+
 - Finding paths stored in `meta` IndexedDB under key `findingPaths` as:
   `{ [objectId]: { [startStarHip]: { steps: [{startPoint, endPoint, multiplier}] } } }`.
 - Fixed-position Finder View: use `position: sticky; top: 0` within the
@@ -728,6 +858,7 @@ Technical notes:
 button navigates to Step 33.
 
 Technical notes:
+
 - Guide state machine: `{ pathId, currentStepIndex }` held in a Svelte store.
   Entering guide mode via 5.3.1 button initialises the state machine and
   switches the Finder View into read-only guide mode.
@@ -749,6 +880,7 @@ Technical notes:
 state persistence and Back button.
 
 Technical notes:
+
 - **Setup modal** (global/local + difficulty) is a reusable `<QuizSetup>`
   component. If a saved state exists in `localStorage` for this quiz type +
   difficulty, add a "Continue previous quiz" option.
@@ -771,6 +903,7 @@ Technical notes:
 user to identify the star by name.
 
 Technical notes:
+
 - Reuse `SkyCanvas` at `FINDER_FOV` for each of the 4 panels.
 - Apply a random rotation (0–360°) per panel per question (different rotation
   for each panel).
@@ -785,6 +918,7 @@ Technical notes:
 **Deliverable:** Quiz that highlights a star and asks for name + constellation.
 
 Technical notes:
+
 - `CONSTELLATION_QUIZ_FOV` should be wide enough to show the full constellation
   schema — derive per constellation from the angular span of its member stars
   plus 20% padding.
@@ -800,6 +934,7 @@ Technical notes:
 question rounds.
 
 Technical notes:
+
 - Randomly interleave the three question types within a session.
 - Image questions: images must already be in IndexedDB (loaded in Step 17).
   Display as `<img src={objectURLFromBlob}>`.
@@ -813,6 +948,7 @@ Technical notes:
 **Deliverable:** Quiz that adds a fake star and asks the user to identify it.
 
 Technical notes:
+
 - Render a real sky fragment using `SkyCanvas`. Choose a region with enough
   stars of the target magnitude to provide plausible distractors.
 - The fake star position must be at least 1° away from any real star of
@@ -829,6 +965,7 @@ Technical notes:
 **Deliverable:** Quiz that highlights Moon features and asks for their name.
 
 Technical notes:
+
 - Render the schematic Moon map (from `moon_features.json`, Step 6) as an SVG
   or canvas element.
 - Highlight a feature by drawing a coloured circle at its `(lat, lon)` mapped

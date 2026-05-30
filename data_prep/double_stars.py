@@ -95,10 +95,12 @@ class DoubleStarMatcher:
     def __init__(
         self,
         sources_dir: Path,
+        cache_dir: Path | None = None,
         debug: bool = False,
     ) -> None:
         self._sources_dir = sources_dir
-        self._downloader = Downloader(sources_dir, debug=debug)
+        cache = cache_dir or sources_dir
+        self._downloader = Downloader(cache, debug=debug)
 
     def attach(
         self,

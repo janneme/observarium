@@ -268,13 +268,15 @@ class DsoPipeline:
         self,
         sources_dir: Path,
         output_dir: Path,
+        cache_dir: Path | None = None,
         non_messier_num: int = NON_MESSIER_NUM,
         debug: bool = False,
     ) -> None:
         self._sources_dir = sources_dir
         self._output_dir = output_dir
         self._non_messier_num = non_messier_num
-        self._downloader = Downloader(sources_dir, debug=debug)
+        cache = cache_dir or sources_dir
+        self._downloader = Downloader(cache, debug=debug)
 
     def run(self, object_id: str | None = None) -> Path:
         """Execute full DSO pipeline and return output file path."""
@@ -282,7 +284,7 @@ class DsoPipeline:
             self._downloader.fetch(DSO_MAIN_URL, DSO_MAIN_FILENAME),
             self._downloader.fetch(DSO_ADDENDUM_URL, DSO_ADDENDUM_FILENAME),
         ]
-        notes = _load_notes(self._sources_dir.parent / "notes_dso.csv")
+        notes = _load_notes(self._sources_dir / "notes_dso.csv")
         objects = self._process(csv_paths, notes, object_id)
         return self._write(objects)
 

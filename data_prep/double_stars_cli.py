@@ -2,7 +2,7 @@ import csv
 import json
 from pathlib import Path
 
-from config import VARIABLE_THRESHOLD, WDS_FILENAME
+from config import VARIABLE_THRESHOLD, WDS_FILENAME, WDS_VIZIER_URL
 from double_stars import DoubleStarMatcher
 
 # pylint: disable=too-many-locals,protected-access,too-many-branches,too-many-statements
@@ -22,13 +22,15 @@ def main(
     overwrite that file. A standalone `double_stars.json` is always written.
     """
     sources_dir = Path(__file__).parent / "sources"
+    cache_dir = Path(__file__).parent / "cache"
     output_dir = Path(__file__).parent / "output"
-    matcher = DoubleStarMatcher(sources_dir)
+    matcher = DoubleStarMatcher(sources_dir, cache_dir=cache_dir)
 
     # Always produce the standalone double_stars.json for inspection/debugging
-    systems = matcher._load_systems(
-        sources_dir / WDS_FILENAME, max_mag=(max_mag or 8.0), min_sep=min_sep
-    )
+    # Ensure WDS TSV is present in the cache (download if necessary) and
+    # parse it to build systems.
+    tsv_path = matcher._downloader.fetch(WDS_VIZIER_URL, WDS_FILENAME)
+    systems = matcher._load_systems(tsv_path, max_mag=(max_mag or 8.0), min_sep=min_sep)
     out = output_dir / "double_stars.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     grouped = {s["wds"]: s for s in systems}
@@ -80,7 +82,7 @@ def main(
         )
 
         # Load curated notes sidecar to distinguish curated vs auto notes.
-        notes_path = sources_dir.parent / "notes_stars.csv"
+        notes_path = sources_dir / "notes_stars.csv"
         curated_hips = set()
         if notes_path.exists():
             with notes_path.open("r", encoding="utf-8") as fh:
