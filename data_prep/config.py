@@ -19,6 +19,10 @@ VARIABLE_THRESHOLD: float = 1.0
 #: Stars that never reach this brightness at peak are excluded from the index.
 VAR_MAX_MAG: float = 4.0
 
+# Number of topmost luminous stars to mark with an "extreme luminosity" note.
+# These will receive a persistent note like "Among the X stars with highest luminosity".
+EXTREME_STARS_NUM: int = 10
+
 #: AT-HYG v3.3 "reduced to magnitude 11" subset (871k stars, complete to V=11).
 #: Source: https://codeberg.org/astronexus/athyg  Licence: CC-BY-SA 4.0
 ATHYG_URL: str = (

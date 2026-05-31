@@ -15,6 +15,7 @@ from config import (
     ATHYG_FULL_URLS,
     ATHYG_URL,
     EUROPE_MIN_DEC,
+    EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
     VARIABLE_THRESHOLD,
 )
@@ -171,47 +172,13 @@ def _parse_lum_class(spect: str) -> str | None:
     return _LUM_CLASS_LABELS.get(m.group(2).upper())
 
 
-def _auto_note(spect: str, absmag: float | None, dist: float | None) -> str | None:
-    """Generate a concise physical description from AT-HYG catalogue fields.
+def _auto_note(_spect: str, _absmag: float | None, _dist: float | None) -> str | None:
+    """Auto-notes disabled: always return None.
 
-    Only emits a note for extremal cases: supergiants/bright giants, O-type or
-    rare-type stars (WR/C/S), and very nearby stars (within 33 light-years).
-    Tier-2 curated notes always take precedence over this auto-generated text.
+    Curated notes in `notes_stars.csv` are preserved; automatic generation was
+    intentionally removed per maintainer request.
     """
-    temp_label = _parse_spec_class(spect)
-    lum_label = _parse_lum_class(spect)
-
-    if not temp_label and not lum_label:
-        return None
-
-    supergiant_labels = {"luminous supergiant", "supergiant", "bright giant"}
-    rare_temp_labels = {"extremely hot blue", "Wolf-Rayet", "carbon", "carbon-oxygen"}
-    is_supergiant = lum_label in supergiant_labels
-    is_rare_type = temp_label in rare_temp_labels
-    is_nearby = dist is not None and dist * 3.2616 < 33
-
-    if not (is_supergiant or is_rare_type or is_nearby):
-        return None
-
-    parts: list[str] = []
-    if temp_label and lum_label:
-        raw = f"{temp_label} {lum_label}"
-    elif temp_label:
-        raw = f"{temp_label} star"
-    else:
-        raw = lum_label  # type: ignore[assignment]
-    parts.append(raw[0].upper() + raw[1:])
-
-    if absmag is not None:
-        l_sun = 10 ** ((4.83 - absmag) / 2.5)
-        if l_sun >= 50:
-            parts.append(f"~{_lsun_str(l_sun)}\u00d7 the Sun's luminosity")
-
-    if is_nearby and dist is not None:
-        ly = dist * 3.2616
-        parts.append(f"{ly:.1f} light-years from Earth")
-
-    return "; ".join(parts)
+    return None
 
 
 def _float_or_none(value: str) -> float | None:
@@ -348,7 +315,20 @@ class StarPipeline:
             csv_paths = [self._downloader.fetch(ATHYG_URL, ATHYG_FILENAME)]
         notes_path = self._sources_dir / "notes_stars.csv"
         notes = _load_notes(notes_path)
-        stars, n_curated, n_auto = self._process(csv_paths, var_index or {}, notes)
+        stars, n_curated, _ = self._process(csv_paths, var_index or {}, notes)
+        # Compute luminosities and annotate the most luminous stars. Recompute
+        # the post-annotation auto-note count so only the top N are reported
+        # as auto-generated notes.
+        try:
+            actual_top = self._annotate_luminosity(stars, EXTREME_STARS_NUM)
+        except Exception:  # pylint: disable=broad-except
+            actual_top = 0
+            if self._debug:
+                raise
+        # Report the number of auto-generated summary notes as the actual
+        # top count. The summary note marks the top-most luminous stars and
+        # should be reported as auto-generated regardless of curated notes.
+        n_auto = max(0, actual_top)
         if attach_double:
             n_dbl_stars, n_dbl_pairs = self._double_matcher.attach(
                 stars,
@@ -368,6 +348,65 @@ class StarPipeline:
             show_double=(attach_double and (show_summary or self._debug)),
             show_summary=show_summary,
         )
+
+    def _annotate_luminosity(self, stars: list[dict[str, Any]], top_n: int) -> int:
+        """Compute luminosity (L/L_sun) for stars with `mag` (float) and `dist` (pc).
+
+        Adds temporary `_lsun` (float) and `_lsun_phrase` (str) and appends the
+        phrase to `note` so that `_cap_luminosity_notes()` can trim it for all
+        but the top *top_n* entries. After capping, adds a persistent note
+        "Among the X stars with highest luminosity" to those top entries.
+        """
+        with_lsun = []
+        for star in stars:
+            if self._assign_lsun_to_star(star):
+                with_lsun.append(star)
+        if not with_lsun:
+            return 0
+        # Determine top N by luminosity (handle top_n > available)
+        actual_top = max(0, min(top_n, len(with_lsun)))
+        # Record identities of the top items before capping (use id to track objects)
+        top_set = {
+            id(s)
+            for s in sorted(
+                with_lsun, key=lambda s: s["_lsun"], reverse=True
+            )[:actual_top]
+        }
+        # Cap/remove luminosity phrases and temp fields per existing behaviour
+        self._cap_luminosity_notes(stars, top_n=actual_top)
+        # Add persistent summary note to the top items
+        summary = f"Among the {actual_top} stars with highest luminosity"
+        for star in stars:
+            if id(star) in top_set:
+                if "note" in star and star["note"]:
+                    star["note"] = f"{star['note']}; {summary}"
+                else:
+                    star["note"] = summary
+        return actual_top
+
+    def _assign_lsun_to_star(self, star: dict[str, Any]) -> bool:
+        """Compute and attach luminosity fields for *star*.
+
+        Returns True if luminosity was computed and attached, False otherwise.
+        """
+        m_sun = 4.83
+        mag = star.get("mag")
+        dist = star.get("dist")
+        if not (isinstance(mag, float) and isinstance(dist, (int, float)) and dist and dist > 0):
+            return False
+        try:
+            abs_mag = mag - 5 * math.log10(dist / 10)
+            lsun = 10 ** ((m_sun - abs_mag) / 2.5)
+        except (ValueError, OverflowError):
+            return False
+        star["_lsun"] = float(lsun)
+        phrase = f"~{_lsun_str(lsun)}\u00d7 the Sun's luminosity"
+        star["_lsun_phrase"] = phrase
+        if "note" in star and star["note"]:
+            star["note"] = f"{star['note']}; {phrase}"
+        else:
+            star["note"] = phrase
+        return True
 
     def _process_row(
         self,
@@ -389,18 +428,8 @@ class StarPipeline:
         if hip and hip in notes:
             star["note"] = notes[hip]
             return star, 1, 0
-        absmag = _float_or_none(row.get("absmag", ""))
-        auto = _auto_note(star.get("spect", "") or "", absmag, star.get("dist"))
-        if auto:
-            star["note"] = auto
-            if absmag is not None:
-                l_sun = 10 ** ((4.83 - absmag) / 2.5)
-                if l_sun >= 50:
-                    phrase = f"~{_lsun_str(l_sun)}\u00d7 the Sun's luminosity"
-                    if phrase in auto:
-                        star["_lsun"] = l_sun
-                        star["_lsun_phrase"] = phrase
-            return star, 0, 1
+        # Auto-generated physical notes have been disabled. Preserve curated
+        # notes only; count no auto notes.
         return star, 0, 0
 
     def _process_file(
@@ -453,7 +482,8 @@ class StarPipeline:
             n_auto += da
             if idx == 0:
                 shared_fieldnames = fnames
-        self._cap_luminosity_notes(stars)
+        # Auto-luminosity notes and auto-generated notes are disabled.
+        # Curated notes from `notes_stars.csv` are preserved and counted.
         return stars, n_curated, n_auto
 
     @staticmethod
@@ -467,12 +497,23 @@ class StarPipeline:
             reverse=True,
         )
         for s in tagged[top_n:]:
-            phrase = s.pop("_lsun_phrase")
-            s["note"] = (
-                s["note"]
-                .replace(f"; {phrase}", "")
-                .replace(f"{phrase}; ", "")
-            )
+            phrase = s.pop("_lsun_phrase", None)
+            # Remove the phrase from the note in all common positions.
+            note = s.get("note")
+            if note and phrase:
+                # Remove occurrences like '; {phrase}', '{phrase}; ', or the
+                # phrase alone. Then clean up stray separators/spaces.
+                new = note.replace(f"; {phrase}", "").replace(
+                    f"{phrase}; ", ""
+                )
+                new = new.replace(phrase, "")
+                # Normalize semicolons and whitespace
+                new = re.sub(r"\s*;\s*", "; ", new).strip()
+                new = new.strip("; ")
+                if new:
+                    s["note"] = new
+                else:
+                    s.pop("note", None)
             s.pop("_lsun", None)
         for s in tagged[:top_n]:
             s.pop("_lsun", None)

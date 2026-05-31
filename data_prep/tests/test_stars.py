@@ -334,64 +334,6 @@ class TestParseLumClass:
 
 
 # ---------------------------------------------------------------------------
-# _auto_note
-# ---------------------------------------------------------------------------
-
-
-class TestAutoNote:
-    def test_supergiant_generates_note(self):
-        note = _auto_note("K2Ib", -1.4, 200.0)
-        assert note is not None
-        assert "supergiant" in note.lower()
-
-    def test_supergiant_includes_luminosity(self):
-        # absmag=-1.4 → ~200 L_sun ≥ 50 threshold
-        note = _auto_note("K2Ib", -1.4, 200.0)
-        assert note is not None
-        assert "\u00d7 the Sun's luminosity" in note
-
-    def test_luminous_supergiant(self):
-        note = _auto_note("M2IA", -5.5, 200.0)
-        assert note is not None
-        assert "luminous supergiant" in note.lower()
-        assert "\u00d7 the Sun's luminosity" in note
-
-    def test_o_type_generates_note(self):
-        note = _auto_note("O9V", -4.0, 500.0)
-        assert note is not None
-        assert "extremely hot blue" in note.lower()
-
-    def test_nearby_star_generates_note(self):
-        # dist=2.0 pc → 6.5 ly < 33 ly threshold
-        note = _auto_note("K5V", 6.0, 2.0)
-        assert note is not None
-        assert "light-years from Earth" in note
-
-    def test_regular_giant_returns_none(self):
-        assert _auto_note("K2III", 0.48, 200.0) is None
-
-    def test_main_sequence_far_returns_none(self):
-        assert _auto_note("G5V", 5.0, 50.0) is None
-
-    def test_supergiant_distant_omits_distance(self):
-        # Supergiant far away → no distance note
-        note = _auto_note("F5Ib", -4.5, 200.0)
-        assert note is not None
-        assert "light-years" not in note
-
-    def test_low_luminosity_supergiant_omits_lsun(self):
-        # absmag=2.0 → ~6 L_sun < 50 threshold; still generates note as supergiant
-        note = _auto_note("M2Ia", 2.0, 200.0)
-        assert note is not None
-        assert "\u00d7 the Sun's luminosity" not in note
-
-    def test_first_letter_capitalised(self):
-        note = _auto_note("M2IA", -5.5, 500.0)
-        assert note is not None
-        assert note[0].isupper()
-
-    def test_empty_spect_returns_none(self):
-        assert _auto_note("", -2.0, 100.0) is None
 
 
 # ---------------------------------------------------------------------------

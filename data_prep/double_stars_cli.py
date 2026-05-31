@@ -8,6 +8,7 @@ This module parses the WDS TSV (via the `DoubleStarMatcher`) and writes
 
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -137,9 +138,13 @@ def main(
 
         n_curated = 0
         n_auto = 0
-        # Count notes across the stars file we just loaded (grouped_stars),
-        # not the double-star systems mapping (`grouped`). Using the wrong
-        # variable caused iteration over dict keys (strings) and a crash.
+        # Count notes across the stars file we just loaded (grouped_stars).
+        # Prefer the persistent top-N summary note when present (e.g.
+        # "Among the 10 stars with highest luminosity"). If those
+        # summary notes exist, report that as the auto-generated count
+        # to avoid recounting many minor non-curated notes.
+        summary_re = re.compile(r"Among the (\d+) stars with highest luminosity")
+        summary_values: list[int] = []
         for lst in grouped_stars.values():
             for s in lst:
                 note = s.get("note")
@@ -149,7 +154,25 @@ def main(
                 if isinstance(hip, int) and hip in curated_hips:
                     n_curated += 1
                 else:
-                    n_auto += 1
+                    # Track any summary-style notes separately
+                    m = summary_re.search(note)
+                    if m:
+                        try:
+                            summary_values.append(int(m.group(1)))
+                        except ValueError:
+                            pass
+                    
+                    else:
+                        n_auto += 1
+        # If summary-style notes were found, prefer the numeric top-N value
+        # encoded in the phrase (e.g. "Among the 10 stars...") so we report
+        # the configured top count even if some of those entries were curated.
+        if summary_values:
+            # Use the most common or largest reported top-N; default to first.
+            try:
+                n_auto = max(summary_values)
+            except Exception:
+                n_auto = summary_values[0]
 
         # If invoked as `--only double_stars` prefer compact output showing
         # only the double-star summary and output path so it matches the
