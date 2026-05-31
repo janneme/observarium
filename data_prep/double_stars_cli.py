@@ -1,6 +1,7 @@
 import csv
 import json
 from pathlib import Path
+import sys
 
 from config import VARIABLE_THRESHOLD, WDS_FILENAME, WDS_VIZIER_URL
 from double_stars import DoubleStarMatcher
@@ -13,6 +14,7 @@ def main(
     min_sep: float = 2.0,
     embed_into_stars: bool = True,
     only_mode: bool = False,
+    debug: bool = False,
 ) -> None:
     """Export double-star systems and optionally embed dbl metadata into an
     existing `stars.m{mag}.json` file when *max_mag* is provided.
@@ -26,6 +28,21 @@ def main(
     output_dir = Path(__file__).parent / "output"
     matcher = DoubleStarMatcher(sources_dir, cache_dir=cache_dir)
 
+    # If running in `only_mode` the user likely expects the double-star
+    # information to be embedded into an existing stars file. If the
+    # requested stars file doesn't exist, fail early and instruct the user
+    # to initialize/run the stars pipeline first so they can re-run with
+    # embedding enabled.
+    if only_mode and embed_into_stars and max_mag is not None:
+        stars_file = output_dir / f"stars.m{max_mag:g}.json"
+        if not stars_file.exists():
+            print(
+                f"Stars file {stars_file} not found.\n"
+                "Run 'python main.py --only stars --max-mag {max_mag:g}' or\n"
+                "'python main.py --group stars --max-mag {max_mag:g}' to create it,\n"
+                "then re-run this command to embed double-star metadata.")
+            sys.exit(2)
+
     # Always produce the standalone double_stars.json for inspection/debugging
     # Ensure WDS TSV is present in the cache (download if necessary) and
     # parse it to build systems.
@@ -36,13 +53,25 @@ def main(
     grouped = {s["wds"]: s for s in systems}
     with out.open("w", encoding="utf-8") as fh:
         json.dump(grouped, fh, ensure_ascii=False, indent=2)
-    if max_mag is None:
-        print(f"Wrote {len(grouped)} double-star systems to {out} (max_mag=8.0)")
+    if only_mode:
+        # In only_mode we prefer compact output regardless of debug so the
+        # command remains useful as a standalone tool.
+        if max_mag is None:
+            print(f"Wrote {len(grouped)} double-star systems to {out} (max_mag=8.0)")
+        else:
+            print(
+                f"Wrote {len(grouped)} double-star systems to {out} "
+                f"(filtered by max_mag={max_mag:g})"
+            )
     else:
-        print(
-            f"Wrote {len(grouped)} double-star systems to {out} "
-            f"(filtered by max_mag={max_mag:g})"
-        )
+        if debug:
+            if max_mag is None:
+                print(f"Wrote {len(grouped)} double-star systems to {out} (max_mag=8.0)")
+            else:
+                print(
+                    f"Wrote {len(grouped)} double-star systems to {out} "
+                    f"(filtered by max_mag={max_mag:g})"
+                )
 
     # Optionally embed into existing stars file
     if embed_into_stars and max_mag is not None:
@@ -70,7 +99,11 @@ def main(
             idx += size
         with stars_file.open("w", encoding="utf-8") as fh:
             json.dump(new_grouped, fh, ensure_ascii=False)
-        print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs")
+        if only_mode:
+            print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs")
+        else:
+            if debug:
+                print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs")
 
         # Emit a stars-like summary so this command's output matches the
         # `--only stars` run. Recompute basic stats from the updated file.
@@ -122,20 +155,38 @@ def main(
             print(f"Output         : {stars_file} ({size_mb:.2f} MB)")
             return
 
-        size_mb = stars_file.stat().st_size / 1_048_576
-        print(f"Stars included : {total_stars:,} across {n_const:,} constellations")
-        print(f"Variable stars : {n_variable} encoded with amplitude 00265 {VARIABLE_THRESHOLD}")
-        print(
-            f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
-            f"(sep >= {min_sep} arcsec)"
-        )
-        note_parts = (
-            ([f"{n_curated} curated"] if n_curated else [])
-            + ([f"{n_auto} auto-generated"] if n_auto else [])
-        )
-        notes_summary = " + ".join(note_parts) if note_parts else "none"
-        print(f"Star notes     : {notes_summary}")
-        print(f"Output         : {stars_file} ({size_mb:.2f} MB)")
+        if debug:
+            size_mb = stars_file.stat().st_size / 1_048_576
+            print(f"Stars included : {total_stars:,} across {n_const:,} constellations")
+            print(f"Variable stars : {n_variable} encoded with amplitude 00265 {VARIABLE_THRESHOLD}")
+            print(
+                f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
+                f"(sep >= {min_sep} arcsec)"
+            )
+            note_parts = (
+                ([f"{n_curated} curated"] if n_curated else [])
+                + ([f"{n_auto} auto-generated"] if n_auto else [])
+            )
+            notes_summary = " + ".join(note_parts) if note_parts else "none"
+            print(f"Star notes     : {notes_summary}")
+            print(f"Output         : {stars_file} ({size_mb:.2f} MB)")
+        else:
+            # Concise summary for non-debug/grouped runs so the user still
+            # sees the key results without verbose diagnostics.
+            size_mb = stars_file.stat().st_size / 1_048_576
+            note_parts = (
+                ([f"{n_curated} curated"] if n_curated else [])
+                + ([f"{n_auto} auto-generated"] if n_auto else [])
+            )
+            notes_summary = " + ".join(note_parts) if note_parts else "none"
+            print(f"Stars included : {total_stars:,} across {n_const:,} constellations")
+            print(f"Variable stars : {n_variable} encoded with amplitude >= {VARIABLE_THRESHOLD}")
+            print(
+                f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
+                f"(sep >= {min_sep} arcsec)"
+            )
+            print(f"Star notes     : {notes_summary}")
+            print(f"Output         : {stars_file} ({size_mb:.2f} MB)")
 
 
 if __name__ == "__main__":

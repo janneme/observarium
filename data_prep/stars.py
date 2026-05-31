@@ -322,16 +322,22 @@ class StarPipeline:
         cache = cache_dir or sources_dir
         self._downloader = Downloader(cache, debug=debug)
         self._double_matcher = DoubleStarMatcher(sources_dir, cache_dir=cache, debug=debug)
+        self._debug = debug
 
     def run(
         self,
         var_index: dict[int, tuple[float, float]] | None = None,
+        attach_double: bool = False,
+        show_summary: bool = True,
     ) -> Path:
-        """Execute the full pipeline and return the path to stars.json.
+        """Execute the pipeline and return the path to stars.json.
 
         *var_index* is an optional HIP → (min_mag, max_mag) mapping supplied
         by :class:`~variable_stars.VariableStarPipeline`. When absent, no
         variable-star encoding is applied.
+
+        By default this method does not attach double-star metadata; set
+        *attach_double* to True to perform double-star matching inline.
         """
         if self._max_mag > ATHYG_FULL_MAG_THRESHOLD:
             csv_paths = [
@@ -343,12 +349,25 @@ class StarPipeline:
         notes_path = self._sources_dir / "notes_stars.csv"
         notes = _load_notes(notes_path)
         stars, n_curated, n_auto = self._process(csv_paths, var_index or {}, notes)
-        n_dbl_stars, n_dbl_pairs = self._double_matcher.attach(
+        if attach_double:
+            n_dbl_stars, n_dbl_pairs = self._double_matcher.attach(
+                stars,
+                max_mag=self._max_mag,
+                min_sep=self._min_double_star_sep,
+            )
+        else:
+            n_dbl_stars = 0
+            n_dbl_pairs = 0
+        return self._write(
             stars,
-            max_mag=self._max_mag,
-            min_sep=self._min_double_star_sep,
+            n_curated,
+            n_auto,
+            n_dbl_stars,
+            n_dbl_pairs,
+            show_variables=(bool(var_index) and (show_summary or self._debug)),
+            show_double=(attach_double and (show_summary or self._debug)),
+            show_summary=show_summary,
         )
-        return self._write(stars, n_curated, n_auto, n_dbl_stars, n_dbl_pairs)
 
     def _process_row(
         self,
@@ -467,6 +486,9 @@ class StarPipeline:
         n_auto: int,
         n_dbl_stars: int,
         n_dbl_pairs: int,
+        show_variables: bool = False,
+        show_double: bool = False,
+        show_summary: bool = True,
     ) -> Path:
         """Group stars by constellation, write JSON, print stats, return path."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -478,19 +500,22 @@ class StarPipeline:
             grouped.setdefault(key, []).append(star)
         with out.open("w", encoding="utf-8") as fh:
             json.dump(grouped, fh, ensure_ascii=False)
-        size_mb = out.stat().st_size / 1_048_576
-        n_variable = sum(1 for s in stars if isinstance(s.get("mag"), list))
-        note_parts = ([f"{n_curated} curated"] if n_curated else []) + (
-            [f"{n_auto} auto-generated"] if n_auto else []
-        )
-        notes_summary = " + ".join(note_parts) if note_parts else "none"
-        print(f"Stars included : {len(stars):,} across {len(grouped):,} constellations")
-        print(f"Variable stars : {n_variable} encoded with amplitude \u2265 {self._var_threshold}")
-        print(
-            f"Double stars   : {n_dbl_stars} stars with {n_dbl_pairs} pairs "
-            f"(sep >= {self._min_double_star_sep} arcsec)"
-        )
-        print(f"Star notes     : {notes_summary}")
-        print(f"Output         : {out} ({size_mb:.2f} MB)")
+        if show_summary:
+            size_mb = out.stat().st_size / 1_048_576
+            n_variable = sum(1 for s in stars if isinstance(s.get("mag"), list))
+            note_parts = ([f"{n_curated} curated"] if n_curated else []) + (
+                [f"{n_auto} auto-generated"] if n_auto else []
+            )
+            notes_summary = " + ".join(note_parts) if note_parts else "none"
+            print(f"Stars included : {len(stars):,} across {len(grouped):,} constellations")
+            if show_variables:
+                print(f"Variable stars : {n_variable} encoded with amplitude \u2265 {self._var_threshold}")
+            if show_double:
+                print(
+                    f"Double stars   : {n_dbl_stars} stars with {n_dbl_pairs} pairs "
+                    f"(sep >= {self._min_double_star_sep} arcsec)"
+                )
+            print(f"Star notes     : {notes_summary}")
+            print(f"Output         : {out} ({size_mb:.2f} MB)")
         return out
     # pylint: enable=too-many-arguments,too-many-positional-arguments,too-many-locals

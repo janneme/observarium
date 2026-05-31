@@ -10,10 +10,12 @@ Usage examples:
 # pylint: disable=duplicate-code
 
 import argparse
+import sys
+import math
 from collections.abc import Callable
 from pathlib import Path
 
-from config import NON_MESSIER_NUM, VAR_MAX_MAG
+from config import NON_MESSIER_NUM, VAR_MAX_MAG, MAX_STAR_MAGNITUDE
 from constellations import ConstellationPipeline
 from dso import DsoPipeline
 from moon_features import MoonFeaturePipeline
@@ -69,17 +71,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--var-max-mag",
         type=float,
-        default=VAR_MAX_MAG,
+        default=None,
         metavar="FLOAT",
         dest="var_max_mag",
-        help="Peak brightness limit for the SIMBAD variable-star query (default: %(default)s).",
+        help="Peak brightness limit for the SIMBAD variable-star query (default: 0.75 * --max-mag, rounded up).",
     )
     parser.add_argument(
-        "--skip-variables",
-        action="store_true",
-        default=False,
-        dest="skip_variables",
-        help="Skip variable-star enrichment when processing stars.",
+        "--group",
+        choices=["stars"],
+        help='Fetch a named group of related data (e.g. "stars").',
     )
     parser.add_argument(
         "--non-messier-num",
@@ -109,7 +109,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Entry point: run all requested data pipelines."""
     args = parse_args()
-    targets = [args.only] if args.only else _ALL_CATEGORIES
+    # Compute default for var_max_mag based on max_mag if not provided.
+    if args.var_max_mag is None:
+        effective_max = args.max_mag if args.max_mag is not None else MAX_STAR_MAGNITUDE
+        args.var_max_mag = float(math.ceil(0.75 * effective_max))
+    # Grouping: if a group is requested, run the group's related targets
+    if args.group == "stars":
+        targets = ["variable_stars", "stars", "double_stars"]
+    else:
+        targets = [args.only] if args.only else _ALL_CATEGORIES
     star_kwargs: dict[str, float] = {}
     if args.max_mag is not None:
         star_kwargs["max_mag"] = args.max_mag
@@ -118,13 +126,37 @@ def main() -> None:
 
     def _run_stars() -> None:
         var_index: dict[int, tuple[float, float]] = {}
-        if not args.skip_variables:
+        # `--only stars` should produce only basic star information and
+        # therefore skip variable-star enrichment. For `--group stars` we
+        # auto-fetch the variable-star CSV if missing. For other modes we
+        # require the CSV to already exist and fail fast to avoid silent
+        # omission of variable-star data.
+        if args.only == "stars":
+            pass
+        else:
             var_pipeline = VariableStarPipeline(
                 _SOURCES_DIR, args.var_max_mag, debug=args.debug
             )
-            if not var_pipeline.csv_path().exists():
-                var_pipeline.run()
+            if args.group == "stars":
+                if not var_pipeline.csv_path().exists():
+                    var_pipeline.run()
+            else:
+                # Strict mode: require existing variable-star CSV
+                if not var_pipeline.csv_path().exists():
+                    csv_name = var_pipeline.csv_path().name
+                    print(
+                        f"Variable-star data {csv_name} not found.\n"
+                        f"Run 'python main.py --only variable_stars --var-max-mag {args.var_max_mag}'\n"
+                        "or 'python main.py --group stars' to create it, then re-run."
+                    )
+                    sys.exit(2)
             var_index = var_pipeline.load_index()
+        # Decide whether to emit the concise stars summary. For grouped runs
+        # we suppress the intermediate stars summary and rely on the
+        # double-star exporter to emit a consolidated final summary.
+        show_summary = False if args.group == "stars" else (args.debug or args.group != "stars")
+        # If this is a grouped run, emit a brief variable-star summary so the
+        # user sees progress without needing --debug.
         StarPipeline(
             _SOURCES_DIR,
             _OUTPUT_DIR,
@@ -132,11 +164,13 @@ def main() -> None:
             debug=args.debug,
             min_double_star_sep=args.min_double_star_sep,
             **star_kwargs,
-        ).run(var_index=var_index)
+        ).run(var_index=var_index, attach_double=False, show_summary=show_summary)
+        # (No extra prints here — the pipeline and the double-star exporter
+        # already emit concise summaries for grouped runs.)
 
     runners: dict[str, Callable[[], None]] = {
         "variable_stars": lambda: VariableStarPipeline(
-            _SOURCES_DIR, args.var_max_mag
+            _SOURCES_DIR, args.var_max_mag, debug=args.debug
         ).run(),
         "stars": _run_stars,
         "dso": lambda: DsoPipeline(
@@ -160,6 +194,7 @@ def main() -> None:
             min_sep=args.min_double_star_sep,
             embed_into_stars=True,
             only_mode=(args.only == "double_stars"),
+            debug=args.debug,
         ),
     }
     for target in targets:

@@ -80,7 +80,8 @@ class VariableStarPipeline:
             writer = csv.writer(fh)
             writer.writerow(_CSV_FIELDS)
             writer.writerows(rows)
-        print(f"Variable stars : {len(rows):,} written \u2192 {out.name}")
+        if self._debug:
+            print(f"Variable stars : {len(rows):,} written \u2192 {out.name}")
         return out
 
     def _fetch_gcvs(self) -> list[dict[str, Any]]:
@@ -96,7 +97,8 @@ class VariableStarPipeline:
             except (ValueError, TypeError):
                 continue
             rows.append({"var_name": var_name, "mag_max": mag_max, "min1": min1})
-        print(f"GCVS           : {len(rows):,} entries with magMax <= {self._max_mag}")
+        if self._debug:
+            print(f"GCVS           : {len(rows):,} entries with magMax <= {self._max_mag}")
         return rows
 
     def _fetch_hip_xmatch(
@@ -135,7 +137,7 @@ class VariableStarPipeline:
             except ValueError:
                 continue
             results.append((hip, row["mag_max"], row["min1"]))
-        if skipped_amplitude:
+        if skipped_amplitude and self._debug:
             print(
                 f"GCVS           : {skipped_amplitude} entries skipped"
                 " (Min1 < magMax \u2014 amplitude notation)"
