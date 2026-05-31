@@ -15,6 +15,7 @@ from config import (
     ATHYG_FULL_URLS,
     ATHYG_URL,
     EUROPE_MIN_DEC,
+    EXTREME_BRIGHT_NUM,
     EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
     VARIABLE_THRESHOLD,
@@ -325,10 +326,24 @@ class StarPipeline:
             actual_top = 0
             if self._debug:
                 raise
-        # Report the number of auto-generated summary notes as the actual
-        # top count. The summary note marks the top-most luminous stars and
-        # should be reported as auto-generated regardless of curated notes.
-        n_auto = max(0, actual_top)
+        try:
+            actual_bright = self._annotate_brightness(stars, EXTREME_BRIGHT_NUM)
+        except Exception:  # pylint: disable=broad-except
+            actual_bright = 0
+            if self._debug:
+                raise
+        # Compute the number of unique stars marked by any persistent summary
+        # note (luminosity or brightness) and report that as auto-generated.
+        summary_phrases = (
+            f"Among the {actual_top} stars with highest luminosity",
+            f"Among the {actual_bright} brightest stars",
+        )
+        summary_ids: set[int] = set()
+        for s in stars:
+            note = s.get("note") or ""
+            if any(p in note for p in summary_phrases):
+                summary_ids.add(id(s))
+        n_auto = len(summary_ids)
         if attach_double:
             n_dbl_stars, n_dbl_pairs = self._double_matcher.attach(
                 stars,
@@ -382,6 +397,26 @@ class StarPipeline:
                     star["note"] = f"{star['note']}; {summary}"
                 else:
                     star["note"] = summary
+        return actual_top
+
+    def _annotate_brightness(self, stars: list[dict[str, Any]], top_n: int) -> int:
+        """Mark the top *top_n* stars by apparent brightness (lowest `mag`).
+
+        Appends a persistent summary note "Among the X brightest stars" to
+        each of the selected stars and returns the actual number marked.
+        """
+        with_mag = [s for s in stars if isinstance(s.get("mag"), float)]
+        if not with_mag:
+            return 0
+        actual_top = max(0, min(top_n, len(with_mag)))
+        # sort by apparent magnitude (smaller = brighter)
+        top_stars = sorted(with_mag, key=lambda s: s["mag"])[:actual_top]
+        summary = f"Among the {actual_top} brightest stars"
+        for s in top_stars:
+            if "note" in s and s["note"]:
+                s["note"] = f"{s['note']}; {summary}"
+            else:
+                s["note"] = summary
         return actual_top
 
     def _assign_lsun_to_star(self, star: dict[str, Any]) -> bool:

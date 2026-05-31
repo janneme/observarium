@@ -143,8 +143,11 @@ def main(
         # "Among the 10 stars with highest luminosity"). If those
         # summary notes exist, report that as the auto-generated count
         # to avoid recounting many minor non-curated notes.
-        summary_re = re.compile(r"Among the (\d+) stars with highest luminosity")
-        summary_values: list[int] = []
+        # Recognise summary phrases for luminosity and brightness and count
+        # the unique stars they mark; otherwise count non-summary auto notes.
+        lum_re = re.compile(r"Among the (\d+) stars with highest luminosity")
+        bright_re = re.compile(r"Among the (\d+) brightest stars")
+        summary_ids: set[int] = set()
         for lst in grouped_stars.values():
             for s in lst:
                 note = s.get("note")
@@ -154,25 +157,12 @@ def main(
                 if isinstance(hip, int) and hip in curated_hips:
                     n_curated += 1
                 else:
-                    # Track any summary-style notes separately
-                    m = summary_re.search(note)
-                    if m:
-                        try:
-                            summary_values.append(int(m.group(1)))
-                        except ValueError:
-                            pass
-                    
+                    if lum_re.search(note) or bright_re.search(note):
+                        summary_ids.add(id(s))
                     else:
                         n_auto += 1
-        # If summary-style notes were found, prefer the numeric top-N value
-        # encoded in the phrase (e.g. "Among the 10 stars...") so we report
-        # the configured top count even if some of those entries were curated.
-        if summary_values:
-            # Use the most common or largest reported top-N; default to first.
-            try:
-                n_auto = max(summary_values)
-            except Exception:
-                n_auto = summary_values[0]
+        if summary_ids:
+            n_auto = len(summary_ids)
 
         # If invoked as `--only double_stars` prefer compact output showing
         # only the double-star summary and output path so it matches the
