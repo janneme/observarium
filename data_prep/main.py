@@ -10,12 +10,12 @@ Usage examples:
 # pylint: disable=duplicate-code
 
 import argparse
-import sys
 import math
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from config import NON_MESSIER_NUM, VAR_MAX_MAG, MAX_STAR_MAGNITUDE
+from config import MAX_STAR_MAGNITUDE, NON_MESSIER_NUM
 from constellations import ConstellationPipeline
 from dso import DsoPipeline
 from moon_features import MoonFeaturePipeline
@@ -74,7 +74,10 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="FLOAT",
         dest="var_max_mag",
-        help="Peak brightness limit for the SIMBAD variable-star query (default: 0.75 * --max-mag, rounded up).",
+        help=(
+            "Peak brightness limit for the SIMBAD variable-star query "
+            "(default: 0.75 * --max-mag, rounded up)."
+        ),
     )
     parser.add_argument(
         "--group",
@@ -146,7 +149,8 @@ def main() -> None:
                     csv_name = var_pipeline.csv_path().name
                     print(
                         f"Variable-star data {csv_name} not found.\n"
-                        f"Run 'python main.py --only variable_stars --var-max-mag {args.var_max_mag}'\n"
+                        "Run 'python main.py --only variable_stars --var-max-mag "
+                        f"{args.var_max_mag}'\n"
                         "or 'python main.py --group stars' to create it, then re-run."
                     )
                     sys.exit(2)

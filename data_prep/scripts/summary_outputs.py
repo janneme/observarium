@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 from pathlib import Path
+
 out = Path(__file__).parent.parent / 'output'
 stars9 = out / 'stars.m9.json'
 dbl = out / 'double_stars.json'

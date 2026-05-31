@@ -507,9 +507,15 @@ class StarPipeline:
                 [f"{n_auto} auto-generated"] if n_auto else []
             )
             notes_summary = " + ".join(note_parts) if note_parts else "none"
-            print(f"Stars included : {len(stars):,} across {len(grouped):,} constellations")
+            print(
+                f"Stars included : {len(stars):,} across {len(grouped):,} "
+                "constellations"
+            )
             if show_variables:
-                print(f"Variable stars : {n_variable} encoded with amplitude \u2265 {self._var_threshold}")
+                print(
+                    f"Variable stars : {n_variable} encoded with amplitude \u2265 "
+                    f"{self._var_threshold}"
+                )
             if show_double:
                 print(
                     f"Double stars   : {n_dbl_stars} stars with {n_dbl_pairs} pairs "

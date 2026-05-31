@@ -7,8 +7,12 @@ REQ := requirements.txt
 PYPROJECT := pyproject.toml
 
 .PHONY: init uv-init activate install
+.PHONY: test
+.PHONY: lint lint-fix
 
 .PHONY: test
+
+.PHONY: lint
 
 # Default init: prefer pyproject.toml + uv, fall back to requirements.txt
 init:
@@ -38,10 +42,22 @@ install:
 	$(PIP) install --upgrade pip setuptools wheel
 	@if [ -f $(REQ) ]; then $(PIP) install -r $(REQ); else echo "No requirements.txt found in data_prep"; fi
 
-# Initialize venv, ensure runtime/test deps and run the test suite.
+# Run tests: assume the venv is already prepared and only run pytest.
 test: ## Run pytest using existing venv (requires prior `make init`)
-	@if [ -d $(VENV) ]; then \
-		$(VENV)/bin/uv run pytest; \
-	else \
-		echo "Virtualenv not found. Run 'make init' first to create $(VENV)."; exit 1; \
-	fi
+	$(VENV)/bin/python -m pytest
+
+# Run linters using tools installed in the venv. Do not perform any installs.
+lint: ## Run ruff and pylint using existing venv (requires prior `make init`)
+	# Exclude build artifacts, the venv directory and tests from analysis
+	@$(VENV)/bin/ruff check . --exclude .venv,build,output,cache,tests; rc=$$?; \
+	if [ $$rc -ne 0 ]; then \
+		echo "ruff reported issues (exit $$rc); skipping pylint."; \
+		exit 0; \
+	fi; \
+	$(VENV)/bin/pylint --rcfile=$(CURDIR)/../.pylintrc $(shell find . -name '*.py' -not -path './.venv/*' -not -path './build/*' -not -path './output/*' -not -path './cache/*' -not -path './tests/*' -not -path '../tests/*') || true
+
+# Auto-fix lintable issues with ruff, then re-run lint target
+lint-fix: ## Run ruff --fix on source (requires prior `make init`)
+	@echo "Running ruff --fix (source only, tests excluded)..."
+	@$(VENV)/bin/ruff check . --fix --exclude .venv,build,output,cache,tests || true
+	@$(MAKE) -C $(CURDIR) lint

@@ -50,7 +50,13 @@ def _precess_b1875_to_j2000(ra_hms: str, dec_dms: str) -> tuple[float, float]:
 class ConstellationPipeline:
     """Build constellation lines, boundaries and names from Stellarium data."""
 
-    def __init__(self, sources_dir: Path, output_dir: Path, cache_dir: Path | None = None, debug: bool = False) -> None:
+    def __init__(
+        self,
+        sources_dir: Path,
+        output_dir: Path,
+        cache_dir: Path | None = None,
+        debug: bool = False,
+    ) -> None:
         self._sources_dir = sources_dir
         self._output_dir = output_dir
         cache = cache_dir or sources_dir

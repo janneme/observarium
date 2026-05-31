@@ -1,7 +1,7 @@
 import csv
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from config import VARIABLE_THRESHOLD, WDS_FILENAME, WDS_VIZIER_URL
 from double_stars import DoubleStarMatcher
@@ -157,8 +157,14 @@ def main(
 
         if debug:
             size_mb = stars_file.stat().st_size / 1_048_576
-            print(f"Stars included : {total_stars:,} across {n_const:,} constellations")
-            print(f"Variable stars : {n_variable} encoded with amplitude 00265 {VARIABLE_THRESHOLD}")
+            print(
+                f"Stars included : {total_stars:,} across {n_const:,} "
+                "constellations"
+            )
+            print(
+                f"Variable stars : {n_variable} encoded with amplitude >= "
+                f"{VARIABLE_THRESHOLD}"
+            )
             print(
                 f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
                 f"(sep >= {min_sep} arcsec)"
