@@ -116,7 +116,8 @@ def main() -> None:
     if args.var_max_mag is None:
         effective_max = args.max_mag if args.max_mag is not None else MAX_STAR_MAGNITUDE
         args.var_max_mag = float(math.ceil(0.75 * effective_max))
-    # Grouping: if a group is requested, run the group's related targets
+
+    # Determine targets and star kwargs
     if args.group == "stars":
         targets = ["variable_stars", "stars", "double_stars"]
     else:
@@ -127,72 +128,70 @@ def main() -> None:
     if args.var_threshold is not None:
         star_kwargs["var_threshold"] = args.var_threshold
 
-    def _run_stars() -> None:
-        var_index: dict[int, tuple[float, float]] = {}
-        # `--only stars` should produce only basic star information and
-        # therefore skip variable-star enrichment. For `--group stars` we
-        # auto-fetch the variable-star CSV if missing. For other modes we
-        # require the CSV to already exist and fail fast to avoid silent
-        # omission of variable-star data.
-        if args.only == "stars":
-            pass
-        else:
-            var_pipeline = VariableStarPipeline(
-                _SOURCES_DIR, args.var_max_mag, debug=args.debug
-            )
-            if args.group == "stars":
-                if not var_pipeline.csv_path().exists():
-                    var_pipeline.run()
-            else:
-                # Strict mode: require existing variable-star CSV
-                if not var_pipeline.csv_path().exists():
-                    csv_name = var_pipeline.csv_path().name
-                    print(
-                        f"Variable-star data {csv_name} not found.\n"
-                        "Run 'python main.py --only variable_stars --var-max-mag "
-                        f"{args.var_max_mag}'\n"
-                        "or 'python main.py --group stars' to create it, then re-run."
-                    )
-                    sys.exit(2)
-            var_index = var_pipeline.load_index()
-        # Decide whether to emit the concise stars summary. For grouped runs
-        # we suppress the intermediate stars summary and rely on the
-        # double-star exporter to emit a consolidated final summary.
-        show_summary = False if args.group == "stars" else (args.debug or args.group != "stars")
-        # If this is a grouped run, emit a brief variable-star summary so the
-        # user sees progress without needing --debug.
-        StarPipeline(
-            _SOURCES_DIR,
-            _OUTPUT_DIR,
-            cache_dir=_CACHE_DIR,
-            debug=args.debug,
-            min_double_star_sep=args.min_double_star_sep,
-            **star_kwargs,
-        ).run(var_index=var_index, attach_double=False, show_summary=show_summary)
-        # (No extra prints here — the pipeline and the double-star exporter
-        # already emit concise summaries for grouped runs.)
+    runners = _build_runners(args, star_kwargs)
+    for target in targets:
+        runner = runners.get(target)
+        if runner is None:
+            print(f"[data-prep] '{target}' not yet implemented, skipping.")
+            continue
+        runner()
 
-    runners: dict[str, Callable[[], None]] = {
+
+def _prepare_var_index(args: argparse.Namespace) -> dict[int, tuple[float, float]]:
+    """Prepare and return the variable-star index for star enrichment."""
+    if args.only == "stars":
+        return {}
+    var_pipeline = VariableStarPipeline(_SOURCES_DIR, args.var_max_mag, debug=args.debug)
+    if args.group == "stars":
+        if not var_pipeline.csv_path().exists():
+            var_pipeline.run()
+    else:
+        # Strict mode: require existing variable-star CSV
+        if not var_pipeline.csv_path().exists():
+            csv_name = var_pipeline.csv_path().name
+            print(
+                f"Variable-star data {csv_name} not found.\n"
+                "Run 'python main.py --only variable_stars --var-max-mag "
+                f"{args.var_max_mag}'\n"
+                "or 'python main.py --group stars' to create it, then re-run."
+            )
+            sys.exit(2)
+    return var_pipeline.load_index()
+
+
+def _run_stars(args: argparse.Namespace, star_kwargs: dict[str, float]) -> None:
+    var_index = _prepare_var_index(args)
+    show_summary = False if args.group == "stars" else (args.debug or args.group != "stars")
+    StarPipeline(
+        _SOURCES_DIR,
+        _OUTPUT_DIR,
+        cache_dir=_CACHE_DIR,
+        debug=args.debug,
+        min_double_star_sep=args.min_double_star_sep,
+        **star_kwargs,
+    ).run(var_index=var_index, attach_double=False, show_summary=show_summary)
+
+
+def _build_runners(
+    args: argparse.Namespace,
+    star_kwargs: dict[str, float],
+) -> dict[str, Callable[[], None]]:
+    return {
         "variable_stars": lambda: VariableStarPipeline(
             _SOURCES_DIR, args.var_max_mag, debug=args.debug
         ).run(),
-        "stars": _run_stars,
+        "stars": lambda: _run_stars(args, star_kwargs),
         "dso": lambda: DsoPipeline(
             _SOURCES_DIR,
             _OUTPUT_DIR,
             cache_dir=_CACHE_DIR,
             non_messier_num=args.non_messier_num,
             debug=args.debug,
-        ).run(
-            object_id=args.object
-        ),
+        ).run(object_id=args.object),
         "constellations": lambda: ConstellationPipeline(
             _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(),
         "moon_features": lambda: MoonFeaturePipeline(_SOURCES_DIR, _OUTPUT_DIR).run(),
-        # Run the standalone double-star exporter; if the user provided
-        # `--max-mag` also produce a `stars.m{mag}.json` file so double-star
-        # metadata is available in the stars output as well.
         "double_stars": lambda: __import__("double_stars_cli").main(
             max_mag=args.max_mag,
             min_sep=args.min_double_star_sep,
@@ -201,13 +200,6 @@ def main() -> None:
             debug=args.debug,
         ),
     }
-    for target in targets:
-        runner = runners.get(target)
-        if runner is None:
-            print(f"[data-prep] '{target}' not yet implemented, skipping.")
-        else:
-            runner()
-
 
 if __name__ == "__main__":
     main()

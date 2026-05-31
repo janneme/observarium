@@ -111,45 +111,76 @@ class DoubleStarMatcher:
         """Attach double-star metadata under `dbl`; return (stars_with_dbl, pair_count)."""
         tsv_path = self._downloader.fetch(WDS_VIZIER_URL, WDS_FILENAME)
         systems = self._load_systems(tsv_path, max_mag=max_mag, min_sep=min_sep)
-        # Try to fetch ORB6 orbital periods and map them by WDS id.
+
+        # Try to load and merge ORB6 periods (non-fatal)
         orb_map: dict[str, float] = {}
         try:
             orb_path = self._downloader.fetch(ORB6_VIZIER_URL, ORB6_FILENAME)
             orb_map = self._load_orb_periods(orb_path)
         except OSError:
-            # Non-fatal: if ORB6 fetch fails (network/file error), continue
-            # without periods.
             orb_map = {}
-        # Merge periods into systems' pairs when available.
+
         if orb_map:
-            for system in systems:
-                period = orb_map.get(system["wds"])
-                if period is None:
-                    continue
-                # Attach period to all pairs in the system where applicable.
-                for pair in system.get("pairs", []):
-                    pair["period"] = period
+            self._merge_orb_periods_into_systems(systems, orb_map)
+
         stars_with_hip = [s for s in stars if isinstance(s.get("hip"), int)]
         if not stars_with_hip:
             return 0, 0
 
+        return self._apply_systems_to_stars(systems, stars_with_hip)
+
+    def _merge_orb_periods_into_systems(
+        self,
+        systems: list[dict[str, Any]],
+        orb_map: dict[str, float],
+    ) -> None:
+        """Attach orbital periods from `orb_map` into system pairs in-place."""
+        for system in systems:
+            period = orb_map.get(system["wds"])
+            if period is None:
+                continue
+            for pair in system.get("pairs", []):
+                pair["period"] = period
+
+    def _apply_systems_to_stars(
+        self,
+        systems: list[dict[str, Any]],
+        stars_with_hip: list[dict[str, Any]],
+    ) -> tuple[int, int]:
+        """Match systems to stars, attach `dbl` payloads, and return counts."""
         pair_count = 0
         touched: set[int] = set()
         for system in systems:
             matched = self._match_system_star(system, stars_with_hip)
             if matched is None:
                 continue
-            payload = {
-                "wds": system["wds"],
-                "disc": system.get("disc"),
-                "pairs": system["pairs"],
-            }
-            if payload["disc"] is None:
-                payload.pop("disc")
-            matched.setdefault("dbl", []).append(payload)
-            touched.add(matched["hip"])
-            pair_count += len(system["pairs"])
+            pair_count += self._attach_payload_and_count(matched, system, touched)
         return len(touched), pair_count
+
+    @staticmethod
+    def _build_payload(system: dict[str, Any]) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "wds": system["wds"],
+            "disc": system.get("disc"),
+            "pairs": system["pairs"],
+        }
+        if payload["disc"] is None:
+            payload.pop("disc")
+        return payload
+
+    def _attach_payload_and_count(
+        self,
+        matched: dict[str, Any],
+        system: dict[str, Any],
+        touched: set[int],
+    ) -> int:
+        """Attach payload to matched star, update `touched`, and return number of pairs added."""
+        payload = self._build_payload(system)
+        matched.setdefault("dbl", []).append(payload)
+        hip = matched.get("hip")
+        if isinstance(hip, int):
+            touched.add(hip)
+        return len(system.get("pairs", []))
 
     def _load_systems(self, tsv_path: Path, max_mag: float, min_sep: float) -> list[dict[str, Any]]:
         # pylint: disable=too-many-locals
@@ -174,32 +205,12 @@ class DoubleStarMatcher:
                 dec = _dec_degrees(row.get("DEJ2000", ""))
                 if not wds_id or ra is None or dec is None:
                     continue
-
                 system = grouped.get(wds_id)
                 if system is None:
-                    system = {
-                        "wds": wds_id,
-                        "disc": row.get("Disc", "").strip() or None,
-                        "pos": [ra, dec],
-                        "pairs": [],
-                        "_score": -1e9,
-                    }
+                    system = self._init_system_from_row(wds_id, row, ra, dec)
                     grouped[wds_id] = system
 
-                pair: dict[str, Any] = {
-                    "comp": row.get("Comp", "").strip() or "AB",
-                    "mag": [mag1, mag2],
-                }
-                sep_payload = _sep_range(sep1, sep2)
-                if sep_payload is not None:
-                    pair["sep"] = sep_payload
-                phys_flag = _is_physical(row.get("Notes", ""))
-                if phys_flag is True:
-                    pair["phys"] = pair["comp"]
-                elif phys_flag is False:
-                    # Explicitly mark known non-physical (visual/optical)
-                    # pairs using `vis` so callers can distinguish.
-                    pair["vis"] = pair["comp"]
+                pair = self._build_pair_from_row(row, mag1, mag2, sep1, sep2)
                 system["pairs"].append(pair)
                 system["_score"] = max(system["_score"], 20.0 - (mag1 + mag2))
 
@@ -207,6 +218,45 @@ class DoubleStarMatcher:
         for system in systems:
             system.pop("_score", None)
         return systems
+
+    def _init_system_from_row(
+        self,
+        wds_id: str,
+        row: dict[str, Any],
+        ra: float,
+        dec: float,
+    ) -> dict[str, Any]:
+        """Create initial system dict for a WDS id from a TSV row."""
+        return {
+            "wds": wds_id,
+            "disc": row.get("Disc", "").strip() or None,
+            "pos": [ra, dec],
+            "pairs": [],
+            "_score": -1e9,
+        }
+
+    def _build_pair_from_row(
+        self,
+        row: dict[str, Any],
+        mag1: float,
+        mag2: float,
+        sep1: float | None,
+        sep2: float | None,
+    ) -> dict[str, Any]:
+        """Build a pair payload from a TSV row and parsed magnitudes/separations."""
+        pair: dict[str, Any] = {
+            "comp": row.get("Comp", "").strip() or "AB",
+            "mag": [mag1, mag2],
+        }
+        sep_payload = _sep_range(sep1, sep2)
+        if sep_payload is not None:
+            pair["sep"] = sep_payload
+        phys_flag = _is_physical(row.get("Notes", ""))
+        if phys_flag is True:
+            pair["phys"] = pair["comp"]
+        elif phys_flag is False:
+            pair["vis"] = pair["comp"]
+        return pair
 
     @staticmethod
     def _load_orb_periods(tsv_path: Path) -> dict[str, float]:

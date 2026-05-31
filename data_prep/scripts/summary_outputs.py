@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
+"""Small helper to print quick existence and counts for generated outputs.
+
+Usage: run from the `data_prep` directory to check `output/` files.
+"""
+
 import json
 from pathlib import Path
 
-out = Path(__file__).parent.parent / 'output'
-stars9 = out / 'stars.m9.json'
-dbl = out / 'double_stars.json'
-vs = Path(__file__).parent / 'sources' / 'variable_stars_m9.csv'
-print('stars exists', stars9.exists())
-print('double exists', dbl.exists())
-print('variable csv exists', vs.exists())
+out = Path(__file__).parent.parent / "output"
+stars9 = out / "stars.m9.json"
+dbl = out / "double_stars.json"
+vs = Path(__file__).parent / "sources" / "variable_stars_m9.csv"
+print("stars exists", stars9.exists())
+print("double exists", dbl.exists())
+print("variable csv exists", vs.exists())
 if stars9.exists():
     data = json.load(stars9.open())
     total = sum(len(v) for v in data.values())
-    print('stars total', total, 'constellations', len(data))
+    print("stars total", total, "constellations", len(data))
 if dbl.exists():
     g = json.load(dbl.open())
-    print('double systems', len(g))
+    print("double systems", len(g))

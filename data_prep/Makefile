@@ -49,11 +49,13 @@ test: ## Run pytest using existing venv (requires prior `make init`)
 # Run linters using tools installed in the venv. Do not perform any installs.
 lint: ## Run ruff and pylint using existing venv (requires prior `make init`)
 	# Exclude build artifacts, the venv directory and tests from analysis
-	@$(VENV)/bin/ruff check . --exclude .venv,build,output,cache,tests; rc=$$?; \
+	@printf "\n\033[1;36m❯ ruff check\033[0m\n"; \
+	$(VENV)/bin/ruff check . --exclude .venv,build,output,cache,tests; rc=$$?; \
 	if [ $$rc -ne 0 ]; then \
 		echo "ruff reported issues (exit $$rc); skipping pylint."; \
 		exit 0; \
 	fi; \
+	printf "\n\033[1;36m❯ pylint check\033[0m\n"; \
 	$(VENV)/bin/pylint --rcfile=$(CURDIR)/../.pylintrc $(shell find . -name '*.py' -not -path './.venv/*' -not -path './build/*' -not -path './output/*' -not -path './cache/*' -not -path './tests/*' -not -path '../tests/*') || true
 
 # Auto-fix lintable issues with ruff, then re-run lint target

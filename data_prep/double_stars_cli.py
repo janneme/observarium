@@ -1,3 +1,11 @@
+"""Command-line helper to export double-star systems and optionally
+embed them into an existing stars JSON output.
+
+This module parses the WDS TSV (via the `DoubleStarMatcher`) and writes
+`double_stars.json`. It can also merge double-star metadata into a
+`stars.m{mag}.json` file when requested.
+"""
+
 import csv
 import json
 import sys
