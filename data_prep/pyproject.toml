@@ -37,3 +37,6 @@ disable = [
     "missing-module-docstring",
     "too-few-public-methods",  # acceptable for single-responsibility pipeline classes
 ]
+
+[tool.setuptools.packages.find]
+exclude = ["cache", "output", "sources"]
