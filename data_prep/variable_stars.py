@@ -6,7 +6,7 @@ for stars with peak brightness <= *max_mag*, yielding (VarName, magMax, Min1).
 Stage 2 – SIMBAD TAP maps each GCVS name ("V* alf Ori") to its Hipparcos
 identifier, discarding stars not in the Hipparcos catalogue.
 
-The result is cached as ``sources/variable_stars_m{max_mag}.csv``.
+    The result is cached as ``sources/variable_stars_m{max_mag}.csv``.
 """
 
 import csv
@@ -59,22 +59,28 @@ class VariableStarPipeline:
     """
 
     def __init__(
-        self, sources_dir: Path, max_mag: float = VAR_MAX_MAG, debug: bool = False
+        self,
+        sources_dir: Path,
+        max_mag: float = VAR_MAX_MAG,
+        cache_dir: Path | None = None,
+        debug: bool = False,
     ) -> None:
         self._sources_dir = sources_dir
         self._max_mag = max_mag
+        # Use explicit cache dir for downloads/output; fall back to sources
+        self._cache_dir = cache_dir or sources_dir
         self._debug = debug
 
     def csv_path(self) -> Path:
         """Return the path to the cached CSV for this magnitude limit."""
-        return self._sources_dir / f"variable_stars_m{self._max_mag:g}.csv"
+        return self._cache_dir / f"variable_stars_m{self._max_mag:g}.csv"
 
     def run(self) -> Path:
         """Fetch GCVS + HIP crossmatch, write CSV, return its path."""
         gcvs_rows = self._fetch_gcvs()
         xmatch = self._fetch_hip_xmatch(gcvs_rows)
         rows = self._merge(gcvs_rows, xmatch)
-        self._sources_dir.mkdir(parents=True, exist_ok=True)
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
         out = self.csv_path()
         with out.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)

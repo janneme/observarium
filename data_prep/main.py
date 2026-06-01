@@ -141,7 +141,9 @@ def _prepare_var_index(args: argparse.Namespace) -> dict[int, tuple[float, float
     """Prepare and return the variable-star index for star enrichment."""
     if args.only == "stars":
         return {}
-    var_pipeline = VariableStarPipeline(_SOURCES_DIR, args.var_max_mag, debug=args.debug)
+    var_pipeline = VariableStarPipeline(
+        _SOURCES_DIR, args.var_max_mag, cache_dir=_CACHE_DIR, debug=args.debug
+    )
     if args.group == "stars":
         if not var_pipeline.csv_path().exists():
             var_pipeline.run()
@@ -178,7 +180,7 @@ def _build_runners(
 ) -> dict[str, Callable[[], None]]:
     return {
         "variable_stars": lambda: VariableStarPipeline(
-            _SOURCES_DIR, args.var_max_mag, debug=args.debug
+            _SOURCES_DIR, args.var_max_mag, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(),
         "stars": lambda: _run_stars(args, star_kwargs),
         "dso": lambda: DsoPipeline(
