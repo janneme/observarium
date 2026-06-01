@@ -101,6 +101,7 @@ class DoubleStarMatcher:
         self._sources_dir = sources_dir
         cache = cache_dir or sources_dir
         self._downloader = Downloader(cache, debug=debug)
+        self._debug = bool(debug)
 
     def attach(
         self,
@@ -148,11 +149,85 @@ class DoubleStarMatcher:
         stars_with_hip: list[dict[str, Any]],
     ) -> tuple[int, int]:
         """Match systems to stars, attach `dbl` payloads, and return counts."""
+        # Build a simple RA/Dec bin index to avoid O(N*M) full scans when
+        # matching systems to stars. Use 1-degree declination bins and 1-hour
+        # RA bins (hours) as a cheap spatial index; this is sufficient given
+        # the small matching radius (0.2 degrees) used by `_match_system_star`.
+        bins: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        for s in stars_with_hip:
+            ra_h, dec_d = s["pos"]
+            ra_bin = int(ra_h) % 24
+            dec_bin = int(dec_d)
+            bins.setdefault((ra_bin, dec_bin), []).append(s)
+
+        def _candidate_stars(sys_ra: float, sys_dec: float) -> list[dict[str, Any]]:
+            ra_bin = int(sys_ra) % 24
+            dec_bin = int(sys_dec)
+            cand: list[dict[str, Any]] = []
+            # search neighbouring bins within +/-1 in both coordinates
+            for r in (ra_bin - 1, ra_bin, ra_bin + 1):
+                rb = r % 24
+                for d in (dec_bin - 1, dec_bin, dec_bin + 1):
+                    key = (rb, d)
+                    if key in bins:
+                        cand.extend(bins[key])
+            return cand
+
         pair_count = 0
         touched: set[int] = set()
         for system in systems:
-            matched = self._match_system_star(system, stars_with_hip)
-            if matched is None:
+            sys_ra, sys_dec = system["pos"]
+            candidates = _candidate_stars(sys_ra, sys_dec)
+            if not candidates:
+                continue
+            # Find the best match among candidates only.
+            best: tuple[float, dict[str, Any]] | None = None
+            for star in candidates:
+                ra, dec = star["pos"]
+                dist = _angular_distance_deg(sys_ra, sys_dec, ra, dec)
+                if best is None or dist < best[0]:
+                    best = (dist, star)
+            if best is None:
+                continue
+            distance, matched = best
+            if distance > 0.2:
+                continue
+            # Magnitude-consistency check: if the matched star has a magnitude
+            # recorded, ensure it reasonably matches one of the pair magnitudes
+            # in the system to reduce false attachments. If no mag is present
+            # on the star, accept the match.
+            star_mag = matched.get("mag")
+            def _star_mag_value(m):
+                if isinstance(m, (int, float)):
+                    return float(m)
+                if isinstance(m, list) and m:
+                    # variable encoding as [min, max] → use midpoint
+                    return float((m[0] + m[-1]) / 2.0)
+                return None
+
+            s_val = _star_mag_value(star_mag)
+            attach_ok = True
+            if s_val is not None:
+                attach_ok = False
+                # check each pair's component magnitudes for a near match
+                for pair in system.get("pairs", []):
+                    mags = pair.get("mag") or []
+                    for pm in mags:
+                        try:
+                            pmf = float(pm)
+                        except Exception:
+                            continue
+                        if abs(s_val - pmf) <= 1.0:  # 1 mag tolerance
+                            attach_ok = True
+                            break
+                    if attach_ok:
+                        break
+                if not attach_ok and self._debug:
+                    print(
+                        f"Skipping attach for system {system['wds']} -> star hip={matched.get('hip')}"
+                        f" due to magnitude mismatch (star={s_val}, pairs={[p.get('mag') for p in system.get('pairs',[])]})"
+                    )
+            if not attach_ok:
                 continue
             pair_count += self._attach_payload_and_count(matched, system, touched)
         return len(touched), pair_count

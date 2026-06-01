@@ -62,9 +62,8 @@ def main(
     grouped = {s["wds"]: s for s in systems}
     with out.open("w", encoding="utf-8") as fh:
         json.dump(grouped, fh, ensure_ascii=False, indent=2)
-    if only_mode:
-        # In only_mode we prefer compact output regardless of debug so the
-        # command remains useful as a standalone tool.
+    # Only emit the explicit 'Wrote ...' message when debug is enabled.
+    if debug:
         if max_mag is None:
             print(f"Wrote {len(grouped)} double-star systems to {out} (max_mag=8.0)")
         else:
@@ -72,15 +71,6 @@ def main(
                 f"Wrote {len(grouped)} double-star systems to {out} "
                 f"(filtered by max_mag={max_mag:g})"
             )
-    else:
-        if debug:
-            if max_mag is None:
-                print(f"Wrote {len(grouped)} double-star systems to {out} (max_mag=8.0)")
-            else:
-                print(
-                    f"Wrote {len(grouped)} double-star systems to {out} "
-                    f"(filtered by max_mag={max_mag:g})"
-                )
 
     # Optionally embed into existing stars file
     if embed_into_stars and max_mag is not None:
