@@ -15,7 +15,11 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from config import MAX_STAR_MAGNITUDE, NON_MESSIER_NUM
+from config import (
+    EXTREME_STARS_NUM,
+    MAX_STAR_MAGNITUDE,
+    NON_MESSIER_NUM,
+)
 from constellations import ConstellationPipeline
 from dso import DsoPipeline
 from moon_features import MoonFeaturePipeline
@@ -106,6 +110,17 @@ def parse_args() -> argparse.Namespace:
         dest="min_double_star_sep",
         help="Minimum double-star separation in arcsec for inclusion (default: %(default)s).",
     )
+    parser.add_argument(
+        "--extreme-stars-num",
+        type=int,
+        default=EXTREME_STARS_NUM,
+        metavar="INT",
+        dest="extreme_stars_num",
+        help=(
+            "Number of stars to mark for all extreme/top-N annotations "
+            "(brightness, proper motion, nearest, hottest, velocity, variable)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -171,7 +186,13 @@ def _run_stars(args: argparse.Namespace, star_kwargs: dict[str, float]) -> None:
         debug=args.debug,
         min_double_star_sep=args.min_double_star_sep,
         **star_kwargs,
-    ).run(var_index=var_index, attach_double=False, show_summary=show_summary)
+    ).run(
+        var_index=var_index,
+        attach_double=False,
+        show_summary=show_summary,
+        extreme_stars_num=args.extreme_stars_num,
+    )
+    
 
 
 def _build_runners(

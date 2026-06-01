@@ -15,8 +15,7 @@ from config import (
     ATHYG_FULL_URLS,
     ATHYG_URL,
     EUROPE_MIN_DEC,
-    EXTREME_BRIGHT_NUM,
-    EXTREME_STARS_NUM,
+        EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
     VARIABLE_THRESHOLD,
 )
@@ -256,6 +255,8 @@ def _build_star(
         ("spect", spect or None),
         ("dist", dist),
         ("const", row.get("con", "") or None),
+        ("pm_ra", _float_or_none(row.get("pm_ra", ""))),
+        ("pm_dec", _float_or_none(row.get("pm_dec", ""))),
     ):
         if value is not None:
             star[key] = value
@@ -297,6 +298,7 @@ class StarPipeline:
         var_index: dict[int, tuple[float, float]] | None = None,
         attach_double: bool = False,
         show_summary: bool = True,
+        extreme_stars_num: int | None = None,
     ) -> Path:
         """Execute the pipeline and return the path to stars.json.
 
@@ -320,29 +322,54 @@ class StarPipeline:
         # Compute luminosities and annotate the most luminous stars. Recompute
         # the post-annotation auto-note count so only the top N are reported
         # as auto-generated notes.
+
+        def _choose_n() -> int:
+            return extreme_stars_num if extreme_stars_num is not None else EXTREME_STARS_NUM
+
         try:
-            actual_top = self._annotate_luminosity(stars, EXTREME_STARS_NUM)
+            self._annotate_luminosity(stars, _choose_n())
         except Exception:  # pylint: disable=broad-except
-            actual_top = 0
             if self._debug:
                 raise
+
         try:
-            actual_bright = self._annotate_brightness(stars, EXTREME_BRIGHT_NUM)
+            self._annotate_brightness(stars, _choose_n())
         except Exception:  # pylint: disable=broad-except
-            actual_bright = 0
             if self._debug:
                 raise
-        # Compute the number of unique stars marked by any persistent summary
-        # note (luminosity or brightness) and report that as auto-generated.
-        summary_phrases = (
-            f"Among the {actual_top} stars with highest luminosity",
-            f"Among the {actual_bright} brightest stars",
-        )
-        summary_ids: set[int] = set()
-        for s in stars:
-            note = s.get("note") or ""
-            if any(p in note for p in summary_phrases):
-                summary_ids.add(id(s))
+
+        try:
+            self._annotate_pm(stars, _choose_n())
+        except Exception:  # pylint: disable=broad-except
+            if self._debug:
+                raise
+
+        try:
+            self._annotate_most_variable(stars, var_index or {}, _choose_n())
+        except Exception:  # pylint: disable=broad-except
+            if self._debug:
+                raise
+
+        try:
+            self._annotate_nearest(stars, _choose_n())
+        except Exception:  # pylint: disable=broad-except
+            if self._debug:
+                raise
+
+        try:
+            self._annotate_hottest(stars, _choose_n())
+        except Exception:  # pylint: disable=broad-except
+            if self._debug:
+                raise
+
+        try:
+            self._annotate_space_velocity(stars, _choose_n())
+        except Exception:  # pylint: disable=broad-except
+            if self._debug:
+                raise
+        # Compute the number of unique stars that received auto-generated
+        # notes (marked by the helper flag set above).
+        summary_ids: set[int] = {id(s) for s in stars if s.get("_auto_note")}
         n_auto = len(summary_ids)
         if attach_double:
             n_dbl_stars, n_dbl_pairs = self._double_matcher.attach(
@@ -380,23 +407,24 @@ class StarPipeline:
             return 0
         # Determine top N by luminosity (handle top_n > available)
         actual_top = max(0, min(top_n, len(with_lsun)))
-        # Record identities of the top items before capping (use id to track objects)
-        top_set = {
-            id(s)
-            for s in sorted(
-                with_lsun, key=lambda s: s["_lsun"], reverse=True
-            )[:actual_top]
-        }
+        top_list = sorted(with_lsun, key=lambda s: s["_lsun"], reverse=True)[:actual_top]
         # Cap/remove luminosity phrases and temp fields per existing behaviour
         self._cap_luminosity_notes(stars, top_n=actual_top)
-        # Add persistent summary note to the top items
-        summary = f"Among the {actual_top} stars with highest luminosity"
-        for star in stars:
-            if id(star) in top_set:
-                if "note" in star and star["note"]:
-                    star["note"] = f"{star['note']}; {summary}"
-                else:
-                    star["note"] = summary
+        # Add persistent summary into `smr` for the top items.
+        for idx, star in enumerate(top_list, start=1):
+            if idx == 1:
+                summary = "The star with the highest luminosity"
+            elif idx == 2:
+                summary = "A star with the 2nd highest luminosity"
+            elif idx == 3:
+                summary = "A star with the 3rd highest luminosity"
+            else:
+                summary = f"Among the {actual_top} stars with highest luminosity"
+            if "smr" in star and star["smr"]:
+                star["smr"] = f"{star['smr']}; {summary}"
+            else:
+                star["smr"] = summary
+            star["_auto_note"] = True
         return actual_top
 
     def _annotate_brightness(self, stars: list[dict[str, Any]], top_n: int) -> int:
@@ -411,12 +439,169 @@ class StarPipeline:
         actual_top = max(0, min(top_n, len(with_mag)))
         # sort by apparent magnitude (smaller = brighter)
         top_stars = sorted(with_mag, key=lambda s: s["mag"])[:actual_top]
-        summary = f"Among the {actual_top} brightest stars"
-        for s in top_stars:
-            if "note" in s and s["note"]:
-                s["note"] = f"{s['note']}; {summary}"
+        for idx, s in enumerate(top_stars, start=1):
+            if idx == 1:
+                summary = "The brightest star in the sky"
+            elif idx == 2:
+                summary = "The 2nd brightest star in the sky"
+            elif idx == 3:
+                summary = "The 3rd brightest star in the sky"
             else:
-                s["note"] = summary
+                summary = f"Among the {actual_top} brightest stars"
+            if "smr" in s and s["smr"]:
+                s["smr"] = f"{s['smr']}; {summary}"
+            else:
+                s["smr"] = summary
+            s["_auto_note"] = True
+        return actual_top
+
+    def _annotate_pm(self, stars: list[dict[str, Any]], top_n: int) -> int:
+        """Mark the top *top_n* stars by proper motion (pm_ra, pm_dec).
+
+        Proper motion magnitude is computed as sqrt(pm_ra^2 + pm_dec^2)
+        where the fields are expected in mas/yr. Top-ranked stars receive
+        special phrasing for ranks 1..3; others receive a summary note.
+        """
+        with_pm = []
+        for s in stars:
+            pm_ra = s.get("pm_ra")
+            pm_dec = s.get("pm_dec")
+            if isinstance(pm_ra, (int, float)) and isinstance(pm_dec, (int, float)):
+                s["_pm"] = float(math.hypot(pm_ra, pm_dec))
+                with_pm.append(s)
+        if not with_pm:
+            return 0
+        actual_top = max(0, min(top_n, len(with_pm)))
+        top_list = sorted(with_pm, key=lambda s: s["_pm"], reverse=True)[:actual_top]
+        def _fmt_arcsec_per_year(pm_masyr: float) -> str:
+            # mas/yr -> arcsec/yr: arcsec = pm_masyr / 1000
+            arcsec = pm_masyr / 1000.0
+            # Format with 2 decimal places for readability
+            return f"{arcsec:.2f}\"/yr"
+
+        for idx, s in enumerate(top_list, start=1):
+            if idx == 1:
+                summary = "The star with the highest proper motion"
+            elif idx == 2:
+                summary = "The star with the 2nd highest proper motion"
+            elif idx == 3:
+                summary = "The star with the 3rd highest proper motion"
+            else:
+                summary = f"Among the {actual_top} stars with highest proper motion"
+            # append a human-readable proper-motion rate (arcsec per year)
+            pm_val = s.get("_pm")
+            if isinstance(pm_val, (int, float)):
+                pm_str = _fmt_arcsec_per_year(pm_val)
+                summary = f"{summary} - {pm_str}"
+            if "smr" in s and s["smr"]:
+                s["smr"] = f"{s['smr']}; {summary}"
+            else:
+                s["smr"] = summary
+            s["_auto_note"] = True
+        return actual_top
+
+    def _annotate_most_variable(
+        self,
+        stars: list[dict[str, Any]],
+        var_index: dict[int, tuple[float, float]] | None,
+        top_n: int,
+    ) -> int:
+        """Mark the top *top_n* stars by variability amplitude from *var_index*.
+
+        *var_index* is a HIP -> (min_mag, max_mag) mapping.
+        """
+        if not var_index:
+            return 0
+        var_list: list[tuple[dict[str, Any], float]] = []
+        for s in stars:
+            hip = s.get("hip")
+            if hip and hip in var_index:
+                rng = var_index[hip]
+                if rng and isinstance(rng[0], (int, float)) and isinstance(rng[1], (int, float)):
+                    amp = rng[1] - rng[0]
+                    if amp > 0:
+                        var_list.append((s, amp))
+        if not var_list:
+            return 0
+        var_list.sort(key=lambda x: x[1], reverse=True)
+        actual_top = max(0, min(top_n, len(var_list)))
+        for idx, (s, amp) in enumerate(var_list[:actual_top], start=1):
+            if idx == 1:
+                summary = f"The most variable star (amplitude {amp:.2f} mag)"
+            elif idx == 2:
+                summary = f"The 2nd most variable star (amplitude {amp:.2f} mag)"
+            elif idx == 3:
+                summary = f"The 3rd most variable star (amplitude {amp:.2f} mag)"
+            else:
+                summary = f"Among the {actual_top} most variable stars (amplitude {amp:.2f} mag)"
+            if "smr" in s and s["smr"]:
+                s["smr"] = f"{s['smr']}; {summary}"
+            else:
+                s["smr"] = summary
+            s["_auto_note"] = True
+        return actual_top
+
+    def _annotate_nearest(self, stars: list[dict[str, Any]], top_n: int) -> int:
+        """Mark the top *top_n* nearest stars (showing distance in ly)."""
+        with_dist = [
+            s
+            for s in stars
+            if isinstance(s.get("dist"), (int, float)) and s.get("dist") > 0
+        ]
+        if not with_dist:
+            return 0
+        with_dist.sort(key=lambda s: s["dist"])  # ascending pc
+        actual_top = max(0, min(top_n, len(with_dist)))
+        for idx, s in enumerate(with_dist[:actual_top], start=1):
+            ly = s["dist"] * 3.26156
+            if idx == 1:
+                summary = f"The nearest star — {ly:.2f} ly"
+            elif idx == 2:
+                summary = f"The 2nd nearest star — {ly:.2f} ly"
+            elif idx == 3:
+                summary = f"The 3rd nearest star — {ly:.2f} ly"
+            else:
+                summary = f"Among the {actual_top} nearest stars — {ly:.2f} ly"
+            if "smr" in s and s["smr"]:
+                s["smr"] = f"{s['smr']}; {summary}"
+            else:
+                s["smr"] = summary
+            s["_auto_note"] = True
+        return actual_top
+
+    def _annotate_hottest(self, stars: list[dict[str, Any]], top_n: int) -> int:
+        """Rank by Harvard spectral class (O hottest → M coolest)."""
+        order = {"O": 0, "B": 1, "A": 2, "F": 3, "G": 4, "K": 5, "M": 6, "W": 7, "C": 8, "S": 9}
+        parsed: list[tuple[dict[str, Any], int, float]] = []
+        for s in stars:
+            spect = s.get("spect") or ""
+            if not spect:
+                continue
+            m = re.match(r"^([OBAFGKMWCS])([0-9.]*)", spect.strip(), re.I)
+            if not m:
+                continue
+            letter = m.group(1).upper()
+            subtype = float(m.group(2)) if m.group(2) else 5.0
+            rank_key = order.get(letter, 99)
+            parsed.append((s, rank_key, subtype))
+        if not parsed:
+            return 0
+        parsed.sort(key=lambda x: (x[1], x[2]))
+        actual_top = max(0, min(top_n, len(parsed)))
+        for idx, (s, _, _) in enumerate(parsed[:actual_top], start=1):
+            if idx == 1:
+                summary = "The hottest star"
+            elif idx == 2:
+                summary = "The 2nd hottest star"
+            elif idx == 3:
+                summary = "The 3rd hottest star"
+            else:
+                summary = f"Among the {actual_top} hottest stars"
+            if "smr" in s and s["smr"]:
+                s["smr"] = f"{s['smr']}; {summary}"
+            else:
+                s["smr"] = summary
+            s["_auto_note"] = True
         return actual_top
 
     def _assign_lsun_to_star(self, star: dict[str, Any]) -> bool:
@@ -437,10 +622,13 @@ class StarPipeline:
         star["_lsun"] = float(lsun)
         phrase = f"~{_lsun_str(lsun)}\u00d7 the Sun's luminosity"
         star["_lsun_phrase"] = phrase
-        if "note" in star and star["note"]:
-            star["note"] = f"{star['note']}; {phrase}"
+        # Auto-generated phrases go into the `smr` (summary) field. Always
+        # attach the luminosity phrase to `smr` so curated `note` remains
+        # untouched while still recording autogenerated summaries.
+        if "smr" in star and star["smr"]:
+            star["smr"] = f"{star['smr']}; {phrase}"
         else:
-            star["note"] = phrase
+            star["smr"] = phrase
         return True
 
     def _process_row(
@@ -461,7 +649,9 @@ class StarPipeline:
         if star is None:
             return None, 0, 0
         if hip and hip in notes:
+            # Attach curated note into `note` (preserve curated text).
             star["note"] = notes[hip]
+            star["_curated_note"] = True
             return star, 1, 0
         # Auto-generated physical notes have been disabled. Preserve curated
         # notes only; count no auto notes.
@@ -533,22 +723,30 @@ class StarPipeline:
         )
         for s in tagged[top_n:]:
             phrase = s.pop("_lsun_phrase", None)
-            # Remove the phrase from the note in all common positions.
-            note = s.get("note")
-            if note and phrase:
-                # Remove occurrences like '; {phrase}', '{phrase}; ', or the
-                # phrase alone. Then clean up stray separators/spaces.
-                new = note.replace(f"; {phrase}", "").replace(
-                    f"{phrase}; ", ""
-                )
-                new = new.replace(phrase, "")
-                # Normalize semicolons and whitespace
-                new = re.sub(r"\s*;\s*", "; ", new).strip()
-                new = new.strip("; ")
-                if new:
-                    s["note"] = new
-                else:
-                    s.pop("note", None)
+            # Remove the phrase from the note and summary fields in all
+            # common positions so only the top-N keep the luminosity claim.
+            if phrase:
+                smr = s.get("smr")
+                if smr:
+                    new = smr.replace(f"; {phrase}", "").replace(f"{phrase}; ", "")
+                    new = new.replace(phrase, "")
+                    new = re.sub(r"\s*;\s*", "; ", new).strip()
+                    new = new.strip("; ")
+                    if new:
+                        s["smr"] = new
+                    else:
+                        s.pop("smr", None)
+
+                note = s.get("note")
+                if note:
+                    newn = note.replace(f"; {phrase}", "").replace(f"{phrase}; ", "")
+                    newn = newn.replace(phrase, "")
+                    newn = re.sub(r"\s*;\s*", "; ", newn).strip()
+                    newn = newn.strip("; ")
+                    if newn:
+                        s["note"] = newn
+                    else:
+                        s.pop("note", None)
             s.pop("_lsun", None)
         for s in tagged[:top_n]:
             s.pop("_lsun", None)
@@ -573,6 +771,35 @@ class StarPipeline:
         grouped: dict[str, list[dict[str, Any]]] = {}
         for star in stars:
             key = star.pop("const", None) or "NO_CONST"
+            # Rewrite autogenerated summaries into a concise form that
+            # indicates these are limited to the survey coverage
+            # (Europe-visible). e.g. "The 3rd nearest star — 8.60 ly" ->
+            # "The 3rd nearest star visible from Europe — 8.60 ly".
+            if star.get("_auto_note") and star.get("smr"):
+                raw = star.get("smr", "")
+                # split multiple summary clauses joined with ";"
+                parts = [p.strip() for p in raw.split(";") if p.strip()]
+                new_parts: list[str] = []
+                for p in parts:
+                    # remove any previous long-form suffix if present
+                    p = p.replace("(Northern-sky survey — southern stars excluded)", "").strip()
+                    # prefer the em-dash separator " — ", else hyphen " - "
+                    if " — " in p:
+                        lead, sep, tail = p.partition(" — ")
+                    elif " - " in p:
+                        lead, sep, tail = p.partition(" - ")
+                    else:
+                        lead, sep, tail = p, "", ""
+                    # Avoid duplicating similar suffixes; prefer the
+                    # concise phrase "visible from Europe".
+                    if "visible from Europe" not in lead and "Europe-visible" not in lead:
+                        lead = f"{lead} visible from Europe"
+                    new = f"{lead}{sep}{tail}" if sep else lead
+                    new_parts.append(new)
+                star["smr"] = "; ".join(new_parts)
+            # Remove internal helper flags before writing output
+            for helper in ["_lsun", "_lsun_phrase", "_curated_note", "_auto_note", "_pm"]:
+                star.pop(helper, None)
             grouped.setdefault(key, []).append(star)
         with out.open("w", encoding="utf-8") as fh:
             json.dump(grouped, fh, ensure_ascii=False)
@@ -601,3 +828,56 @@ class StarPipeline:
             print(f"Output         : {out} ({size_mb:.2f} MB)")
         return out
     # pylint: enable=too-many-arguments,too-many-positional-arguments,too-many-locals
+
+    def _annotate_space_velocity(
+        self, stars: list[dict[str, Any]], top_n: int
+    ) -> int:
+        """Annotate stars with highest total space velocity (km/s).
+
+        Uses `pm_ra`, `pm_dec` (mas/yr), `dist` (pc) and optional `rv` (km/s).
+        Ranks by total velocity sqrt(vt^2 + rv^2) when RV present, else by vt.
+        Notes only include the total km/s rounded to 1 decimal place.
+        """
+        vals: list[tuple[dict[str, Any], float]] = []
+        for s in stars:
+            pm_ra = s.get("pm_ra")
+            pm_dec = s.get("pm_dec")
+            dist = s.get("dist")
+            if not (
+                isinstance(pm_ra, (int, float))
+                and isinstance(pm_dec, (int, float))
+                and isinstance(dist, (int, float))
+                and dist > 0
+            ):
+                continue
+            mu_masyr = math.hypot(pm_ra, pm_dec)
+            mu_arcsec = mu_masyr / 1000.0
+            vt = 4.74047 * mu_arcsec * dist
+            rv = s.get("rv")
+            if isinstance(rv, (int, float)):
+                vtot = math.hypot(vt, rv)
+            else:
+                vtot = vt
+            vals.append((s, float(vtot)))
+        if not vals:
+            return 0
+        vals.sort(key=lambda x: x[1], reverse=True)
+        actual_top = max(0, min(top_n, len(vals)))
+        for idx, (s, vtot) in enumerate(vals[:actual_top], start=1):
+            if idx == 1:
+                summary = f"The star with the highest total space velocity — {vtot:.1f} km/s"
+            elif idx == 2:
+                summary = f"The star with the 2nd highest total space velocity — {vtot:.1f} km/s"
+            elif idx == 3:
+                summary = f"The star with the 3rd highest total space velocity — {vtot:.1f} km/s"
+            else:
+                summary = (
+                    f"Among the {actual_top} stars with highest total space velocity — "
+                    f"{vtot:.1f} km/s"
+                )
+            if "smr" in s and s["smr"]:
+                s["smr"] = f"{s['smr']}; {summary}"
+            else:
+                s["smr"] = summary
+            s["_auto_note"] = True
+        return actual_top
