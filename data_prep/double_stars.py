@@ -176,22 +176,41 @@ class DoubleStarMatcher:
         pair_count = 0
         touched: set[int] = set()
         for system in systems:
-            sys_ra, sys_dec = system["pos"]
-            candidates = _candidate_stars(sys_ra, sys_dec)
-            if not candidates:
-                continue
-            # Find the best match among candidates only.
-            best: tuple[float, dict[str, Any]] | None = None
-            for star in candidates:
-                ra, dec = star["pos"]
-                dist = _angular_distance_deg(sys_ra, sys_dec, ra, dec)
-                if best is None or dist < best[0]:
-                    best = (dist, star)
-            if best is None:
-                continue
-            distance, matched = best
-            if distance > 0.2:
-                continue
+            # Prefer direct catalogue ID matches when available: HIP then HD.
+            matched: dict[str, Any] | None = None
+            sid = system.get("hip")
+            if sid is not None:
+                for s in stars_with_hip:
+                    if s.get("hip") == sid:
+                        matched = s
+                        break
+            if matched is None and system.get("hd") is not None:
+                hdid = system.get("hd")
+                for s in stars_with_hip:
+                    if s.get("hd") == hdid:
+                        matched = s
+                        break
+
+            if matched is None:
+                sys_ra, sys_dec = system["pos"]
+                candidates = _candidate_stars(sys_ra, sys_dec)
+                if not candidates:
+                    continue
+                # Find the best match among candidates only.
+                best: tuple[float, dict[str, Any]] | None = None
+                for star in candidates:
+                    ra, dec = star["pos"]
+                    dist = _angular_distance_deg(sys_ra, sys_dec, ra, dec)
+                    if best is None or dist < best[0]:
+                        best = (dist, star)
+                if best is None:
+                    continue
+                distance, matched = best
+                if distance > 0.2:
+                    continue
+            else:
+                # we found a direct ID match; matched is set and we skip spatial checks
+                distance = 0.0
             # Magnitude-consistency check: if the matched star has a magnitude
             # recorded, ensure it reasonably matches one of the pair magnitudes
             # in the system to reduce false attachments. If no mag is present
@@ -302,13 +321,33 @@ class DoubleStarMatcher:
         dec: float,
     ) -> dict[str, Any]:
         """Create initial system dict for a WDS id from a TSV row."""
-        return {
+        system: dict[str, Any] = {
             "wds": wds_id,
             "disc": row.get("Disc", "").strip() or None,
             "pos": [ra, dec],
             "pairs": [],
             "_score": -1e9,
         }
+        # Prefer available catalogue cross-IDs when present (HIP/HD).
+        hip = row.get("HIP", "") or row.get("Hip", "") or row.get("hip", "")
+        hd = row.get("HD", "") or row.get("Hd", "") or row.get("hd", "")
+        try:
+            hip_i = int(hip) if hip else None
+        except Exception:
+            hip_i = None
+        try:
+            hd_i = int(hd) if hd else None
+        except Exception:
+            hd_i = None
+        if hip_i is not None:
+            system["hip"] = hip_i
+        if hd_i is not None:
+            system["hd"] = hd_i
+        # Attempt to capture any provided spectral type for basic cross-checks
+        spect = row.get("SpType", "") or row.get("Sp", "") or row.get("Spec", "")
+        if spect:
+            system["spect"] = spect.strip()
+        return system
 
     def _build_pair_from_row(
         self,
