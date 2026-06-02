@@ -234,7 +234,7 @@ class DoubleStarMatcher:
                     for pm in mags:
                         try:
                             pmf = float(pm)
-                        except Exception:
+                        except (TypeError, ValueError):
                             continue
                         if abs(s_val - pmf) <= 1.0:  # 1 mag tolerance
                             attach_ok = True
@@ -242,9 +242,11 @@ class DoubleStarMatcher:
                     if attach_ok:
                         break
                 if not attach_ok and self._debug:
+                    pair_mags = [pair.get("mag") for pair in system.get("pairs", [])]
                     print(
-                        f"Skipping attach for system {system['wds']} -> star hip={matched.get('hip')}"
-                        f" due to magnitude mismatch (star={s_val}, pairs={[p.get('mag') for p in system.get('pairs',[])]})"
+                        f"Skipping attach for system {system['wds']} -> "
+                        f"star hip={matched.get('hip')} due to magnitude mismatch "
+                        f"(star={s_val}, pairs={pair_mags})"
                     )
             if not attach_ok:
                 continue

@@ -18,6 +18,7 @@ from pathlib import Path
 from config import (
     EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
+    MIN_MOON_ITEM_SIZE,
     NON_MESSIER_NUM,
 )
 from constellations import ConstellationPipeline
@@ -121,6 +122,18 @@ def parse_args() -> argparse.Namespace:
             "(brightness, proper motion, nearest, hottest, velocity, variable)."
         ),
     )
+    parser.add_argument(
+        "--mon-object-min-size",
+        "--moon-object-min-size",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        dest="mon_object_min_size",
+        help=(
+            "Minimum Moon feature angular size in degrees "
+            f"(default: {MIN_MOON_ITEM_SIZE:g}, tuned for 8x50 binocular visibility)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -214,7 +227,9 @@ def _build_runners(
         "constellations": lambda: ConstellationPipeline(
             _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(),
-        "moon_features": lambda: MoonFeaturePipeline(_SOURCES_DIR, _OUTPUT_DIR).run(),
+        "moon_features": lambda: MoonFeaturePipeline(
+            _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
+        ).run(min_item_size=args.mon_object_min_size),
         "double_stars": lambda: __import__("double_stars_cli").main(
             max_mag=args.max_mag,
             min_sep=args.min_double_star_sep,

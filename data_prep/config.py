@@ -98,7 +98,7 @@ ORB6_VIZIER_URL: str = (
 )
 ORB6_FILENAME: str = "orb6.tsv"
 
-#: Supported moon feature types.
+#: Supported moon feature types for the public Moon map output.
 MOON_FEATURE_TYPES: tuple[str, ...] = (
     "Catena",
     "Crater",
@@ -111,5 +111,20 @@ MOON_FEATURE_TYPES: tuple[str, ...] = (
     "Vallis",
 )
 
-#: Local moon source filename expected in data_prep/sources.
-MOON_FEATURES_SOURCE_FILENAME: str = "moon_features.csv"
+#: USGS/IAU Gazetteer Moon nomenclature KMZ with centre points.
+MOON_FEATURES_URL: str = (
+    "https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/"
+    "MOON_nomenclature_center_pts.kmz"
+)
+MOON_FEATURES_FILENAME: str = "MOON_nomenclature_center_pts.kmz"
+
+#: Minimum apparent angular size in degrees at mean Earth-Moon distance.
+#: 0.01° is about 0.6 arcmin and keeps visually meaningful major features.
+MIN_MOON_ITEM_SIZE: float = 0.01
+
+#: Mean Earth-Moon distance used for deterministic angular-size filtering.
+MEAN_MOON_DISTANCE_KM: float = 384_400.0
+
+#: Circularity threshold for Moon features based on width/height axis ratio.
+#: ratio <= 1.05 is treated as circular.
+MOON_CIRCULAR_TOLERANCE: float = 1.05
