@@ -15,7 +15,9 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from asteroids import SolarSystemPipeline
 from config import (
+    ASTEROID_MAX_MAGNITUDE,
     EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
     MIN_MOON_ITEM_SIZE,
@@ -134,6 +136,17 @@ def parse_args() -> argparse.Namespace:
             f"(default: {MIN_MOON_ITEM_SIZE:g}, tuned for 8x50 binocular visibility)."
         ),
     )
+    parser.add_argument(
+        "--asteroid-max-mag",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        dest="asteroid_max_mag",
+        help=(
+            "Maximum asteroid apparent magnitude at opposition "
+            f"(default: {ASTEROID_MAX_MAGNITUDE:g}, tuned for 8x50 binoculars)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -230,6 +243,9 @@ def _build_runners(
         "moon_features": lambda: MoonFeaturePipeline(
             _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(min_item_size=args.mon_object_min_size),
+        "solar_system": lambda: SolarSystemPipeline(
+            _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
+        ).run(max_mag=args.asteroid_max_mag),
         "double_stars": lambda: __import__("double_stars_cli").main(
             max_mag=args.max_mag,
             min_sep=args.min_double_star_sep,

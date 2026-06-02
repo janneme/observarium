@@ -253,24 +253,32 @@ Implementation notes:
 
 ---
 
-### Step 7: Solar system ephemeris pipeline
+### Step 7: Solar system ephemeris pipeline ✅
 
 **README refs:** §2.1d  
-**Deliverable:** Solar system objects are **not** pre-baked into the static
-JSON. Instead, the client computes positions at runtime using a bundled
-lightweight ephemeris.
+**Deliverable:** `data_prep/output/solar_system.json` containing planet
+metadata and minor-planet orbital elements. Solar system positions are computed
+at runtime in the client using the bundled Astronomy Engine library.
 
 Technical notes:
 
 - Use [Astronomy Engine](https://github.com/cosinekitty/astronomy) — it is a
   single JS file (no WASM, no server call) covering Sun, Moon, planets and
   can compute apparent magnitude. Include it in the Svelte client bundle.
-- Asteroid magnitudes at a given date require the asteroid's orbital elements
-  (H, G parameters) and the computed distance/phase angle. Source orbital
-  elements for the `ASTEROID_MAX_MAGNITUDE` brightest asteroids from MPC and
-  bake them into a small static JSON file (`data_prep/output/asteroids.json`).
-- This step produces `asteroids.json` and verifies the Astronomy Engine API
-  can reproduce expected planet positions for a test date.
+- `solar_system.json` has two sections:
+  - `planets`: Array of 7 observable major planets (excludes Earth and Pluto)
+    with display metadata (name, symbol, color, inner flag for phase display,
+    typical magnitude range).
+  - `minor_planets`: Array of brightest asteroids (magnitude ≤
+    `ASTEROID_MAX_MAGNITUDE`) with orbital elements (H, G, a, e, i, Ω, ω, M,
+    epoch) sourced from MPC MPCORB database. Client computes positions and
+    magnitudes at runtime using these elements.
+- Minor-planet orbital elements: Source from MPC MPCORB.DAT.gz, filter by
+  estimated opposition magnitude and H ≤ 8.0, output includes computed
+  `min_mag`/`max_mag` range for visibility planning.
+- This step produces `solar_system.json` with planet catalog (inline metadata)
+  and minor-planet pipeline (MPCORB download, parsing, filtering). All 129+
+  tests passing, ruff clean.
 
 ---
 

@@ -128,3 +128,17 @@ MEAN_MOON_DISTANCE_KM: float = 384_400.0
 #: Circularity threshold for Moon features based on width/height axis ratio.
 #: ratio <= 1.05 is treated as circular.
 MOON_CIRCULAR_TOLERANCE: float = 1.05
+
+# ---------------------------------------------------------------------------
+# Asteroids (MPC Orbit Database)
+# ---------------------------------------------------------------------------
+
+#: MPC Orbit Database (MPCORB.DAT.gz) — orbital elements for minor planets.
+#: Source: https://www.minorplanetcenter.net/iau/MPCORB/
+#: Format: Fixed-width text, ~100 MB gzipped. Licence: Public domain.
+MPCORB_URL: str = "https://www.minorplanetcenter.net/iau/MPCORB/MPCORB.DAT.gz"
+MPCORB_FILENAME: str = "MPCORB.DAT.gz"
+
+#: Maximum apparent magnitude at opposition for asteroids to include.
+#: Set to 9.0 to match approximate reach of 8×50 binoculars.
+ASTEROID_MAX_MAGNITUDE: float = 9.0

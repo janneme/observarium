@@ -27,3 +27,4 @@ infra/.terraform.lock.hcl
 
 # Editor
 .vscode/settings.json
+.aider*

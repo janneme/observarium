@@ -1,8 +1,8 @@
 """Unit tests for moon feature pipeline (moon_features.py)."""
 
 import json
-from pathlib import Path
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -73,7 +73,8 @@ def test_moon_feature_pipeline_filters_and_writes(tmp_path: Path):
     assert tycho["lat"] == pytest.approx(-43.31, rel=0, abs=1e-4)
     assert "geom" in tycho
     assert "size" not in tycho
-    assert tycho["geom"] == pytest.approx([-2.05, -1.9, 2.05, -1.9, 2.05, 1.9, -2.05, 1.9], rel=0, abs=1e-4)
+    expected_geom = [-2.05, -1.9, 2.05, -1.9, 2.05, 1.9, -2.05, 1.9]
+    assert tycho["geom"] == pytest.approx(expected_geom, rel=0, abs=1e-4)
 
     mare = data["mare"]["Mare Tranquillitatis"]
     assert mare["lon"] == pytest.approx(31.4, rel=0, abs=1e-4)

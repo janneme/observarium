@@ -6,7 +6,6 @@ import pytest
 
 from stars import (
     StarPipeline,
-    _auto_note,
     _bayer_letter,
     _build_star,
     _is_variable,
