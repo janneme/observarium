@@ -25,6 +25,7 @@ from config import (
 )
 from constellations import ConstellationPipeline
 from dso import DsoPipeline
+from images import ImagePipeline
 from moon_features import MoonFeaturePipeline
 from stars import StarPipeline
 from variable_stars import VariableStarPipeline
@@ -41,6 +42,7 @@ _ALL_CATEGORIES = [
     "solar_system",
     "moon_features",
     "double_stars",
+    "images",
 ]
 
 
@@ -147,6 +149,14 @@ def parse_args() -> argparse.Namespace:
             f"(default: {ASTEROID_MAX_MAGNITUDE:g}, tuned for 8x50 binoculars)."
         ),
     )
+    parser.add_argument(
+        "--image-limit",
+        type=int,
+        default=None,
+        metavar="N",
+        dest="image_limit",
+        help="Limit number of images to download (useful for testing on mobile data).",
+    )
     return parser.parse_args()
 
 
@@ -246,6 +256,9 @@ def _build_runners(
         "solar_system": lambda: SolarSystemPipeline(
             _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(max_mag=args.asteroid_max_mag),
+        "images": lambda: ImagePipeline(
+            _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
+        ).run(limit=args.image_limit),
         "double_stars": lambda: __import__("double_stars_cli").main(
             max_mag=args.max_mag,
             min_sep=args.min_double_star_sep,

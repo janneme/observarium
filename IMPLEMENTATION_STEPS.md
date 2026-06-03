@@ -282,7 +282,7 @@ Technical notes:
 
 ---
 
-### Step 8: Object images pipeline
+### Step 8: Object images pipeline ✅
 
 **README refs:** §2.1 field 10  
 **Deliverable:** `data_prep/output/images/` directory with one JPEG per object,
@@ -298,6 +298,24 @@ Technical notes:
 - Incremental: skip if the output file already exists (re-run is safe).
 - Images are referenced in `objects.json` by catalogue number — no separate
   manifest needed at runtime.
+
+Implementation notes:
+
+- Implemented in `data_prep/images.py` with CLI integration in `data_prep/main.py`
+  (`python main.py --only images`).
+- Manifest stored as JSON (`data_prep/sources/image_sources.json`) with 596 DSO
+  entries, each containing: `catalogue_id`, `url`, `verified` (1=validated, 0=template, -1=failed).
+- URL validation script (`data_prep/scripts/validate_image_sources.py`) uses HTTP/2
+  with full browser security headers (sec-fetch-*, sec-ch-ua) required by Wikimedia,
+  per-domain parallel processing with exponential backoff [10s, 20s, 40s] to handle
+  rate limiting intelligently.
+- Image download uses `httpx` with HTTP/2 and same browser headers, grouped by domain
+  with parallel ThreadPoolExecutor processing and retry logic matching validation script.
+- Fixed PIL decompression bomb protection (`Image.MAX_IMAGE_PIXELS = None`) for large
+  astronomical images (e.g., M42 Orion Nebula at 18000×18000 pixels).
+- `--image-limit` parameter counts only NEW downloads, not already-processed files.
+- All 113 verified images successfully processed; output JPEGs are 400×400 thumbnails
+  at quality 70, typically 15-50 KB each.
 
 ---
 

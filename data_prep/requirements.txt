@@ -2,3 +2,5 @@
 # Pin versions before the first production run.
 skyfield>=1.49
 astropy>=6.1
+requests>=2.32
+pillow>=11.0
