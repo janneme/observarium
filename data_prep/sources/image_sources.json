@@ -560,189 +560,149 @@
     "verified": 1
   },
   {
-    "catalogue_id": "NGC146",
-    "url": "",
-    "verified": 0
-  },
-  {
     "catalogue_id": "NGC147",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/78/NGC_147.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC185",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC188",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC189",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/9/97/Ngc185_rgb_combined.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC225",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e5/NGC225HunterWilson.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC246",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/NGC_246.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC247",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Wide_Field_Imager_view_of_the_spiral_galaxy_NGC_247.jpg/3840px-Wide_Field_Imager_view_of_the_spiral_galaxy_NGC_247.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC278",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2d/Cassiopeia%E2%80%99s_unusual_resident.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC288",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC381",
-    "url": "",
-    "verified": 0
+    "url": "https://news.fnal.gov/wp-content/uploads/2022/10/DES-photo-essay-9-NGC-288.jpeg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC404",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/NGC_404_Hubble.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC436",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/12/NGC_436.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC457",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/8d/BGC_457Cluster.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC488",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/10/N488s.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC524",
-    "url": "",
-    "verified": 0
+    "url": "https://cdn.esahubble.org/archives/images/screen/potw1329a.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC559",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/NGC_559_PanSTARRS.jpg/1920px-NGC_559_PanSTARRS.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC596",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/26/NGC596_-_SDSS_DR14.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC613",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC637",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/33/ESO-NGS613-phot-33a-03-fullres.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC654",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b4/NGC654-Rev.01-THIS_IS_FINAL.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC659",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c3/NGC_659.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC663",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/12/NGC663HunterWilson.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC672",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC720",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC744",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/NGC672%2C_IC_1727_-_Iotw2019a.jpg/1920px-NGC672%2C_IC_1727_-_Iotw2019a.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC752",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/4a/NGC_752.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC772",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/NGC_772_by_Goran_Nilsson_%26_The_Liverpool_Telescope.jpg/1920px-NGC_772_by_Goran_Nilsson_%26_The_Liverpool_Telescope.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC821",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/08/NGC_821_color_cutout_hst_06099_12_wfpc2_f814w_f555w_pc_sci.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC869",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/H_and_%CF%87_Persei.jpg/1920px-H_and_%CF%87_Persei.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC884",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c9/Double_Cluster.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC891",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f9/NGC891HunterWilson.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC908",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d8/NGC908.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC925",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/a3/NGC925.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC936",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC956",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Potw1009a.jpg/1920px-Potw1009a.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC957",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/de/NGC_957.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC1023",

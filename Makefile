@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 AWS_PROFILE   ?= personal
 
-.PHONY: help deploy dev-server dev-client data-prep data-upload test
+.PHONY: help deploy dev dev-server dev-client data-prep data-upload test
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -17,8 +17,11 @@ deploy: ## Apply Terraform, deploy Lambda, sync data, deploy client
 	@echo "==> Deploy client to S3"
 	$(MAKE) _deploy-client
 
+dev: ## Run both frontend and backend development servers
+	python3 run.py
+
 dev-server: ## Run the Lambda handler via the local HTTP wrapper
-	cd server && python local_server.py
+	$(MAKE) -C server dev
 
 dev-client: ## Start the Vite dev server for the Svelte client
 	cd client && npm run dev

@@ -1,2 +1,0 @@
-# Runtime dependencies for the Lambda function.
-# Pin versions before the first production deployment.

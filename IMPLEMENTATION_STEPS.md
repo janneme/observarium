@@ -342,7 +342,7 @@ Technical notes:
 
 ## Phase 2 — AWS Infrastructure & Lambda
 
-### Step 10: Terraform infrastructure
+### Step 10: Terraform infrastructure ✅
 
 **README refs:** §3.1.4, §3.2.1–§3.2.5  
 **Deliverable:** `terraform apply` creates all AWS resources; outputs Lambda
@@ -364,9 +364,34 @@ Resources to define in `infra/main.tf`:
 Create initial Cognito user manually with `aws cognito-idp admin-create-user`
 (no self-service signup needed).
 
+Implementation notes:
+
+- Deployed to region `eu-central-1` with AWS profile `personal`.
+- Created 15 AWS resources: 2 S3 buckets (data + client website), Cognito User
+  Pool + Client, IAM role + policy, CloudWatch Log Group, Lambda Function with
+  Function URL, random ID for unique bucket names, bucket policies and
+  configurations.
+- **Critical fix:** As of October 2025, Lambda Function URLs with
+  `authorization_type = "NONE"` require **two** permissions in the resource-based
+  policy:
+  1. `lambda:InvokeFunctionUrl` with condition `lambda:FunctionUrlAuthType = "NONE"`
+  2. `lambda:InvokeFunction` with condition `lambda:InvokedViaFunctionUrl = "true"`
+- Terraform's `aws_lambda_function_url` resource only creates the first
+  permission automatically. The second must be added via
+  `aws_lambda_permission` resource with `--invoked-via-function-url` flag (CLI)
+  or imported into Terraform state.
+- See: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+- Outputs:
+  - Data bucket: `observarium-data-0b5ad51e`
+  - Client bucket: `observarium-client-0b5ad51e`
+  - Client website: `http://observarium-client-0b5ad51e.s3-website.eu-central-1.amazonaws.com`
+  - Lambda URL: `https://qswhlcrn6nbfwirq4kk3ycohz40nefmg.lambda-url.eu-central-1.on.aws/`
+  - Cognito User Pool: `eu-central-1_7lQBM35tr`
+  - Cognito Client ID: `7tunopdnaetvaf561vo330eih5`
+
 ---
 
-### Step 11: Lambda skeleton + local dev server
+### Step 11: Lambda skeleton + local dev server ✅
 
 **README refs:** §3.1.2  
 **Deliverable:** Lambda returns `{"status": "ok"}` for a health-check request;
@@ -381,10 +406,37 @@ Technical notes:
   `handler.lambda_handler`. No external dependencies beyond stdlib.
 - `make dev-server` runs `python server/local_server.py --port 8787`.
 - Install `boto3`, `PyJWT`, `cryptography` (for JWKS verification) in
-  `server/requirements.txt`.
+  `server/pyproject.toml` (using `uv` package manager, not requirements.txt).
 - CORS: add `Access-Control-Allow-Origin`, `Access-Control-Allow-Headers`,
   and `Access-Control-Allow-Methods` headers to every response in a shared
   `build_response()` helper. Handle `OPTIONS` preflight in the router.
+
+Implementation notes:
+
+- Created `server/pyproject.toml` with dependencies: boto3 ≥1.35.0, PyJWT ≥2.9.0,
+  cryptography ≥43.0.0 (no build-system section needed for non-package projects).
+- Implemented full HTTP router in `handler.py`:
+  - `build_response()` helper adds CORS headers to all responses
+  - Routes: `GET /` (health check), `POST /login`, `GET /objects-url`,
+    `GET /images-url`, `GET /data-hash`, `GET /observations`,
+    `POST /observations`, `DELETE /observations/{date}`
+  - All endpoints except health check return 501 (not yet implemented) with
+    descriptive error messages
+  - 404 for unknown routes
+  - OPTIONS method handled for CORS preflight
+- Implemented `local_server.py` with full Lambda Function URL event emulation:
+  - Constructs Lambda event dict from HTTP request with proper structure
+    (version, rawPath, requestContext.http.method, headers, body, etc.)
+  - Handles GET, POST, DELETE, OPTIONS methods
+  - Generic error handling returns 500 on exceptions
+  - Runs on port 8787 by default
+- Created `server/Makefile` with targets: `dev` (runs local server), `sync`
+  (installs dependencies), `lint`, `test`
+- Updated root `Makefile` to delegate `dev-server` to `server/Makefile`
+- Deployed updated Lambda function to AWS; all endpoints working:
+  - `GET /` returns `{"status": "ok"}` with 200
+  - Other endpoints return appropriate 501/404 responses
+  - CORS headers present on all responses
 
 ---
 
