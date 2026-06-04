@@ -440,7 +440,7 @@ Implementation notes:
 
 ---
 
-### Step 12: Lambda — authentication
+### Step 12: Lambda — authentication ✅
 
 **README refs:** §3.2.1 (user login), §3.2.3  
 **Deliverable:** `POST /login` returns a Cognito access token.
@@ -460,7 +460,7 @@ Technical notes:
 
 ---
 
-### Step 13: Lambda — data endpoints (pre-signed URLs)
+### Step 13: Lambda — data endpoints (pre-signed URLs) ✅
 
 **README refs:** §3.2.1 (read objects, read images), §3.2.2  
 **Deliverable:** `GET /objects-url` and `GET /images-url` return pre-signed S3 URLs.

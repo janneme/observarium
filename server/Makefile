@@ -17,4 +17,4 @@ lint: ## Run ruff and pylint
 	uv run pylint handler.py local_server.py
 
 test: ## Run tests (placeholder)
-	@echo "No tests yet"
+	uv run pytest -q

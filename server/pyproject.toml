@@ -7,6 +7,7 @@ dependencies = [
     "boto3>=1.35.0",
     "PyJWT>=2.9.0",
     "cryptography>=43.0.0",
+    "pytest>=7.0.0",
 ]
 
 [tool.ruff]
@@ -17,6 +18,7 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "T10", "EXE", "ISC", "ICN", "PIE", "PYI", "Q", "RSE", "RET", "SIM", "TID", "ARG", "PTH", "PD", "PL", "NPY", "RUF"]
 ignore = [
     "PLR0911",  # Too many return statements - OK for routers
+    "PLR0912",  # Too many branches - router function is expected to be large
     "ARG001",   # Unused function argument - Lambda requires context param
 ]
 

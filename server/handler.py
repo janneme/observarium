@@ -17,6 +17,7 @@ from jwt import PyJWKClient
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "eu-central-1")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
+DATA_BUCKET = os.environ.get("DATA_BUCKET")
 
 # JWKS client cache: {jwks_url: (PyJWKClient, expiry_timestamp)}
 _JWK_CLIENT_CACHE: dict[str, Any] = {}
@@ -80,6 +81,59 @@ def verify_jwt(token: str) -> dict:
 
 def _cognito_client():
     return boto3.client("cognito-idp", region_name=COGNITO_REGION)
+
+
+def _s3_client():
+    aws_region = os.environ.get("AWS_REGION", COGNITO_REGION)
+    return boto3.client("s3", region_name=aws_region)
+
+
+def _generate_presigned_put(key: str, expires: int = 300) -> str:
+    """Generate a presigned PUT URL for `key` in the data bucket."""
+    if not DATA_BUCKET:
+        raise RuntimeError("DATA_BUCKET not set in environment")
+    client = _s3_client()
+    return client.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": DATA_BUCKET, "Key": key},
+        ExpiresIn=expires,
+    )
+
+
+def handle_presign_key(key: str) -> dict:
+    """Return a dict containing a presigned PUT URL and metadata for `key`."""
+    url = _generate_presigned_put(key)
+    return {
+        "url": url,
+        "bucket": DATA_BUCKET,
+        "key": key,
+        "expires_in": 300,
+    }
+
+
+def handle_data_hash() -> dict:
+    """Return ETag information for objects.zip and images.zip in data bucket.
+
+    If an object is missing, its value will be null.
+    """
+    keys = {"objects": "objects.zip", "images": "images.zip"}
+    client = _s3_client()
+    out: dict = {}
+    for name, key in keys.items():
+        try:
+            head = client.head_object(Bucket=DATA_BUCKET, Key=key)
+            etag = head.get("ETag")
+            # ETag may be quoted; strip quotes
+            if etag and etag.startswith('"') and etag.endswith('"'):
+                etag = etag[1:-1]
+            out[name] = etag
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NotFound", "NoSuchKey"):
+                out[name] = None
+            else:
+                out[name] = None
+    return out
 
 
 def handle_login(event: dict) -> dict:
@@ -146,59 +200,101 @@ def _get_bearer_token_from_event(event: dict) -> str | None:
     return None
 
 
-def lambda_handler(event, context):  # pylint: disable=unused-argument
-    """Handle Lambda invocations.
-
-    Routes requests based on rawPath and HTTP method.
-    """
-    # Extract request details
-    path = event.get("rawPath", "/")
-    method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
-
-    # Handle CORS preflight
+def _route_preflight(method: str):
     if method == "OPTIONS":
         return build_response(200)
+    return None
 
-    # Health check endpoint
+
+def _route_health(path: str, method: str):
     if path == "/" and method == "GET":
         return build_response(200, {"status": "ok"})
+    return None
 
-    # Authentication
+
+def _route_login(path: str, method: str, event: dict):
     if path == "/login" and method == "POST":
         return handle_login(event)
+    return None
 
-    # Protected endpoints example (will require JWT verification in later steps)
-    if path == "/objects-url" and method == "GET":
+
+def _route_presign(path: str, method: str, event: dict):
+    if method != "GET":
+        return None
+
+    if path == "/objects-url":
         token = _get_bearer_token_from_event(event)
         if not token:
             return build_response(401, {"error": "Authorization required"})
         try:
-            claims = verify_jwt(token)
+            verify_jwt(token)
         except Exception:
             return build_response(401, {"error": "Invalid token"})
+        try:
+            out = handle_presign_key("objects.zip")
+            return build_response(200, out)
+        except Exception:
+            return build_response(500, {"error": "Could not generate presigned URL"})
 
-        return build_response(
-            501,
-            {
-                "error": "Objects URL not yet implemented",
-                "sub": claims.get("sub"),
-            },
-        )
+    if path == "/images-url":
+        token = _get_bearer_token_from_event(event)
+        if not token:
+            return build_response(401, {"error": "Authorization required"})
+        try:
+            verify_jwt(token)
+        except Exception:
+            return build_response(401, {"error": "Invalid token"})
+        try:
+            out = handle_presign_key("images.zip")
+            return build_response(200, out)
+        except Exception:
+            return build_response(500, {"error": "Could not generate presigned URL"})
 
-    if path == "/images-url" and method == "GET":
-        return build_response(501, {"error": "Images URL not yet implemented"})
+    return None
 
+
+def _route_data_hash(path: str, method: str):
     if path == "/data-hash" and method == "GET":
-        return build_response(501, {"error": "Data hash not yet implemented"})
+        try:
+            out = handle_data_hash()
+            return build_response(200, out)
+        except Exception:
+            return build_response(500, {"error": "Could not fetch data hashes"})
+    return None
 
+
+def _route_observations(path: str, method: str):
     if path == "/observations" and method == "GET":
         return build_response(501, {"error": "Get observations not yet implemented"})
-
     if path == "/observations" and method == "POST":
         return build_response(501, {"error": "Save observations not yet implemented"})
-
     if path.startswith("/observations/") and method == "DELETE":
         return build_response(501, {"error": "Delete observation not yet implemented"})
+    return None
 
-    # Not found
+
+def lambda_handler(event, context):  # pylint: disable=unused-argument
+    """Handle Lambda invocations by delegating to smaller route functions."""
+    path = event.get("rawPath", "/")
+    method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+
+    # Check preflight and health quickly
+    route_funcs = (
+        _route_preflight,
+        _route_health,
+        _route_login,
+        _route_presign,
+        _route_data_hash,
+        _route_observations,
+    )
+
+    for fn in route_funcs:
+        if fn in (_route_login, _route_presign):
+            resp = fn(path, method, event)
+        else:
+            resp = fn(path, method)
+
+        if resp is not None:
+            return resp
+
     return build_response(404, {"error": f"Not found: {method} {path}"})
