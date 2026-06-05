@@ -1,0 +1,17 @@
+{
+  "name": "observarium-client",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite --port 6543 --open",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "svelte": "^4.0.0"
+  },
+  "devDependencies": {
+    "vite": "^4.3.9",
+    "@sveltejs/vite-plugin-svelte": "^2.0.0"
+  }
+}

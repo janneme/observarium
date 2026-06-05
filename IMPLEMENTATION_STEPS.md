@@ -500,7 +500,7 @@ Technical notes:
 
 ## Phase 3 — Client Foundation (MVP)
 
-### Step 15: Svelte project setup + color scheme system
+### Step 15: Svelte project setup + color scheme system ✅
 
 **README refs:** §2.2a, §3.1.1  
 **Deliverable:** Vite + Svelte 4 project in `client/` with working daily/nightly
