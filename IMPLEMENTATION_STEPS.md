@@ -520,11 +520,13 @@ initial-scale=1, maximum-scale=1, user-scalable=no">` plus CSS
 
 ---
 
-### Step 16: Custom keyboard engine
+### Step 16: Custom keyboard engine ✅
 
 **README refs:** §2.2d  
 **Deliverable:** Reusable `<CustomInput>` and `<CustomTextarea>` Svelte
 components that accept all text input without triggering the system keyboard.
+
+**Status:** Implemented in `client/src/components/CustomInput.svelte`, `client/src/components/CustomTextarea.svelte`, and `client/src/components/OnScreenKeyboard.svelte` — includes CZ/EN layouts, Shift/Caps, dead-key composition for Czech accents, visible caret, arrow navigation, and uniform key sizing.
 
 Technical notes:
 

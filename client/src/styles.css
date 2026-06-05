@@ -2,6 +2,7 @@
   --bg: #ffffff;
   --fg: #111111;
   --accent: #cc0000;
+  --key-border: rgba(0,0,0,0.12);
 }
 
 :root[data-theme='nightly'] {
@@ -12,6 +13,8 @@
   --accent: #3b63ff;
   --accent-border: rgba(59,99,255,0.32);
   --button-bg-hover: rgba(59,99,255,0.06);
+  /* Lighter, red-tinged border in nightly to match text color */
+  --key-border: rgba(224,106,90,0.16);
 }
 
 body, main {
