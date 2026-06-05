@@ -29,11 +29,15 @@ dev-client: ## Start the Vite dev server for the Svelte client
 data-prep: ## Run the data preparation pipeline
 	cd data_prep && python main.py $(ARGS)
 
-data-upload: ## Detect changed data files, re-zip and upload to S3
-	@echo "data-upload: not yet implemented"
+data-upload: ## Detect changed data files, re-zip and upload to storage backend
+	@echo "Running data upload (STORAGE=$(STORAGE) MAG=$(mag))"
+	MAG=$(mag) STORAGE=$(STORAGE) python3 data_prep/data_upload.py
 
-test: ## Run the data-prep test suite
-	cd data_prep && uv run pytest
+test: ## Run server and data-prep test suites (from repo root)
+	@echo "==> Running server tests"
+	cd server && PYTHONPATH=$(CURDIR) uv run pytest -q
+	@echo "==> Running data_prep tests"
+	cd data_prep && uv run pytest -q
 
 # Internal targets (not advertised in help)
 _deploy-lambda:

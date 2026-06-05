@@ -13,6 +13,7 @@ import boto3
 import jwt
 from botocore.exceptions import ClientError
 from jwt import PyJWKClient
+from python_lib.storage import backend as storage_backend
 
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "eu-central-1")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
@@ -90,14 +91,8 @@ def _s3_client():
 
 def _generate_presigned_put(key: str, expires: int = 300) -> str:
     """Generate a presigned PUT URL for `key` in the data bucket."""
-    if not DATA_BUCKET:
-        raise RuntimeError("DATA_BUCKET not set in environment")
-    client = _s3_client()
-    return client.generate_presigned_url(
-        "put_object",
-        Params={"Bucket": DATA_BUCKET, "Key": key},
-        ExpiresIn=expires,
-    )
+    backend = storage_backend.get_backend()
+    return backend.generate_presigned_put(key, expires)
 
 
 def handle_presign_key(key: str) -> dict:
@@ -117,22 +112,13 @@ def handle_data_hash() -> dict:
     If an object is missing, its value will be null.
     """
     keys = {"objects": "objects.zip", "images": "images.zip"}
-    client = _s3_client()
+    backend = storage_backend.get_backend()
     out: dict = {}
     for name, key in keys.items():
         try:
-            head = client.head_object(Bucket=DATA_BUCKET, Key=key)
-            etag = head.get("ETag")
-            # ETag may be quoted; strip quotes
-            if etag and etag.startswith('"') and etag.endswith('"'):
-                etag = etag[1:-1]
-            out[name] = etag
-        except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code", "")
-            if code in ("404", "NotFound", "NoSuchKey"):
-                out[name] = None
-            else:
-                out[name] = None
+            out[name] = backend.get_hash(key)
+        except Exception:
+            out[name] = None
     return out
 
 
@@ -221,22 +207,14 @@ def handle_get_observations(event: dict) -> dict:
     except PermissionError:
         return build_response(401, {"error": "Authorization required"})
 
-    client = _s3_client()
+    backend = storage_backend.get_backend()
     key = _observations_key_for_user(username)
     try:
-        obj = client.get_object(Bucket=DATA_BUCKET, Key=key)
-        body = obj.get("Body")
-        if hasattr(body, "read"):
-            data = body.read()
-        else:
-            data = body
+        if not backend.exists(key):
+            return build_response(200, [])
+        data = backend.read_bytes(key)
         arr = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data)
         return build_response(200, arr)
-    except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
-        if code in ("404", "NoSuchKey", "NotFound"):
-            return build_response(200, [])
-        return build_response(500, {"error": "Could not read observations"})
     except Exception:
         return build_response(500, {"error": "Could not read observations"})
 
@@ -256,10 +234,10 @@ def handle_save_observations(event: dict) -> dict:
     if not isinstance(data, list):
         return build_response(400, {"error": "Observations must be a JSON array"})
 
-    client = _s3_client()
+    backend = storage_backend.get_backend()
     key = _observations_key_for_user(username)
     try:
-        client.put_object(Bucket=DATA_BUCKET, Key=key, Body=json.dumps(data).encode("utf-8"), ContentType="application/json")
+        backend.write_bytes(key, json.dumps(data).encode("utf-8"))
         return build_response(200, {"ok": True})
     except Exception:
         return build_response(500, {"error": "Could not save observations"})
@@ -288,25 +266,20 @@ def handle_delete_observation(date: str) -> dict:
     except PermissionError:
         return build_response(401, {"error": "Authorization required"})
 
-    client = _s3_client()
+    backend = storage_backend.get_backend()
     key = _observations_key_for_user(username)
     try:
-        obj = client.get_object(Bucket=DATA_BUCKET, Key=key)
-        body = obj.get("Body")
-        data = body.read() if hasattr(body, "read") else body
-        arr = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data)
-    except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
-        if code in ("404", "NoSuchKey", "NotFound"):
+        if not backend.exists(key):
             return build_response(404, {"error": "Not found"})
-        return build_response(500, {"error": "Could not read observations"})
+        data = backend.read_bytes(key)
+        arr = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data)
     except Exception:
         return build_response(500, {"error": "Could not read observations"})
 
     # Filter out entries with matching date
     new_arr = [item for item in arr if item.get("date") != date]
     try:
-        client.put_object(Bucket=DATA_BUCKET, Key=key, Body=json.dumps(new_arr).encode("utf-8"), ContentType="application/json")
+        backend.write_bytes(key, json.dumps(new_arr).encode("utf-8"))
         return build_response(200, {"ok": True})
     except Exception:
         return build_response(500, {"error": "Could not save observations"})

@@ -40,9 +40,16 @@ def test_handle_presign_key(monkeypatch):
             assert ClientMethod == "put_object"
             assert Params["Key"] == "objects.zip"
             return "https://presigned.example/put"
-
+    # Patch storage backend used by handler
     monkeypatch.setattr(handler, "DATA_BUCKET", "test-bucket")
-    monkeypatch.setattr(handler, "_s3_client", lambda: DummyS3())
+    class DummyBackend:
+        def generate_presigned_put(self, key, expires=300):
+            assert key == "objects.zip"
+            return "https://presigned.example/put"
+
+    import python_lib.storage.backend as storage_backend
+
+    monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
 
     out = handler.handle_presign_key("objects.zip")
     assert out["url"].startswith("https://presigned.example")
@@ -51,14 +58,15 @@ def test_handle_presign_key(monkeypatch):
 
 
 def test_handle_data_hash(monkeypatch):
-    class DummyS3:
-        def head_object(self, Bucket, Key):
-            if Key == "objects.zip":
-                return {"ETag": '"etag1"'}
-            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "HeadObject")
+    class DummyBackend:
+        def get_hash(self, key):
+            if key == "objects.zip":
+                return "etag1"
+            return None
 
     monkeypatch.setattr(handler, "DATA_BUCKET", "test-bucket")
-    monkeypatch.setattr(handler, "_s3_client", lambda: DummyS3())
+    import python_lib.storage.backend as storage_backend
+    monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
 
     out = handler.handle_data_hash()
     assert out["objects"] == "etag1"

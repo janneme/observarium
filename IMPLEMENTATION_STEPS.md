@@ -223,11 +223,11 @@ Implementation notes:
 - For multi-star systems, keep all pair-wise entries (AB, AC, BC...).
 - Where known physical association exists in WDS notes, store
   `"phys": "<components>"` (e.g. `"phys": "AB"`).
- - Where WDS notes indicate a non-physical (visual/optical) pair, store
-   `"vis": "<components>"` (e.g. `"vis": "AB"`) so callers can
-   distinguish confirmed visual pairs from unknown/physical ones.
- - When available, attach orbital period information (years) from the ORB6
-   orbit catalogue (fetched via VizieR) to pairs as `"period": <years>`.
+- Where WDS notes indicate a non-physical (visual/optical) pair, store
+  `"vis": "<components>"` (e.g. `"vis": "AB"`) so callers can
+  distinguish confirmed visual pairs from unknown/physical ones.
+- When available, attach orbital period information (years) from the ORB6
+  orbit catalogue (fetched via VizieR) to pairs as `"period": <years>`.
 
 **Moon features:**
 
@@ -306,7 +306,7 @@ Implementation notes:
 - Manifest stored as JSON (`data_prep/sources/image_sources.json`) with 596 DSO
   entries, each containing: `catalogue_id`, `url`, `verified` (1=validated, 0=template, -1=failed).
 - URL validation script (`data_prep/scripts/validate_image_sources.py`) uses HTTP/2
-  with full browser security headers (sec-fetch-*, sec-ch-ua) required by Wikimedia,
+  with full browser security headers (sec-fetch-\*, sec-ch-ua) required by Wikimedia,
   per-domain parallel processing with exponential backoff [10s, 20s, 40s] to handle
   rate limiting intelligently.
 - Image download uses `httpx` with HTTP/2 and same browser headers, grouped by domain
@@ -322,7 +322,21 @@ Implementation notes:
 ### Step 9: Data bundling & `make data-upload`
 
 **README refs:** §3.1.3, §3.1.4, §3.2.2  
-**Deliverable:** `make data-upload` uploads changed ZIPs to the S3 data bucket.
+**Deliverable:** `make data-upload` bundles object data and images into ZIPs and
+syncs them to the configured storage backend.
+
+Storage backend selection:
+
+- Env `STORAGE=local|s3` selects the backend.
+- `STORAGE=local` stores artifacts under the repository-root `storage/`
+  directory (this folder must be in `.gitignore`).
+- `STORAGE=s3` stores artifacts in the S3 data bucket (`DATA_BUCKET`).
+- The storage abstraction must be usable from both `data_prep/` and `server/`.
+
+Key namespace must be identical across backends:
+
+- Bundles: `objects.zip`, `images.zip` at the top level.
+- Observations: `observations/{username}.json`.
 
 Technical notes:
 
@@ -333,10 +347,34 @@ Technical notes:
 - Create `images.zip` using `ZIP_DEFLATED` level 0 (`compresslevel=0`,
   equivalent to STORE) for all JPEG files in `images/`.
 - Change detection in `make data-upload`: compare SHA-256 of local ZIPs
-  against ETags of the S3 objects (S3 ETag = MD5 for single-part uploads ≤ 5 GB).
-  Upload only if different.
+  against the backend's stored content identifier (hash/etag). Sync only if
+  different.
 - `make data-upload` is called as step 3 of the full `make deploy` sequence
   (README §3.1.4).
+
+Validation order (mandatory):
+
+1. First run and verify with `STORAGE=local` (no cloud dependencies).
+2. Only after verifying local results, re-run with `STORAGE=s3`.
+
+---
+
+### Step 9a: Storage abstraction retrofit (server + data prep)
+
+**Deliverable:** A shared storage abstraction layer that is imported and used
+by both `data_prep/` and `server/`, so the solution can run fully locally.
+
+Technical notes:
+
+- Provide a small backend interface that supports at least:
+  - read/write bytes by key
+  - read/write JSON by key
+  - existence checks
+  - retrieving a stable content identifier (e.g. SHA-256 for local mode; ETag
+    or metadata hash for S3 mode)
+- Local backend must resolve the repository root reliably (do not assume
+  current working directory is the repo root).
+- `server/` must not require boto3/S3 connectivity when `STORAGE=local`.
 
 ---
 
@@ -476,6 +514,25 @@ Technical notes:
 
 ---
 
+### Step 13b: Data endpoints — support `STORAGE=local` via storage backend
+
+**Deliverable:** `GET /objects-url`, `GET /images-url`, and `GET /data-hash`
+work in both `STORAGE=local` and `STORAGE=s3` modes by using the shared storage
+abstraction.
+
+Technical notes:
+
+- `STORAGE=s3`: preserve Step 13 behaviour (pre-signed S3 URLs; `/data-hash`
+  reports the S3 bundle identifiers).
+- `STORAGE=local`:
+  - `/objects-url` and `/images-url` return URLs to local server routes
+    (e.g. `/data/objects.zip` and `/data/images.zip`) that stream the bundles
+    from the local storage backend.
+  - `/data-hash` returns bundle identifiers derived from local storage
+    (e.g. SHA-256).
+
+---
+
 ### Step 14: Lambda — observation CRUD
 
 **README refs:** §3.2.1 (add/modify/delete observations), §3.2.2  
@@ -495,6 +552,20 @@ Technical notes:
   given date, writes back.
 - Request bodies are JSON; validate that the top-level value is an array before
   writing.
+
+---
+
+### Step 14b: Observation CRUD — support `STORAGE=local` via storage backend
+
+**Deliverable:** Observation CRUD persists without AWS when `STORAGE=local`, by
+using the shared storage abstraction layer.
+
+Technical notes:
+
+- Use the same key scheme in both modes: `observations/{username}.json`.
+- `STORAGE=local`: store and read observations under the repository-root
+  `storage/` directory (gitignored), with the same logical key layout as S3.
+- `STORAGE=s3`: preserve existing S3 behaviour.
 
 ---
 
@@ -554,7 +625,8 @@ Technical notes:
 
 **README refs:** §5.1, §2.3  
 **Deliverable:** First-run screen that authenticates, fetches data via
-pre-signed URLs, unpacks ZIPs with JSZip, and stores everything in IndexedDB.
+URLs returned by the API (pre-signed in `STORAGE=s3`, direct local routes in
+`STORAGE=local`), unpacks ZIPs with JSZip, and stores everything in IndexedDB.
 
 Technical notes:
 
@@ -860,9 +932,10 @@ Technical notes:
 
 Technical notes:
 
-- Call `GET /data-hash` (Step 13) — returns ETags for `objects.zip` and
-  `images.zip`. Compare against the `dataHash` values stored in the `meta`
-  IndexedDB store after the last successful load.
+- Call `GET /data-hash` (Step 13/13b) — returns content identifiers for
+  `objects.zip` and `images.zip` (ETags in `STORAGE=s3`, hashes in
+  `STORAGE=local`, depending on backend). Compare against the `dataHash` values
+  stored in the `meta` IndexedDB store after the last successful load.
 - Show separate status per data type ("Object data: up to date",
   "Images: update available").
 - Re-download and re-process only the changed ZIP(s), using the same flow as
@@ -900,8 +973,8 @@ Technical notes:
   per-store sizes iterate and sum value byte lengths.
 - `make deploy` steps (README §3.1.4): run `terraform apply`, then package and
   push Lambda zip (`zip -r lambda.zip server/ && aws lambda update-function-code`),
-  then `make data-upload`, then `npm --prefix client run build && aws s3 sync
-client/dist/ s3://CLIENT_BUCKET --delete`.
+  then `make data-upload` (typically with `STORAGE=s3` for cloud deploy), then
+  `npm --prefix client run build && aws s3 sync client/dist/ s3://CLIENT_BUCKET --delete`.
 
 ---
 

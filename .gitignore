@@ -3,6 +3,9 @@
 data_prep/output/
 data_prep/cache/
 
+# Local storage artifacts
+storage/
+
 # Python
 __pycache__/
 *.py[cod]
