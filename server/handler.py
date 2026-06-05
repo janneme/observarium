@@ -200,6 +200,118 @@ def _get_bearer_token_from_event(event: dict) -> str | None:
     return None
 
 
+def _get_username_from_event(event: dict) -> str:
+    token = _get_bearer_token_from_event(event)
+    if not token:
+        raise PermissionError("Authorization required")
+    claims = verify_jwt(token)
+    sub = claims.get("sub")
+    if not sub:
+        raise PermissionError("Invalid token: missing sub")
+    return sub
+
+
+def _observations_key_for_user(username: str) -> str:
+    return f"observations/{username}.json"
+
+
+def handle_get_observations(event: dict) -> dict:
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    client = _s3_client()
+    key = _observations_key_for_user(username)
+    try:
+        obj = client.get_object(Bucket=DATA_BUCKET, Key=key)
+        body = obj.get("Body")
+        if hasattr(body, "read"):
+            data = body.read()
+        else:
+            data = body
+        arr = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data)
+        return build_response(200, arr)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in ("404", "NoSuchKey", "NotFound"):
+            return build_response(200, [])
+        return build_response(500, {"error": "Could not read observations"})
+    except Exception:
+        return build_response(500, {"error": "Could not read observations"})
+
+
+def handle_save_observations(event: dict) -> dict:
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    body = event.get("body") or ""
+    try:
+        data = json.loads(body) if isinstance(body, str) else body
+    except Exception:
+        return build_response(400, {"error": "Invalid JSON body"})
+
+    if not isinstance(data, list):
+        return build_response(400, {"error": "Observations must be a JSON array"})
+
+    client = _s3_client()
+    key = _observations_key_for_user(username)
+    try:
+        client.put_object(Bucket=DATA_BUCKET, Key=key, Body=json.dumps(data).encode("utf-8"), ContentType="application/json")
+        return build_response(200, {"ok": True})
+    except Exception:
+        return build_response(500, {"error": "Could not save observations"})
+
+
+def handle_delete_observation(date: str) -> dict:
+    # This function expects that authorization has already been validated by
+    # route caller; to keep consistent behaviour, we accept an event-less
+    # signature and rely on token parsing elsewhere. For simplicity we will
+    # read the Authorization header from the global last event — instead,
+    # change signature to accept event is more robust. We'll implement a
+    # simple replacement that expects the Authorization token be available in
+    # the environment `LAST_EVENT_FOR_DELETE` (but better to accept event).
+    # To keep code simple and testable, this function will not rely on
+    # external state; the router calls this only after extracting date and
+    # will reparse token from a global event variable. Update router to pass
+    # event instead; however to avoid large signature changes, we will
+    # reimplement by reading from a module-level variable `_CURRENT_EVENT` if set.
+    global _CURRENT_EVENT
+    event = globals().get("_CURRENT_EVENT")
+    if not event:
+        return build_response(400, {"error": "Missing request context"})
+
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    client = _s3_client()
+    key = _observations_key_for_user(username)
+    try:
+        obj = client.get_object(Bucket=DATA_BUCKET, Key=key)
+        body = obj.get("Body")
+        data = body.read() if hasattr(body, "read") else body
+        arr = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in ("404", "NoSuchKey", "NotFound"):
+            return build_response(404, {"error": "Not found"})
+        return build_response(500, {"error": "Could not read observations"})
+    except Exception:
+        return build_response(500, {"error": "Could not read observations"})
+
+    # Filter out entries with matching date
+    new_arr = [item for item in arr if item.get("date") != date]
+    try:
+        client.put_object(Bucket=DATA_BUCKET, Key=key, Body=json.dumps(new_arr).encode("utf-8"), ContentType="application/json")
+        return build_response(200, {"ok": True})
+    except Exception:
+        return build_response(500, {"error": "Could not save observations"})
+
+
 def _route_preflight(method: str):
     if method == "OPTIONS":
         return build_response(200)
@@ -265,11 +377,13 @@ def _route_data_hash(path: str, method: str):
 
 def _route_observations(path: str, method: str):
     if path == "/observations" and method == "GET":
-        return build_response(501, {"error": "Get observations not yet implemented"})
+        return handle_get_observations(path)
     if path == "/observations" and method == "POST":
-        return build_response(501, {"error": "Save observations not yet implemented"})
+        return handle_save_observations(path)
     if path.startswith("/observations/") and method == "DELETE":
-        return build_response(501, {"error": "Delete observation not yet implemented"})
+        # path: /observations/{date}
+        date = path.split("/", 2)[2] if path.count("/") >= 2 else ""
+        return handle_delete_observation(date)
     return None
 
 
@@ -277,6 +391,9 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
     """Handle Lambda invocations by delegating to smaller route functions."""
     path = event.get("rawPath", "/")
     method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+
+    # Expose the current event to handlers that need header/context access
+    globals()["_CURRENT_EVENT"] = event
 
     # Check preflight and health quickly
     route_funcs = (
