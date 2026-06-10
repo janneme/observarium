@@ -906,373 +906,253 @@
   },
   {
     "catalogue_id": "NGC2169",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2180",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2182",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/66/37-Star-Cluster.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2186",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/NGC2186_-_SDSS_DR14_%28panorama%29.jpg/1920px-NGC2186_-_SDSS_DR14_%28panorama%29.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2192",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2194",
-    "url": "",
-    "verified": 0
+    "url": "https://in-the-sky.org/image.php?style=medium&userimg=19910715_115811_585d351cc0e6.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2204",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2215",
-    "url": "",
-    "verified": 0
+    "url": "https://www.baskies.com.ar/PHOTOS/NGC%202204%20LRGB%20QHY%20183.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2217",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/NGC_2217_ESO.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2232",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f4/NGC_2232.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2236",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f4/NGC_2232.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2243",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2247",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/75/ngc2243-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2250",
-    "url": "",
-    "verified": 0
+    "url": "https://cseligman.com/text/atlas/ngc2250.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2251",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2252",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/NGC2251_-_SDSS_DR14_%28panorama%29.jpg/1920px-NGC2251_-_SDSS_DR14_%28panorama%29.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2254",
-    "url": "",
-    "verified": 0
+    "url": "https://www.lex.sk.ca/astro/DeepSky/NGC2254_110.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2259",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f3/NGC2259_-_SDSS_DR14.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2266",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2269",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/NGC2266_-_SDSS_DR14_%28panorama%29.jpg/1920px-NGC2266_-_SDSS_DR14_%28panorama%29.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2281",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2286",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/NGC_2281_Broken_Heart.png/1920px-NGC_2281_Broken_Heart.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2301",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2302",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/75/ngc2301-great-bird-cluster-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2304",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2309",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2311",
-    "url": "",
-    "verified": 0
+    "url": "https://images.mantrapskies.com/catalog/NGC/NGC2304/NGC2304L4X10RGB2X10CROP.JPG",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2324",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2331",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2335",
-    "url": "",
-    "verified": 0
+    "url": "https://in-the-sky.org/image.php?style=medium&userimg=19910715_115836_ae01e8fb1545.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2336",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/NGC_2336.png/3840px-NGC_2336.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2343",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/3d/NGC_2343_Spitzer.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2345",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2353",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/76/ngc2345-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2354",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/8b/NGC_2354.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2356",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/NGC2355_-_SDSS_DR14_%28panorama%29.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2360",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/NGC2360_-_SDSS_DR14_%28panorama%29.jpg/1920px-NGC2360_-_SDSS_DR14_%28panorama%29.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2362",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/87/NGC_2362.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2367",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2374",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Star_cluster_NGC_2367.jpg/1920px-Star_cluster_NGC_2367.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2383",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/76/ngc2383-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2384",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/1b/NGC_2383-2384.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2392",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2395",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2396",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/16/Ngc2392.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2403",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2409",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e5/NGC2403_Galaxy_from_the_Mount_Lemmon_SkyCenter_Schulman_Telescope_courtesy_Adam_Block.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2414",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/76/ngc2414-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2419",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/ae/NGC_2419.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2420",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/54/Solar_composition_star_cluster_-_Noao0203a.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2421",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2423",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/76/ngc2421-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2432",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/77/ngc2432-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2438",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/73/N2438s-crop.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2439",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/ae/NGC_2439.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2440",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/89/NGC_2440_by_HST.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2453",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2455",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/77/ngc2453-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2479",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/77/ngc2479-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2482",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2483",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/77/ngc2482-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2489",
-    "url": "",
-    "verified": 0
+    "url": "http://www.phys.ttu.edu/~ozprof/2489h400.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2506",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/77/ngc2506-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2509",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2527",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/77/ngc2509-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2533",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/78/ngc2533-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2539",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/29/NGC_2539.png",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2566",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/NGC_2566_imaged_by_the_Hubble_Space_Telescope.jpg/1920px-NGC_2566_imaged_by_the_Hubble_Space_Telescope.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2567",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2571",
-    "url": "",
-    "verified": 0
-  },
-  {
-    "catalogue_id": "NGC2580",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/78/ngc2567-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2587",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/78/ngc2587-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2613",
-    "url": "",
-    "verified": 0
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/NGC_2613_%28captured_by_ESO%27s_1.5-metre_Danish_telescope%29.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2627",
-    "url": "",
-    "verified": 0
+    "url": "https://static.theskylive.com/website/sky/deepsky/deepsky-images/79/ngc2627-dss2r-800.jpg",
+    "verified": 1
   },
   {
     "catalogue_id": "NGC2652",
