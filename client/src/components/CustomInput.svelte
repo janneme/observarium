@@ -5,6 +5,7 @@
   export let value = ''
   export let placeholder = ''
   export let id = ''
+  export let mask = false
 
   const dispatch = createEventDispatcher()
 
@@ -40,17 +41,22 @@
   function moveDown() { /* no-op for single-line */ }
 
   let el
+  let focused = false
 
   function onFocus() {
+    focused = true
     register(api)
     setCursor(value.length)
   }
 
   function onBlur() {
+    focused = false
     unregister(api)
   }
 
-  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown }
+  function enter() { el.blur() }
+
+  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter }
 
   onDestroy(() => unregister(api))
 
@@ -71,10 +77,22 @@
     <input id={id} value={value} tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;" />
   {/if}
 
-  {#if value.length}
-    <span class="before">{value.slice(0,cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{value.slice(cursor)}</span>
+  {#if focused}
+    {#if value.length}
+      {#if mask}
+        <span class="before">{'•'.repeat(cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{'•'.repeat(value.length - cursor)}</span>
+      {:else}
+        <span class="before">{value.slice(0,cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{value.slice(cursor)}</span>
+      {/if}
+    {:else}
+      <span class="caret" aria-hidden="true"></span><span class="placeholder">{placeholder}</span>
+    {/if}
   {:else}
-    <span class="placeholder">{placeholder}</span>
+    {#if value.length}
+      <span>{mask ? '•'.repeat(value.length) : value}</span>
+    {:else}
+      <span class="placeholder">{placeholder}</span>
+    {/if}
   {/if}
 </div>
 

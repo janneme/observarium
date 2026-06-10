@@ -1,5 +1,7 @@
 SHELL := /bin/bash
 
+unexport VIRTUAL_ENV
+
 VENV := .venv
 PY := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
@@ -47,16 +49,10 @@ test: ## Run pytest using existing venv (requires prior `make init`)
 	$(VENV)/bin/python -m pytest
 
 # Run linters using tools installed in the venv. Do not perform any installs.
-lint: ## Run ruff and pylint using existing venv (requires prior `make init`)
-	# Exclude build artifacts, the venv directory and tests from analysis
-	@printf "\n\033[1;36m❯ ruff check\033[0m\n"; \
-	$(VENV)/bin/ruff check . --exclude .venv,build,output,cache,tests; rc=$$?; \
-	if [ $$rc -ne 0 ]; then \
-		echo "ruff reported issues (exit $$rc); skipping pylint."; \
-		exit 0; \
-	fi; \
-	printf "\n\033[1;36m❯ pylint check\033[0m\n"; \
-	$(VENV)/bin/pylint --rcfile=$(CURDIR)/../.pylintrc $(shell find . -name '*.py' -not -path './.venv/*' -not -path './build/*' -not -path './output/*' -not -path './cache/*' -not -path './tests/*' -not -path '../tests/*') || true
+lint: ## Run ruff and pylint
+	PYTHONPATH=.. uv run --extra dev ruff check .
+	PYTHONPATH=.. uv run --extra dev pylint $$(find . -name '*.py' -not -path './.venv/*' -not -path './tests/*' | sort) || true
+	PYTHONPATH=.. uv run --extra dev pylint --disable=missing-function-docstring,missing-class-docstring,protected-access $$(find ./tests -name '*.py' | sort) || true
 
 # Auto-fix lintable issues with ruff, then re-run lint target
 lint-fix: ## Run ruff --fix on source (requires prior `make init`)

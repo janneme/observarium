@@ -125,9 +125,9 @@ class TestLoadIndex:
         assert index[14576] == (2.12, 3.4)
 
     def test_missing_csv_returns_empty_dict(self, tmp_path: Path):
-        assert VariableStarPipeline(tmp_path).load_index() == {}
+        assert not VariableStarPipeline(tmp_path).load_index()
 
     def test_respects_max_mag_in_filename(self, tmp_path: Path):
         _write_csv(tmp_path, [{"hip": 27989, "min_mag": 0.0, "max_mag": 1.3}], max_mag=4.0)
-        assert VariableStarPipeline(tmp_path, max_mag=6.0).load_index() == {}
+        assert not VariableStarPipeline(tmp_path, max_mag=6.0).load_index()
         assert VariableStarPipeline(tmp_path, max_mag=4.0).load_index() == {27989: (0.0, 1.3)}

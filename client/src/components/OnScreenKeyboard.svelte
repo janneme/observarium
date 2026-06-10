@@ -1,5 +1,5 @@
 <script>
-  import { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown } from '../stores/keyboard.js'
+  import { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter, pressedKey } from '../stores/keyboard.js'
   import { onMount, onDestroy, tick } from 'svelte'
 
   let layout = 'cz' // 'en' or 'cz'
@@ -67,7 +67,7 @@
   function press(k) {
     // Handle special keys
     if (k === 'BACKSPACE') { backspace(); return }
-    if (k === 'ENTER' || k === '\n') { insertChar('\n'); if (shift) shift = false; return }
+    if (k === 'ENTER' || k === '\n') { enter(); if (shift) shift = false; return }
     if (k === 'SHIFT') { toggleShift(); return }
     if (k === 'CAPS') { capsLock = !capsLock; return }
 
@@ -198,31 +198,31 @@
   <div class="row digits">
     {#if layout === 'en'}
       {#each (shift || capsLock ? en.shifted[0] : en.unshifted[0]) as d}
-        <button class="key flex" data-key={d} type="button" class:dead-active={deadKeySymbol === d} on:mousedown|preventDefault on:click={() => press(d)}>{displayKey(d)}</button>
+        <button class="key flex" data-key={d} type="button" class:dead-active={deadKeySymbol === d} class:hw-active={$pressedKey === d} on:mousedown|preventDefault on:click={() => press(d)}>{displayKey(d)}</button>
       {/each}
     {:else}
       {#each (shift ? cz.shifted[0] : cz.unshifted[0]) as d}
-        <button class="key flex" data-key={d} type="button" class:dead-active={deadKeySymbol === d} on:click={() => press(d)}>{displayKey(d)}</button>
+        <button class="key flex" data-key={d} type="button" class:dead-active={deadKeySymbol === d} class:hw-active={$pressedKey === d} on:click={() => press(d)}>{displayKey(d)}</button>
       {/each}
     {/if}
-      <button class="key flex" data-key="BACKSPACE" type="button" class:dead-active={deadKeySymbol === 'BACKSPACE'} on:mousedown|preventDefault on:click={back}>{displayKey('BACKSPACE')}</button>
+      <button class="key flex" data-key="BACKSPACE" type="button" class:dead-active={deadKeySymbol === 'BACKSPACE'} class:hw-active={$pressedKey === 'BACKSPACE'} on:mousedown|preventDefault on:click={back}>{displayKey('BACKSPACE')}</button>
   </div>
 
   {#each rows as r,ri}
     <div class="row">
           {#each r as k}
-                    <button class="key flex" data-key={k} type="button" class:dead-active={deadKeySymbol === k} on:mousedown|preventDefault on:click={() => press(k)}>{displayKey(k)}</button>
+                    <button class="key flex" data-key={k} type="button" class:dead-active={deadKeySymbol === k} class:hw-active={$pressedKey === k} on:mousedown|preventDefault on:click={() => press(k)}>{displayKey(k)}</button>
                   {/each}
     </div>
   {/each}
 
   <div class="row bottom">
     <button class="key small lang" data-key="LANG" type="button" class:dead-active={deadKeySymbol === 'LANG'} on:mousedown|preventDefault on:click={toggleLayout} aria-label="Language">{layout.toUpperCase()}</button>
-    <button class="key small" data-key="LEFT" type="button" class:dead-active={deadKeySymbol === 'LEFT'} on:mousedown|preventDefault on:click={left}>{displayKey('LEFT')}</button>
-    <button class="key small" data-key="UP" type="button" class:dead-active={deadKeySymbol === 'UP'} on:mousedown|preventDefault on:click={up}>{displayKey('UP')}</button>
-    <button class="key space" data-key="SPACE" type="button" class:dead-active={deadKeySymbol === 'SPACE'} on:mousedown|preventDefault on:click={() => press(' ')} aria-label="Space"></button>
-    <button class="key small" data-key="DOWN" type="button" class:dead-active={deadKeySymbol === 'DOWN'} on:mousedown|preventDefault on:click={down}>{displayKey('DOWN')}</button>
-    <button class="key small" data-key="RIGHT" type="button" class:dead-active={deadKeySymbol === 'RIGHT'} on:mousedown|preventDefault on:click={right}>{displayKey('RIGHT')}</button>
+    <button class="key small" data-key="LEFT" type="button" class:dead-active={deadKeySymbol === 'LEFT'} class:hw-active={$pressedKey === 'LEFT'} on:mousedown|preventDefault on:click={left}>{displayKey('LEFT')}</button>
+    <button class="key small" data-key="UP" type="button" class:dead-active={deadKeySymbol === 'UP'} class:hw-active={$pressedKey === 'UP'} on:mousedown|preventDefault on:click={up}>{displayKey('UP')}</button>
+    <button class="key space" data-key="SPACE" type="button" class:dead-active={deadKeySymbol === 'SPACE'} class:hw-active={$pressedKey === 'SPACE'} on:mousedown|preventDefault on:click={() => press(' ')} aria-label="Space"></button>
+    <button class="key small" data-key="DOWN" type="button" class:dead-active={deadKeySymbol === 'DOWN'} class:hw-active={$pressedKey === 'DOWN'} on:mousedown|preventDefault on:click={down}>{displayKey('DOWN')}</button>
+    <button class="key small" data-key="RIGHT" type="button" class:dead-active={deadKeySymbol === 'RIGHT'} class:hw-active={$pressedKey === 'RIGHT'} on:mousedown|preventDefault on:click={right}>{displayKey('RIGHT')}</button>
   </div>
 </div>
 
@@ -232,7 +232,7 @@
   .digits { justify-content:flex-start }
   .key { padding:0.45rem 0.65rem; background:var(--key-bg, rgba(255,255,255,0.02)); border-radius:6px; color:var(--fg); border:1px solid rgba(127,127,127,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.04); min-width:36px; text-align:center; box-sizing:border-box }
   .key { padding:0.28rem 0.5rem; background:var(--key-bg, rgba(255,255,255,0.02)); border-radius:6px; color:var(--fg); border:1px solid var(--fg); box-shadow: 0 2px 0 rgba(0,0,0,0.08); min-width:36px; text-align:center; box-sizing:border-box; transition: transform 80ms ease, filter 120ms ease; display:flex; align-items:center; justify-content:center; height: clamp(36px, 6vw, 56px); font-size: 1.05rem }
-  .key:active { transform: translateY(1px) scale(0.995); background: var(--fg); color: var(--bg); border-color: var(--bg) }
+  .key:active, .key.hw-active { transform: translateY(1px) scale(0.995); background: var(--fg); color: var(--bg); border-color: var(--bg) }
   .key.small { padding:0.28rem 0.5rem; min-width:36px; flex:1 1 0; max-width:64px; font-size: 1.05rem }
   /* use a clamped height so keys remain visually balanced; flex distributes width evenly */
   .key.flex { flex:1 1 0; min-width:0 }

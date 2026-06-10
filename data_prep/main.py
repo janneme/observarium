@@ -228,7 +228,7 @@ def _run_stars(args: argparse.Namespace, star_kwargs: dict[str, float]) -> None:
         show_summary=show_summary,
         extreme_stars_num=args.extreme_stars_num,
     )
-    
+
 
 
 def _build_runners(

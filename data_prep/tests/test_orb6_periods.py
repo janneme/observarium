@@ -28,7 +28,7 @@ def test_attach_merges_period(tmp_path: Path) -> None:
     matcher = DoubleStarMatcher(tmp_path)
 
     # Monkeypatch the downloader fetch to return our files based on filename
-    def fake_fetch(url: str, filename: str) -> Path:
+    def fake_fetch(_url: str, filename: str) -> Path:
         if filename == "wds.tsv":
             return wds_tsv
         if filename == "orb6.tsv":

@@ -39,7 +39,13 @@ ignore = [
 [tool.pylint.main]
 disable = [
     "missing-module-docstring",
+    "broad-exception-caught",
+    "too-many-arguments",
+    "too-many-positional-arguments",
     "too-few-public-methods",  # acceptable for single-responsibility pipeline classes
+    "too-many-instance-attributes",
+    "missing-function-docstring",
+    "duplicate-code",
 ]
 
 [tool.setuptools.packages.find]

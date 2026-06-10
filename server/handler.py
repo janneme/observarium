@@ -7,6 +7,7 @@ JWT verification helpers that fetch and cache Cognito JWKS for token checks.
 import json
 import os
 import time
+import traceback
 from typing import Any
 
 import boto3
@@ -25,7 +26,7 @@ _JWK_CLIENT_CACHE: dict[str, Any] = {}
 BEARER_PARTS = 2
 
 
-def build_response(status_code: int, body: dict | None = None):
+def build_response(status_code: int, body: dict | list | None = None):
     """Build a Lambda response with CORS headers."""
     headers = {
         "Content-Type": "application/json",
@@ -66,18 +67,23 @@ def _get_jwk_client() -> PyJWKClient:
 
 
 def verify_jwt(token: str) -> dict:
-    """Verify JWT using Cognito JWKS. Returns decoded claims or raises."""
+    """Verify JWT using Cognito JWKS. Returns decoded claims or raises.
+
+    Cognito access tokens carry 'client_id' not 'aud', so audience
+    verification is skipped; signature verification against the pool's
+    JWKS is sufficient.
+    """
     jwk_client = _get_jwk_client()
     signing_key = jwk_client.get_signing_key_from_jwt(token)
-    # Verify audience if client id provided
-    options = {"verify_aud": bool(COGNITO_CLIENT_ID)}
-    return jwt.decode(
+    claims = jwt.decode(
         token,
         signing_key.key,
         algorithms=["RS256"],
-        audience=COGNITO_CLIENT_ID if COGNITO_CLIENT_ID else None,
-        options=options,
+        options={"verify_aud": False},
     )
+    if COGNITO_CLIENT_ID and claims.get("client_id") != COGNITO_CLIENT_ID:
+        raise ValueError("Token client_id does not match expected client")
+    return claims
 
 
 def _cognito_client():
@@ -89,15 +95,15 @@ def _s3_client():
     return boto3.client("s3", region_name=aws_region)
 
 
-def _generate_presigned_put(key: str, expires: int = 300) -> str:
-    """Generate a presigned PUT URL for `key` in the data bucket."""
+def _generate_presigned_get(key: str, expires: int = 300) -> str:
+    """Generate a presigned GET URL for `key` in the data bucket."""
     backend = storage_backend.get_backend()
-    return backend.generate_presigned_put(key, expires)
+    return backend.generate_presigned_get(key, expires)
 
 
 def handle_presign_key(key: str) -> dict:
-    """Return a dict containing a presigned PUT URL and metadata for `key`."""
-    url = _generate_presigned_put(key)
+    """Return a dict containing a presigned GET URL and metadata for `key`."""
+    url = _generate_presigned_get(key)
     return {
         "url": url,
         "bucket": DATA_BUCKET,
@@ -162,11 +168,12 @@ def handle_login(event: dict) -> dict:
 
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
-        # Do not reveal whether user exists
         if code in ("NotAuthorizedException", "UserNotFoundException"):
             return build_response(401, {"error": "Invalid username or password"})
+        traceback.print_exc()
         return build_response(500, {"error": "Authentication failed"})
     except Exception:
+        traceback.print_exc()
         return build_response(500, {"error": "Authentication failed"})
 
 
@@ -202,6 +209,7 @@ def _observations_key_for_user(username: str) -> str:
 
 
 def handle_get_observations(event: dict) -> dict:
+    """Return the stored observations list for the authenticated user."""
     try:
         username = _get_username_from_event(event)
     except PermissionError:
@@ -213,13 +221,15 @@ def handle_get_observations(event: dict) -> dict:
         if not backend.exists(key):
             return build_response(200, [])
         data = backend.read_bytes(key)
-        arr = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data)
+        raw = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+        arr = json.loads(raw)
         return build_response(200, arr)
     except Exception:
         return build_response(500, {"error": "Could not read observations"})
 
 
 def handle_save_observations(event: dict) -> dict:
+    """Persist the full observations array for the authenticated user."""
     try:
         username = _get_username_from_event(event)
     except PermissionError:
@@ -243,24 +253,8 @@ def handle_save_observations(event: dict) -> dict:
         return build_response(500, {"error": "Could not save observations"})
 
 
-def handle_delete_observation(date: str) -> dict:
-    # This function expects that authorization has already been validated by
-    # route caller; to keep consistent behaviour, we accept an event-less
-    # signature and rely on token parsing elsewhere. For simplicity we will
-    # read the Authorization header from the global last event — instead,
-    # change signature to accept event is more robust. We'll implement a
-    # simple replacement that expects the Authorization token be available in
-    # the environment `LAST_EVENT_FOR_DELETE` (but better to accept event).
-    # To keep code simple and testable, this function will not rely on
-    # external state; the router calls this only after extracting date and
-    # will reparse token from a global event variable. Update router to pass
-    # event instead; however to avoid large signature changes, we will
-    # reimplement by reading from a module-level variable `_CURRENT_EVENT` if set.
-    global _CURRENT_EVENT
-    event = globals().get("_CURRENT_EVENT")
-    if not event:
-        return build_response(400, {"error": "Missing request context"})
-
+def handle_delete_observation(event: dict, date: str) -> dict:
+    """Remove the observation with the given date for the authenticated user."""
     try:
         username = _get_username_from_event(event)
     except PermissionError:
@@ -272,7 +266,8 @@ def handle_delete_observation(date: str) -> dict:
         if not backend.exists(key):
             return build_response(404, {"error": "Not found"})
         data = backend.read_bytes(key)
-        arr = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data)
+        raw = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+        arr = json.loads(raw)
     except Exception:
         return build_response(500, {"error": "Could not read observations"})
 
@@ -285,13 +280,13 @@ def handle_delete_observation(date: str) -> dict:
         return build_response(500, {"error": "Could not save observations"})
 
 
-def _route_preflight(method: str):
+def _route_preflight(_path: str, method: str, _event: dict):
     if method == "OPTIONS":
         return build_response(200)
     return None
 
 
-def _route_health(path: str, method: str):
+def _route_health(path: str, method: str, _event: dict):
     if path == "/" and method == "GET":
         return build_response(200, {"status": "ok"})
     return None
@@ -314,11 +309,13 @@ def _route_presign(path: str, method: str, event: dict):
         try:
             verify_jwt(token)
         except Exception:
+            traceback.print_exc()
             return build_response(401, {"error": "Invalid token"})
         try:
             out = handle_presign_key("objects.zip")
             return build_response(200, out)
         except Exception:
+            traceback.print_exc()
             return build_response(500, {"error": "Could not generate presigned URL"})
 
     if path == "/images-url":
@@ -328,17 +325,19 @@ def _route_presign(path: str, method: str, event: dict):
         try:
             verify_jwt(token)
         except Exception:
+            traceback.print_exc()
             return build_response(401, {"error": "Invalid token"})
         try:
             out = handle_presign_key("images.zip")
             return build_response(200, out)
         except Exception:
+            traceback.print_exc()
             return build_response(500, {"error": "Could not generate presigned URL"})
 
     return None
 
 
-def _route_data_hash(path: str, method: str):
+def _route_data_hash(path: str, method: str, _event: dict):
     if path == "/data-hash" and method == "GET":
         try:
             out = handle_data_hash()
@@ -348,15 +347,14 @@ def _route_data_hash(path: str, method: str):
     return None
 
 
-def _route_observations(path: str, method: str):
+def _route_observations(path: str, method: str, event: dict):
     if path == "/observations" and method == "GET":
-        return handle_get_observations(path)
+        return handle_get_observations(event)
     if path == "/observations" and method == "POST":
-        return handle_save_observations(path)
+        return handle_save_observations(event)
     if path.startswith("/observations/") and method == "DELETE":
-        # path: /observations/{date}
-        date = path.split("/", 2)[2] if path.count("/") >= 2 else ""
-        return handle_delete_observation(date)
+        date = path.removeprefix("/observations/")
+        return handle_delete_observation(event, date)
     return None
 
 
@@ -379,10 +377,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
     )
 
     for fn in route_funcs:
-        if fn in (_route_login, _route_presign):
-            resp = fn(path, method, event)
-        else:
-            resp = fn(path, method)
+        resp = fn(path, method, event)
 
         if resp is not None:
             return resp

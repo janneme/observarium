@@ -6,8 +6,12 @@ Usage:
 
 import argparse
 import json
+import mimetypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
+
+from python_lib.storage import backend as storage_backend
+from python_lib.storage.backend import LocalBackend
 
 from handler import lambda_handler
 
@@ -77,6 +81,32 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
         if body:
             self.wfile.write(body.encode("utf-8"))
 
+    def _serve_local_storage(self, key: str):
+        """Serve a file from the local storage backend over HTTP."""
+        backend = storage_backend.get_backend()
+        if not isinstance(backend, LocalBackend):
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error": "local-storage not available"}')
+            return
+        path = backend.local_file_path(key)
+        if not path.exists():
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": f"Not found: {key}"}).encode())
+            return
+        content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        size = path.stat().st_size
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(size))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        with path.open("rb") as fh:
+            self.wfile.write(fh.read())
+
     def _handle_request(self):
         """Generic request handler for all HTTP methods."""
         try:
@@ -92,6 +122,12 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         """Handle GET requests."""
+        parsed = urlparse(self.path)
+        prefix = "/local-storage/"
+        if parsed.path.startswith(prefix):
+            key = parsed.path[len(prefix):]
+            self._serve_local_storage(key)
+            return
         self._handle_request()
 
     def do_POST(self):

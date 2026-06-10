@@ -149,106 +149,23 @@ class DoubleStarMatcher:
         stars_with_hip: list[dict[str, Any]],
     ) -> tuple[int, int]:
         """Match systems to stars, attach `dbl` payloads, and return counts."""
-        # Build a simple RA/Dec bin index to avoid O(N*M) full scans when
-        # matching systems to stars. Use 1-degree declination bins and 1-hour
-        # RA bins (hours) as a cheap spatial index; this is sufficient given
-        # the small matching radius (0.2 degrees) used by `_match_system_star`.
-        bins: dict[tuple[int, int], list[dict[str, Any]]] = {}
-        for s in stars_with_hip:
-            ra_h, dec_d = s["pos"]
-            ra_bin = int(ra_h) % 24
-            dec_bin = int(dec_d)
-            bins.setdefault((ra_bin, dec_bin), []).append(s)
-
-        def _candidate_stars(sys_ra: float, sys_dec: float) -> list[dict[str, Any]]:
-            ra_bin = int(sys_ra) % 24
-            dec_bin = int(sys_dec)
-            cand: list[dict[str, Any]] = []
-            # search neighbouring bins within +/-1 in both coordinates
-            for r in (ra_bin - 1, ra_bin, ra_bin + 1):
-                rb = r % 24
-                for d in (dec_bin - 1, dec_bin, dec_bin + 1):
-                    key = (rb, d)
-                    if key in bins:
-                        cand.extend(bins[key])
-            return cand
-
+        bins = self._build_spatial_bins(stars_with_hip)
         pair_count = 0
         touched: set[int] = set()
         for system in systems:
-            # Prefer direct catalogue ID matches when available: HIP then HD.
-            matched: dict[str, Any] | None = None
-            sid = system.get("hip")
-            if sid is not None:
-                for s in stars_with_hip:
-                    if s.get("hip") == sid:
-                        matched = s
-                        break
-            if matched is None and system.get("hd") is not None:
-                hdid = system.get("hd")
-                for s in stars_with_hip:
-                    if s.get("hd") == hdid:
-                        matched = s
-                        break
-
+            matched = self._find_direct_match(system, stars_with_hip)
             if matched is None:
                 sys_ra, sys_dec = system["pos"]
-                candidates = _candidate_stars(sys_ra, sys_dec)
+                candidates = self._get_bin_candidates(sys_ra, sys_dec, bins)
                 if not candidates:
                     continue
-                # Find the best match among candidates only.
-                best: tuple[float, dict[str, Any]] | None = None
-                for star in candidates:
-                    ra, dec = star["pos"]
-                    dist = _angular_distance_deg(sys_ra, sys_dec, ra, dec)
-                    if best is None or dist < best[0]:
-                        best = (dist, star)
-                if best is None:
+                nearest = self._find_nearest(candidates, sys_ra, sys_dec)
+                if nearest is None:
                     continue
-                distance, matched = best
-                if distance > 0.2:
+                dist, matched = nearest
+                if dist > 0.2:
                     continue
-            else:
-                # we found a direct ID match; matched is set and we skip spatial checks
-                distance = 0.0
-            # Magnitude-consistency check: if the matched star has a magnitude
-            # recorded, ensure it reasonably matches one of the pair magnitudes
-            # in the system to reduce false attachments. If no mag is present
-            # on the star, accept the match.
-            star_mag = matched.get("mag")
-            def _star_mag_value(m):
-                if isinstance(m, (int, float)):
-                    return float(m)
-                if isinstance(m, list) and m:
-                    # variable encoding as [min, max] → use midpoint
-                    return float((m[0] + m[-1]) / 2.0)
-                return None
-
-            s_val = _star_mag_value(star_mag)
-            attach_ok = True
-            if s_val is not None:
-                attach_ok = False
-                # check each pair's component magnitudes for a near match
-                for pair in system.get("pairs", []):
-                    mags = pair.get("mag") or []
-                    for pm in mags:
-                        try:
-                            pmf = float(pm)
-                        except (TypeError, ValueError):
-                            continue
-                        if abs(s_val - pmf) <= 1.0:  # 1 mag tolerance
-                            attach_ok = True
-                            break
-                    if attach_ok:
-                        break
-                if not attach_ok and self._debug:
-                    pair_mags = [pair.get("mag") for pair in system.get("pairs", [])]
-                    print(
-                        f"Skipping attach for system {system['wds']} -> "
-                        f"star hip={matched.get('hip')} due to magnitude mismatch "
-                        f"(star={s_val}, pairs={pair_mags})"
-                    )
-            if not attach_ok:
+            if not self._passes_mag_check(matched, system):
                 continue
             pair_count += self._attach_payload_and_count(matched, system, touched)
         return len(touched), pair_count
@@ -277,6 +194,104 @@ class DoubleStarMatcher:
         if isinstance(hip, int):
             touched.add(hip)
         return len(system.get("pairs", []))
+
+    @staticmethod
+    def _build_spatial_bins(
+        stars: list[dict[str, Any]],
+    ) -> dict[tuple[int, int], list[dict[str, Any]]]:
+        """Build a 1-hour-RA × 1-degree-Dec bin index for fast spatial lookup."""
+        bins: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        for s in stars:
+            ra_h, dec_d = s["pos"]
+            ra_bin = int(ra_h) % 24
+            dec_bin = int(dec_d)
+            bins.setdefault((ra_bin, dec_bin), []).append(s)
+        return bins
+
+    @staticmethod
+    def _get_bin_candidates(
+        sys_ra: float,
+        sys_dec: float,
+        bins: dict[tuple[int, int], list[dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        """Return stars in the 3×3 bin neighbourhood around (sys_ra, sys_dec)."""
+        ra_bin = int(sys_ra) % 24
+        dec_bin = int(sys_dec)
+        cand: list[dict[str, Any]] = []
+        for r in (ra_bin - 1, ra_bin, ra_bin + 1):
+            rb = r % 24
+            for d in (dec_bin - 1, dec_bin, dec_bin + 1):
+                key = (rb, d)
+                if key in bins:
+                    cand.extend(bins[key])
+        return cand
+
+    @staticmethod
+    def _find_nearest(
+        candidates: list[dict[str, Any]],
+        sys_ra: float,
+        sys_dec: float,
+    ) -> tuple[float, dict[str, Any]] | None:
+        """Return (distance_deg, star) for the nearest candidate, or None if empty."""
+        best_dist = math.inf
+        best_star: dict[str, Any] | None = None
+        for star in candidates:
+            ra, dec = star["pos"]
+            dist = _angular_distance_deg(sys_ra, sys_dec, ra, dec)
+            if dist < best_dist:
+                best_dist = dist
+                best_star = star
+        if best_star is None:
+            return None
+        return (best_dist, best_star)
+
+    @staticmethod
+    def _find_direct_match(
+        system: dict[str, Any],
+        stars: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        """Return the first star whose HIP or HD id matches the system, or None."""
+        sid = system.get("hip")
+        if sid is not None:
+            for s in stars:
+                if s.get("hip") == sid:
+                    return s
+        hdid = system.get("hd")
+        if hdid is not None:
+            for s in stars:
+                if s.get("hd") == hdid:
+                    return s
+        return None
+
+    @staticmethod
+    def _mag_to_float(m: Any) -> float | None:
+        """Convert a magnitude value (scalar or [min, max] list) to float, or None."""
+        if isinstance(m, (int, float)):
+            return float(m)
+        if isinstance(m, list) and m:
+            return float((m[0] + m[-1]) / 2.0)
+        return None
+
+    def _passes_mag_check(self, matched: dict[str, Any], system: dict[str, Any]) -> bool:
+        """Return True if star magnitude is consistent with at least one pair component."""
+        s_val = self._mag_to_float(matched.get("mag"))
+        if s_val is None:
+            return True
+        for pair in system.get("pairs", []):
+            for pm in (pair.get("mag") or []):
+                try:
+                    if abs(s_val - float(pm)) <= 1.0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+        if self._debug:
+            pair_mags = [pair.get("mag") for pair in system.get("pairs", [])]
+            print(
+                f"Skipping attach for system {system['wds']} -> "
+                f"star hip={matched.get('hip')} due to magnitude mismatch "
+                f"(star={s_val}, pairs={pair_mags})"
+            )
+        return False
 
     def _load_systems(self, tsv_path: Path, max_mag: float, min_sep: float) -> list[dict[str, Any]]:
         # pylint: disable=too-many-locals

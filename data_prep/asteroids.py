@@ -72,13 +72,8 @@ def _estimate_opposition_magnitude(abs_mag: float, semimajor_axis_au: float) -> 
     return abs_mag + 5.0 * math.log10(distance_at_opposition * semimajor_axis_au)
 
 
-def _parse_mpcorb_line(line: str) -> dict[str, Any] | None:
-    """Parse one line from MPCORB.DAT.
-
-    Format reference:
-    https://www.minorplanetcenter.net/iau/info/MPOrbitFormat.html
-
-    Each asteroid is on a single long line (~200+ characters).
+def _extract_orbital_elements(line: str) -> dict[str, Any] | None:
+    """Extract orbital elements from fixed-width MPCORB columns.
 
     Columns (1-indexed):
         1-7:   Designation (packed or numbered)
@@ -90,9 +85,35 @@ def _parse_mpcorb_line(line: str) -> dict[str, Any] | None:
         49-57: Longitude of ascending node Ω (degrees)
         60-68: Inclination i (degrees)
         71-79: Eccentricity e
-        81-91: Mean daily motion n OR
-        93-103: Semi-major axis a (AU) - we use this one
-        166-202: Name (rest of line)
+        93-103: Semi-major axis a (AU)
+
+    Returns None if required fields (H or a) are missing or unparseable.
+    """
+    h_str = line[8:13].strip()
+    sma_str = line[92:103].strip()
+    if not h_str or not sma_str:
+        return None
+
+    def _f(s: str, default: float = 0.0) -> float:
+        return float(s) if s else default
+
+    return {
+        "H": float(h_str),
+        "G": _f(line[14:19].strip(), default=0.15),  # IAU default G=0.15
+        "epoch": line[20:25].strip(),
+        "M": _f(line[26:35].strip()),
+        "omega": _f(line[37:46].strip()),
+        "Omega": _f(line[48:57].strip()),
+        "i": _f(line[59:68].strip()),
+        "e": _f(line[70:79].strip()),
+        "a": float(sma_str),
+    }
+
+
+def _parse_mpcorb_line(line: str) -> dict[str, Any] | None:
+    """Parse one line from MPCORB.DAT.
+
+    Format reference: https://www.minorplanetcenter.net/iau/info/MPOrbitFormat.html
 
     Returns:
         Dict with orbital elements, or None if line cannot be parsed.
@@ -101,79 +122,29 @@ def _parse_mpcorb_line(line: str) -> dict[str, Any] | None:
         return None
 
     try:
-        # Designation (column 1-7, 0-indexed: 0-7)
         designation = line[0:7].strip()
         if not designation:
             return None
 
-        # Absolute magnitude H (column 9-13, 0-indexed: 8-13)
-        h_str = line[8:13].strip()
-        if not h_str:
+        elements = _extract_orbital_elements(line)
+        if elements is None:
             return None
-        abs_mag = float(h_str)
 
-        # Slope parameter G (column 15-19, 0-indexed: 14-19)
-        g_str = line[14:19].strip()
-        slope_g = float(g_str) if g_str else 0.15  # Default G=0.15 per IAU
-
-        # Epoch (column 21-25, 0-indexed: 20-25) - packed format, store as-is
-        epoch_str = line[20:25].strip()
-
-        # Mean anomaly M (column 27-35, 0-indexed: 26-35)
-        mean_anomaly_str = line[26:35].strip()
-        mean_anomaly = float(mean_anomaly_str) if mean_anomaly_str else 0.0
-
-        # Argument of perihelion ω (column 38-46, 0-indexed: 37-46)
-        arg_peri_str = line[37:46].strip()
-        arg_perihelion = float(arg_peri_str) if arg_peri_str else 0.0
-
-        # Longitude of ascending node Ω (column 49-57, 0-indexed: 48-57)
-        lon_node_str = line[48:57].strip()
-        lon_asc_node = float(lon_node_str) if lon_node_str else 0.0
-
-        # Inclination i (column 60-68, 0-indexed: 59-68)
-        inc_str = line[59:68].strip()
-        inclination = float(inc_str) if inc_str else 0.0
-
-        # Eccentricity e (column 71-79, 0-indexed: 70-79)
-        ecc_str = line[70:79].strip()
-        eccentricity = float(ecc_str) if ecc_str else 0.0
-
-        # Semi-major axis a (column 93-103, 0-indexed: 92-103)
-        sma_str = line[92:103].strip()
-        if not sma_str:
-            return None
-        semimajor_axis = float(sma_str)
-
-        # Name (from column 166 onwards, 0-indexed: 165+)
-        # Format: "(4) Vesta              20250624" - strip trailing date and designation
+        # Name: "(4) Vesta              20250624" → "Vesta"
         name_raw = line[165:].strip() if len(line) > 165 else designation
-        # Remove trailing 8-digit date (YYYYMMDD) and extra spaces
         name_with_dsg = re.sub(r'\s+\d{8}$', '', name_raw) if name_raw else designation
-        # Strip designation prefix: "(4) Vesta" → "Vesta"
         name_match = re.match(r'^\([^)]+\)\s+(.+)$', name_with_dsg)
         name = name_match.group(1) if name_match else name_with_dsg
 
-        # Strip leading zeros from designation: "00004" → "4"
         dsg = designation.lstrip('0') or '0'
-
-        # Compute magnitude range at opposition
-        min_mag, max_mag = _compute_magnitude_range(abs_mag, semimajor_axis, eccentricity)
+        min_mag, max_mag = _compute_magnitude_range(elements["H"], elements["a"], elements["e"])
 
         return {
             "dsg": dsg,
             "name": name,
-            "H": abs_mag,
-            "G": slope_g,
+            **elements,
             "min_mag": round(min_mag, 1),
             "max_mag": round(max_mag, 1),
-            "epoch": epoch_str,
-            "M": mean_anomaly,
-            "omega": arg_perihelion,
-            "Omega": lon_asc_node,
-            "i": inclination,
-            "e": eccentricity,
-            "a": semimajor_axis,
         }
     except (ValueError, IndexError):
         return None

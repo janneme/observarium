@@ -621,7 +621,9 @@ Technical notes:
 
 ---
 
-### Step 17: Welcome screen + IndexedDB setup + data loading
+### ✅ Step 17: Welcome screen + IndexedDB setup + data loading
+
+**Status:** Completed 2026-06-10
 
 **README refs:** §5.1, §2.3  
 **Deliverable:** First-run screen that authenticates, fetches data via

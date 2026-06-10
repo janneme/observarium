@@ -71,17 +71,22 @@
   }
 
   let el
+  let focused = false
 
   function onFocus() {
+    focused = true
     register(api)
     setCursor(value.length)
   }
 
   function onBlur() {
+    focused = false
     unregister(api)
   }
 
-  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown }
+  function enter() { insertChar('\n') }
+
+  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter }
 
   onDestroy(() => unregister(api))
 
@@ -101,10 +106,18 @@
     <textarea id={id} tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;">{value}</textarea>
   {/if}
 
-  {#if value.length}
-    <pre><span class="before">{value.slice(0,cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{value.slice(cursor)}</span></pre>
+  {#if focused}
+    {#if value.length}
+      <pre><span class="before">{value.slice(0,cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{value.slice(cursor)}</span></pre>
+    {:else}
+      <pre><span class="caret" aria-hidden="true"></span><span class="placeholder">{placeholder}</span></pre>
+    {/if}
   {:else}
-    <pre class="placeholder">{placeholder}</pre>
+    {#if value.length}
+      <pre>{value}</pre>
+    {:else}
+      <pre class="placeholder">{placeholder}</pre>
+    {/if}
   {/if}
 </div>
 

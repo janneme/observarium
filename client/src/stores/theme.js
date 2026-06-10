@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store'
 
-const DEFAULT = 'daily'
+const DEFAULT = 'nightly'
 
 function load() {
   try {

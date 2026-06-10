@@ -1,15 +1,10 @@
 import json
-from types import SimpleNamespace
-
-import pytest
-from botocore.exceptions import ClientError
-
-# Ensure the server package root is on sys.path so `import handler` works when
-# pytest is invoked from different working directories or via `uv run`.
-import sys
 import pathlib
+import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import python_lib.storage.backend as storage_backend
 
 import handler
 
@@ -34,20 +29,12 @@ def test_get_bearer_token_from_event_variants():
 
 
 def test_handle_presign_key(monkeypatch):
-    # Provide a fake s3 client that returns a predictable URL
-    class DummyS3:
-        def generate_presigned_url(self, ClientMethod, Params, ExpiresIn):
-            assert ClientMethod == "put_object"
-            assert Params["Key"] == "objects.zip"
-            return "https://presigned.example/put"
-    # Patch storage backend used by handler
     monkeypatch.setattr(handler, "DATA_BUCKET", "test-bucket")
-    class DummyBackend:
-        def generate_presigned_put(self, key, expires=300):
-            assert key == "objects.zip"
-            return "https://presigned.example/put"
 
-    import python_lib.storage.backend as storage_backend
+    class DummyBackend:
+        def generate_presigned_get(self, key, expires=300):
+            assert key == "objects.zip"
+            return "https://presigned.example/get"
 
     monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
 
@@ -65,7 +52,6 @@ def test_handle_data_hash(monkeypatch):
             return None
 
     monkeypatch.setattr(handler, "DATA_BUCKET", "test-bucket")
-    import python_lib.storage.backend as storage_backend
     monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
 
     out = handler.handle_data_hash()

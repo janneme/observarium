@@ -221,7 +221,7 @@ class TestBuildStar:
 
 class TestLoadNotes:
     def test_returns_empty_dict_when_file_absent(self, tmp_path: Path):
-        assert _load_notes(tmp_path / "no_such_file.csv") == {}
+        assert not _load_notes(tmp_path / "no_such_file.csv")
 
     def test_loads_hip_note_pairs(self, tmp_path: Path):
         csv_file = tmp_path / "notes_stars.csv"

@@ -1,6 +1,6 @@
 import json
 
-from botocore.exceptions import ClientError
+import python_lib.storage.backend as storage_backend
 
 import handler
 
@@ -19,7 +19,6 @@ def test_get_observations_not_found(monkeypatch):
         def exists(self, key):
             return False
 
-    import python_lib.storage.backend as storage_backend
     monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
 
     ev = make_event_with_token("tok")
@@ -38,7 +37,6 @@ def test_save_observations_success(monkeypatch):
             saved["key"] = key
             saved["data"] = data
 
-    import python_lib.storage.backend as storage_backend
     monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
 
     arr = [{"date": "2026-01-01", "note": "obs"}]
@@ -66,16 +64,11 @@ def test_delete_observation(monkeypatch):
             self.stored = data
 
     backend = DummyBackend()
-    import python_lib.storage.backend as storage_backend
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
     monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user3"})
 
     ev = make_event_with_token("tok")
-    # set module global event used by delete handler
-    handler_globals = handler.__dict__
-    handler_globals["_CURRENT_EVENT"] = ev
-
-    res = handler.handle_delete_observation("2026-01-01")
+    res = handler.handle_delete_observation(ev, "2026-01-01")
     assert res["statusCode"] == 200
     saved = json.loads(backend.stored.decode("utf-8"))
     assert saved == [{"date": "2026-02-01", "x": 2}]

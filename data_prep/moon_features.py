@@ -68,6 +68,52 @@ class MoonFeaturePipeline:
         features = self._process(source, min_item_size=min_item_size)
         return self._write(features)
 
+    @staticmethod
+    def _compute_size_axes(row: dict[str, str], diam_deg: float) -> tuple[float, float]:
+        min_lat = _float_or_none(row.get("min_lat", ""))
+        max_lat = _float_or_none(row.get("max_lat", ""))
+        min_lon = _float_or_none(row.get("min_lon", ""))
+        max_lon = _float_or_none(row.get("max_lon", ""))
+        if None not in (min_lat, max_lat, min_lon, max_lon):
+            width = _lon_span_deg(float(min_lon), float(max_lon))  # type: ignore[arg-type]
+            height = abs(float(max_lat) - float(min_lat))  # type: ignore[arg-type]
+            return width, height
+        return diam_deg, diam_deg
+
+    @staticmethod
+    def _parse_placemark(
+        placemark: Any,
+        ns: dict[str, str],
+        allowed: set[str],
+        min_size: float,
+    ) -> dict[str, Any] | None:
+        row = {
+            data.attrib.get("name", ""): (data.text or "").strip()
+            for data in placemark.findall(".//kml:SimpleData", ns)
+        }
+        feature_type = row.get("type", "").split(",", 1)[0].strip()
+        if feature_type not in allowed:
+            return None
+        if "IAU" not in row.get("approval", ""):
+            return None
+        name = (row.get("clean_name") or placemark.findtext("kml:name", "", ns)).strip()
+        lat = _float_or_none(row.get("center_lat", ""))
+        lon = _float_or_none(row.get("center_lon", ""))
+        diam_km = _float_or_none(row.get("diameter", ""))
+        if not name or lat is None or lon is None or diam_km is None:
+            return None
+        diam_deg = MoonFeaturePipeline._angular_size_deg(diam_km)
+        if diam_deg < min_size:
+            return None
+        width, height = MoonFeaturePipeline._compute_size_axes(row, diam_deg)
+        return {
+            "name": name,
+            "type": feature_type,
+            "lat": lat,
+            "lon": _normalize_lon(lon),
+            "size_axes": [width, height],
+        }
+
     def _process(
         self,
         source: Path,
@@ -82,47 +128,9 @@ class MoonFeaturePipeline:
             root = ET.fromstring(zf.read(kml_name))  # noqa: S314
         ns = {"kml": "http://www.opengis.net/kml/2.2"}
         for placemark in root.findall(".//kml:Placemark", ns):
-            row = {
-                data.attrib.get("name", ""): (data.text or "").strip()
-                for data in placemark.findall(".//kml:SimpleData", ns)
-            }
-            feature_type = row.get("type", "").split(",", 1)[0].strip()
-            if feature_type not in allowed:
-                continue
-            if "IAU" not in row.get("approval", ""):
-                continue
-            name = (row.get("clean_name") or placemark.findtext("kml:name", "", ns)).strip()
-            lat = _float_or_none(row.get("center_lat", ""))
-            lon = _float_or_none(row.get("center_lon", ""))
-            diam_km = _float_or_none(row.get("diameter", ""))
-            if not name or lat is None or lon is None or diam_km is None:
-                continue
-            if self._angular_size_deg(diam_km) < min_size:
-                continue
-
-            width: float
-            height: float
-            min_lat = _float_or_none(row.get("min_lat", ""))
-            max_lat = _float_or_none(row.get("max_lat", ""))
-            min_lon = _float_or_none(row.get("min_lon", ""))
-            max_lon = _float_or_none(row.get("max_lon", ""))
-            if None not in (min_lat, max_lat, min_lon, max_lon):
-                width = _lon_span_deg(float(min_lon), float(max_lon))
-                height = abs(float(max_lat) - float(min_lat))
-            else:
-                diam_deg = self._angular_size_deg(diam_km)
-                width = diam_deg
-                height = diam_deg
-
-            out.append(
-                {
-                    "name": name,
-                    "type": feature_type,
-                    "lat": lat,
-                    "lon": _normalize_lon(lon),
-                    "size_axes": [width, height],
-                }
-            )
+            feature = self._parse_placemark(placemark, ns, allowed, min_size)
+            if feature is not None:
+                out.append(feature)
         out.sort(key=lambda f: (f["type"], f["name"]))
         return out
 

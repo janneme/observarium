@@ -323,50 +323,14 @@ class StarPipeline:
         # the post-annotation auto-note count so only the top N are reported
         # as auto-generated notes.
 
-        def _choose_n() -> int:
-            return extreme_stars_num if extreme_stars_num is not None else EXTREME_STARS_NUM
-
-        try:
-            self._annotate_luminosity(stars, _choose_n())
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
-
-        try:
-            self._annotate_brightness(stars, _choose_n())
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
-
-        try:
-            self._annotate_pm(stars, _choose_n())
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
-
-        try:
-            self._annotate_most_variable(stars, var_index or {}, _choose_n())
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
-
-        try:
-            self._annotate_nearest(stars, _choose_n())
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
-
-        try:
-            self._annotate_hottest(stars, _choose_n())
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
-
-        try:
-            self._annotate_space_velocity(stars, _choose_n())
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
+        top_n = extreme_stars_num if extreme_stars_num is not None else EXTREME_STARS_NUM
+        self._safe_annotate(self._annotate_luminosity, stars, top_n)
+        self._safe_annotate(self._annotate_brightness, stars, top_n)
+        self._safe_annotate(self._annotate_pm, stars, top_n)
+        self._safe_annotate(self._annotate_most_variable, stars, var_index or {}, top_n)
+        self._safe_annotate(self._annotate_nearest, stars, top_n)
+        self._safe_annotate(self._annotate_hottest, stars, top_n)
+        self._safe_annotate(self._annotate_space_velocity, stars, top_n)
         # Compute the number of unique stars that received auto-generated
         # notes (marked by the helper flag set above).
         summary_ids: set[int] = {id(s) for s in stars if s.get("_auto_note")}
@@ -390,6 +354,13 @@ class StarPipeline:
             show_double=(attach_double and (show_summary or self._debug)),
             show_summary=show_summary,
         )
+
+    def _safe_annotate(self, fn: Any, *args: Any) -> None:
+        try:
+            fn(*args)
+        except Exception:  # pylint: disable=broad-except
+            if self._debug:
+                raise
 
     def _annotate_luminosity(self, stars: list[dict[str, Any]], top_n: int) -> int:
         """Compute luminosity (L/L_sun) for stars with `mag` (float) and `dist` (pc).
@@ -500,6 +471,22 @@ class StarPipeline:
             s["_auto_note"] = True
         return actual_top
 
+    @staticmethod
+    def _collect_variable_amplitudes(
+        stars: list[dict[str, Any]],
+        var_index: dict[int, tuple[float, float]],
+    ) -> list[tuple[dict[str, Any], float]]:
+        result: list[tuple[dict[str, Any], float]] = []
+        for s in stars:
+            hip = s.get("hip")
+            if hip and hip in var_index:
+                rng = var_index[hip]
+                if rng and isinstance(rng[0], (int, float)) and isinstance(rng[1], (int, float)):
+                    amp = rng[1] - rng[0]
+                    if amp > 0:
+                        result.append((s, amp))
+        return result
+
     def _annotate_most_variable(
         self,
         stars: list[dict[str, Any]],
@@ -512,15 +499,7 @@ class StarPipeline:
         """
         if not var_index:
             return 0
-        var_list: list[tuple[dict[str, Any], float]] = []
-        for s in stars:
-            hip = s.get("hip")
-            if hip and hip in var_index:
-                rng = var_index[hip]
-                if rng and isinstance(rng[0], (int, float)) and isinstance(rng[1], (int, float)):
-                    amp = rng[1] - rng[0]
-                    if amp > 0:
-                        var_list.append((s, amp))
+        var_list = self._collect_variable_amplitudes(stars, var_index)
         if not var_list:
             return 0
         var_list.sort(key=lambda x: x[1], reverse=True)
@@ -829,6 +808,26 @@ class StarPipeline:
         return out
     # pylint: enable=too-many-arguments,too-many-positional-arguments,too-many-locals
 
+    @staticmethod
+    def _compute_space_velocity(s: dict[str, Any]) -> float | None:
+        pm_ra = s.get("pm_ra")
+        pm_dec = s.get("pm_dec")
+        dist = s.get("dist")
+        if not (
+            isinstance(pm_ra, (int, float))
+            and isinstance(pm_dec, (int, float))
+            and isinstance(dist, (int, float))
+            and dist > 0
+        ):
+            return None
+        mu_masyr = math.hypot(pm_ra, pm_dec)
+        mu_arcsec = mu_masyr / 1000.0
+        vt = 4.74047 * mu_arcsec * dist
+        rv = s.get("rv")
+        if isinstance(rv, (int, float)):
+            return math.hypot(vt, rv)
+        return vt
+
     def _annotate_space_velocity(
         self, stars: list[dict[str, Any]], top_n: int
     ) -> int:
@@ -840,25 +839,9 @@ class StarPipeline:
         """
         vals: list[tuple[dict[str, Any], float]] = []
         for s in stars:
-            pm_ra = s.get("pm_ra")
-            pm_dec = s.get("pm_dec")
-            dist = s.get("dist")
-            if not (
-                isinstance(pm_ra, (int, float))
-                and isinstance(pm_dec, (int, float))
-                and isinstance(dist, (int, float))
-                and dist > 0
-            ):
-                continue
-            mu_masyr = math.hypot(pm_ra, pm_dec)
-            mu_arcsec = mu_masyr / 1000.0
-            vt = 4.74047 * mu_arcsec * dist
-            rv = s.get("rv")
-            if isinstance(rv, (int, float)):
-                vtot = math.hypot(vt, rv)
-            else:
-                vtot = vt
-            vals.append((s, float(vtot)))
+            vtot = self._compute_space_velocity(s)
+            if vtot is not None:
+                vals.append((s, vtot))
         if not vals:
             return 0
         vals.sort(key=lambda x: x[1], reverse=True)

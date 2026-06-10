@@ -1,14 +1,10 @@
-import json
 from pathlib import Path
-
-import pytest
-
 
 import python_lib.storage.backend as backend
 
 
 def test_local_backend_write_read(tmp_path):
-    base = tmp_path / "observatorium"
+    base = tmp_path / "observarium"
     b = backend.LocalBackend(base=base)
 
     # write bytes

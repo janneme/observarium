@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 AWS_PROFILE   ?= personal
 
-.PHONY: help deploy dev dev-server dev-client data-prep data-upload test
+.PHONY: help deploy dev dev-server dev-client data-prep data-upload lint test
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -33,10 +33,16 @@ data-upload: ## Detect changed data files, re-zip and upload to storage backend
 	@echo "Running data upload (STORAGE=$(STORAGE) MAG=$(mag))"
 	MAG=$(mag) STORAGE=$(STORAGE) python3 data_prep/data_upload.py
 
+lint: ## Run ruff and pylint on all Python packages
+	@printf '\033[1;36m==> Linting server\033[0m\n'
+	$(MAKE) -C server lint
+	@printf '\033[1;36m==> Linting data_prep\033[0m\n'
+	$(MAKE) -C data_prep lint
+
 test: ## Run server and data-prep test suites (from repo root)
-	@echo "==> Running server tests"
+	@printf '\033[1;36m==> Running server tests\033[0m\n'
 	cd server && PYTHONPATH=$(CURDIR) uv run pytest -q
-	@echo "==> Running data_prep tests"
+	@printf '\033[1;36m==> Running data_prep tests\033[0m\n'
 	cd data_prep && uv run pytest -q
 
 # Internal targets (not advertised in help)

@@ -2,6 +2,7 @@
 # reproducible — never commit them.
 data_prep/output/
 data_prep/cache/
+data_prep/tmp/
 
 # Local storage artifacts
 storage/
