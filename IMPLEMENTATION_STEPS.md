@@ -662,11 +662,30 @@ Technical notes:
 
 - IndexedDB schema (use the `idb` npm library for a Promise-based wrapper):
   - Store `objects` — keyPath `id` (e.g. `"star_HIP71683"`), one record per
-    object across all types.
+    object across all types. Index `by_zone` on field `zone` (integer sky-grid
+    cell, DB version 2 — see sky-zone index note below).
   - Store `images` — keyPath `catalogueId`, value is a Blob.
   - Store `observations` — keyPath `date` (ISO date string).
   - Store `meta` — keyPath `key`; used for `dataHash`, `lastSync`,
     `telescopes`, `eyepieces`, `findingPaths`, `quizStates`.
+- **Sky-zone spatial index (DB version 2):** loading all 1.4 M mag-12 stars
+  into JS memory at once (~200 MB) is impractical. Instead every object record
+  carries a `zone` integer identifying its 5°×5° sky-grid cell. Cells are
+  indexed in the IDB `objects` store under `by_zone`.
+  - Zone formula: `dec_cell = clamp(floor((dec+90)/5), 0, 35)`,
+    `ra_cell = floor(ra/5) % 72`, `zone = dec_cell * 72 + ra_cell`.
+    Gives 2592 cells (72 RA × 36 Dec). At mag 12, ~550 stars/cell average.
+  - Within each Dec band the zone integers are contiguous, enabling one
+    IDB range query per band. RA wrap-around (viewport crossing 0°/360°) is
+    handled with two range queries per affected Dec band.
+  - `computeZone(ra_deg, dec_deg)` is exported from `db.js` and called during
+    `parseObjects` in `WelcomeScreen.svelte` for every star, DSO, and double
+    star.
+  - `getObjectsInArea(ra_min, ra_max, dec_min, dec_max)` in `db.js` issues the
+    range queries and returns a flat array of matching objects.
+  - DB version bump from 1 → 2 creates the `by_zone` index in the `upgrade`
+    callback. Existing records loaded without a `zone` field are not in the
+    index; reload data via the Welcome Screen once after this change.
 - Loading sequence (README §5.1): call `POST /login` → store token in
   `sessionStorage` → call `GET /objects-url` → fetch ZIP → JSZip unpack →
   insert into `objects` store with a progress callback → repeat for images →
@@ -678,7 +697,7 @@ Technical notes:
 
 ---
 
-### Step 18: Sky rendering engine
+### Step 18: Sky rendering engine ✅
 
 **README refs:** §5.2 (first half), §2.1e  
 **Deliverable:** A `SkyCanvas` Svelte component that projects RA/Dec coordinates
@@ -733,6 +752,11 @@ Technical notes:
   dark overlay colour.
 - **Adaptive magnitude limit:** as FOV decreases, increase `NORMAL_VIEW_MAX_STAR_MAGNITUDE`
   linearly up to a sensible cap (e.g. +2 mag per halving of FOV).
+- **Spatial query:** use `getObjectsInArea(ra_min, ra_max, dec_min, dec_max)`
+  from `client/src/lib/db.js` to fetch only the objects that fall within the
+  visible sky area. Derive the bounding box from the current `(RA₀, Dec₀, FOV)`
+  before each render. This avoids loading all objects into memory and scales to
+  mag-12 datasets (~1.4 M stars).
 
 ---
 

@@ -4,7 +4,7 @@
   import CustomInput from '../components/CustomInput.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import { login, getObjectsUrl, getImagesUrl, getObservations } from '../lib/api.js'
-  import { bulkPutObjects, bulkPutImages, bulkPutObservations, setMeta } from '../lib/db.js'
+  import { bulkPutObjects, bulkPutImages, bulkPutObservations, setMeta, computeZone } from '../lib/db.js'
   import { keyboardActive } from '../stores/keyboard.js'
 
   let username = ''
@@ -77,26 +77,27 @@
         for (const [constellation, stars] of Object.entries(value)) {
           for (const star of stars) {
             const id = objectIdFromStar(star)
-            if (id) items.push({ id, type: 'star', constellation, ...star })
+            if (id) {
+              const ra_deg = star.pos[0] * 15  // source stores RA in hours
+              items.push({ constellation, ...star, pos: [ra_deg, star.pos[1]], id, type: 'star', zone: computeZone(ra_deg, star.pos[1]) })
+            }
           }
         }
       } else if (key === 'dso') {
         for (const [constellation, dsos] of Object.entries(value)) {
           for (const dso of dsos) {
             const id = objectIdFromDso(dso)
-            if (id) items.push({ id, type: 'dso', constellation, ...dso })
+            if (id) {
+              const ra_deg = dso.pos[0] * 15
+              items.push({ constellation, ...dso, pos: [ra_deg, dso.pos[1]], id, type: 'dso', zone: computeZone(ra_deg, dso.pos[1]) })
+            }
           }
         }
-      } else if (key === 'double_stars') {
-        for (const [constellation, doubles] of Object.entries(value)) {
-          if (!Array.isArray(doubles)) {
-            console.error(`[parseObjects] double_stars["${constellation}"] is not an array:`, doubles)
-            continue
-          }
-          for (const ds of doubles) {
-            const id = ds.hip ? `double_HIP${ds.hip}` : (ds.hd ? `double_HD${ds.hd}` : null)
-            if (id) items.push({ id, type: 'double_star', constellation, ...ds })
-          }
+      } else if (key.startsWith('double_stars')) {
+        // value is {wds_id: {wds, disc, pos, pairs, ...}}
+        for (const [wdsId, ds] of Object.entries(value)) {
+          const ra_deg = ds.pos[0] * 15
+          items.push({ ...ds, pos: [ra_deg, ds.pos[1]], id: `double_WDS${wdsId}`, type: 'double_star', zone: computeZone(ra_deg, ds.pos[1]) })
         }
       } else {
         // constellations, solar_system, moon_features → store in meta

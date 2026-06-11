@@ -4,4 +4,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 export default defineConfig({
   plugins: [svelte()],
   root: '.',
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.js'],
+  },
 })

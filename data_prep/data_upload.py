@@ -42,9 +42,15 @@ def _collect_json(mag: int | None = None) -> dict:
     out: dict = {}
     for p in sorted(DATA_OUT.glob("*.json")):
         name = p.name
-        # If mag provided, include only stars.m{mag}.json for stars files
-        if mag is not None and name.startswith("stars") and not name.startswith(f"stars.m{mag}"):
-            continue
+        if mag is not None:
+            # Include only stars.m{mag}.json for stars files
+            if name.startswith("stars") and not name.startswith(f"stars.m{mag}"):
+                continue
+            # For double_stars: prefer mag-specific file; skip generic when mag file exists
+            if name == "double_stars.json" and (DATA_OUT / f"double_stars.m{mag}.json").exists():
+                continue
+            if name.startswith("double_stars.m") and name != f"double_stars.m{mag}.json":
+                continue
         # skip images manifest if any
         if name == "images.json":
             continue
