@@ -426,6 +426,21 @@ Implementation notes:
   - Lambda URL: `https://qswhlcrn6nbfwirq4kk3ycohz40nefmg.lambda-url.eu-central-1.on.aws/`
   - Cognito User Pool: `eu-central-1_7lQBM35tr`
   - Cognito Client ID: `7tunopdnaetvaf561vo330eih5`
+- **`STORAGE = "s3"` Lambda env var is mandatory.** Without it the Lambda falls
+  back to `LocalBackend`, which tries to create `/var/storage` on Lambda's
+  read-only filesystem and crashes immediately with `OSError: Read-only file
+  system`. Set in `main.tf` under `environment.variables`.
+- **S3 CORS configuration required for pre-signed URL downloads.** Browsers
+  enforce CORS on `fetch()` requests, including requests to pre-signed S3 URLs.
+  The data bucket must have an `aws_s3_bucket_cors_configuration` resource
+  allowing `GET` from `*`; otherwise the browser blocks the download even though
+  the pre-signed URL itself is valid.
+- **`deploy-lambda` Makefile target stages the zip via S3.** The Lambda zip
+  including manylinux wheels exceeds ~60 MB, above the 70 MB direct HTTP upload
+  limit. The target uploads to `s3://<data-bucket>/_lambda/lambda_function.zip`
+  first, then calls `aws lambda update-function-code --s3-bucket --s3-key`.
+  Wheels must be installed with `--platform manylinux2014_x86_64
+  --python-version 3.12 --only-binary :all:` for Linux/x86_64 compatibility.
 
 ---
 
@@ -474,7 +489,20 @@ Implementation notes:
 - Deployed updated Lambda function to AWS; all endpoints working:
   - `GET /` returns `{"status": "ok"}` with 200
   - Other endpoints return appropriate 501/404 responses
-  - CORS headers present on all responses
+- **CORS ownership split:** `build_response()` must NOT add
+  `Access-Control-Allow-Origin` headers. Lambda Function URL config injects
+  them in production; `local_server.py` injects them for local dev. If the
+  handler also adds them the browser receives duplicate headers and rejects
+  the request with a CORS error.
+- **`run.py` process group shutdown:** `make dev-server` spawns `make` which
+  spawns `python3 local_server.py`. `process.terminate()` on the outer `make`
+  process does not propagate to its children. Fixed by launching each subprocess
+  with `start_new_session=True` (own process group) and sending `SIGTERM` to
+  the entire group via `os.killpg`; waits 3 s then `SIGKILL` if still alive.
+- **Vite env file precedence:** to override `VITE_SERVER_URL` for a local cloud
+  test, create `client/.env.development.local` (highest precedence). A plain
+  `client/.env.local` is shadowed by `client/.env.development` and will be
+  ignored during `npm run dev`.
 
 ---
 

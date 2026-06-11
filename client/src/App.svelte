@@ -16,8 +16,9 @@
     const loaded = await hasData()
     if (loaded) {
       push('/main')
+    } else {
+      push('/')
     }
-    // No data → stay on / (WelcomeScreen)
   })
 </script>
 

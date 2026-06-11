@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime
 
 
@@ -60,6 +61,7 @@ class ProcessManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 bufsize=1,
+                start_new_session=True,  # gives the child its own process group
             )
             self.processes.append(process)
 
@@ -116,15 +118,26 @@ class ProcessManager:
 
         return self.exit_code
 
+    def _kill_group(self, process, sig):
+        """Send signal to the process group, ignoring errors if already gone."""
+        try:
+            os.killpg(os.getpgid(process.pid), sig)
+        except ProcessLookupError:
+            pass
+
     def stop_all(self):
-        """Stop all running processes."""
-        for process in self.processes:
-            if process.poll() is None:  # Still running
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+        """Stop all running processes: SIGTERM → wait 3 s → SIGKILL."""
+        running = [p for p in self.processes if p.poll() is None]
+        for process in running:
+            self._kill_group(process, signal.SIGTERM)
+
+        deadline = time.monotonic() + 3
+        for process in running:
+            remaining = max(0, deadline - time.monotonic())
+            try:
+                process.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                self._kill_group(process, signal.SIGKILL)
 
 
 def signal_handler(sig, frame):  # pylint: disable=unused-argument

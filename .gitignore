@@ -19,6 +19,8 @@ __pycache__/
 client/node_modules/
 client/dist/
 client/.svelte-kit/
+client/.env.local
+client/.env.development.local
 
 # Terraform state (local backend — keep tfstate out of source control)
 infra/.terraform/

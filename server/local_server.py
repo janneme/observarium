@@ -76,6 +76,9 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         for key, value in headers.items():
             self.send_header(key, value)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.end_headers()
 
         if body:

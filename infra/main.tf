@@ -56,6 +56,17 @@ resource "aws_s3_bucket_public_access_block" "data" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_cors_configuration" "data" {
+  bucket = aws_s3_bucket.data.id
+
+  cors_rule {
+    allowed_origins = ["*"]
+    allowed_methods = ["GET"]
+    allowed_headers = ["*"]
+    max_age_seconds = 3600
+  }
+}
+
 # Client bucket (public website hosting)
 resource "aws_s3_bucket" "client" {
   bucket = local.client_bucket_name
@@ -290,6 +301,7 @@ resource "aws_lambda_function" "main" {
       COGNITO_USER_POOL_ID = aws_cognito_user_pool.main.id
       COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.main.id
       COGNITO_REGION       = "eu-central-1"
+      STORAGE              = "s3"
     }
   }
 
