@@ -816,25 +816,24 @@ Technical notes:
   Anchored at (starMag=5 → dsoMag=8) and (starMag=13 → dsoMag=12).
   DSOs without a recorded magnitude default to mag=8 (always shown).
 
-- **Dynamic star radius** — range-anchored linear interpolation; the faintest
-  visible star always renders at `MIN_R` px, while the brightest star scales
-  with FOV so it is not oversized at wide angles:
+- **Dynamic star radius** — fixed-range linear interpolation: stars are always
+  rendered as points between `MIN_R` and `MAX_R` pixels regardless of FOV.
+  Zooming in reveals more faint stars but does not enlarge existing ones —
+  consistent with the visual experience in a telescope where stars remain points:
   ```js
   const BRIGHT_MAG = 2.0
-  const MIN_R = 1.5
-  const FOV_REF_SIZE = 30   // reference FOV in degrees
-  const MAX_R_AT_REF = 5    // max radius at FOV_REF_SIZE
+  const MIN_R = 1.2   // faintest visible star, any FOV
+  const MAX_R = 4.5   // brightest star (Sirius-class), any FOV
   function starRadius(mag) {
     const m = Array.isArray(mag) ? mag[0] : mag  // double stars store [primary, secondary]
     const magLim = adaptiveMagLimit(fov)
-    const fovScale = Math.sqrt(FOV_REF_SIZE / fov)
-    const maxR = Math.min(MAX_R_AT_REF * fovScale, 10)
     const t = Math.max(0, Math.min(1, (magLim - m) / (magLim - BRIGHT_MAG)))
-    return MIN_R + (maxR - MIN_R) * t
+    return MIN_R + (MAX_R - MIN_R) * t
   }
   ```
-  At FOV=30° bright stars reach 5 px; at FOV=120° they shrink to ~2.9 px.
-  At any FOV, the faintest star at `magLim` renders at exactly 1.5 px.
+  At any FOV, the brightest stars render at 4.5 px and the faintest at 1.2 px.
+  Stars brighter than `BRIGHT_MAG` are clamped to `MAX_R`; this is intentional —
+  at high zoom a mag 1 and mag 5 star may share the same rendered size.
 
 - **Two-pass rendering** in `draw()`:
   - Pass 1: DSOs filtered by `dsoMagLim`; drawn first so stars paint on top.

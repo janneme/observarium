@@ -43,17 +43,14 @@
   // (fewer visual clutter) and grows at narrow FOV (faint stars more visible).
   // Linear interpolation in magnitude space between the two endpoints.
   const BRIGHT_MAG = 2.0
-  const MIN_R = 1.5
-  const FOV_REF_SIZE = 30    // FOV at which MAX_R_AT_REF applies
-  const MAX_R_AT_REF = 5
+  const MIN_R = 1.2   // faintest visible star, any FOV
+  const MAX_R = 4.5   // brightest star (Sirius-class), any FOV
 
   function starRadius(mag) {
     const m = Array.isArray(mag) ? mag[0] : mag
     const magLim = adaptiveMagLimit(fov)
-    const fovScale = Math.sqrt(FOV_REF_SIZE / fov)
-    const maxR = Math.min(MAX_R_AT_REF * fovScale, 10)
     const t = Math.max(0, Math.min(1, (magLim - m) / (magLim - BRIGHT_MAG)))
-    return MIN_R + (maxR - MIN_R) * t
+    return MIN_R + (MAX_R - MIN_R) * t
   }
 
   // FOV (degrees) at which the magnitude limit reaches its floor of 5.
