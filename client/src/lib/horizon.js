@@ -1,5 +1,11 @@
 import { Observer, AstroTime, Horizon as AstroHorizon, SiderealTime } from 'astronomy-engine'
 
+export function getLST(lat, lon, time) {
+  const t = new AstroTime(time)
+  const lst = SiderealTime(t) + lon / 15
+  return ((lst % 24) + 24) % 24  // local sidereal time in hours
+}
+
 // Returns altitude in degrees (negative = below horizon).
 export function getAltitude(ra_deg, dec_deg, lat, lon, time) {
   const obs = new Observer(lat, lon, 0)

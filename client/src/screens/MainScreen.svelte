@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import SkyCanvas from '../components/SkyCanvas.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
@@ -9,9 +9,28 @@
   let time = new Date()
   let ra0 = 0
   let dec0 = 0
-  let fov = 30
+  let fov = 60
   let objects = []
   let loading = true
+
+  const FOV_STEP = 0.20   // fractional FOV change per +/- keypress
+  const PAN_STEP = 0.50   // fraction of FOV to pan per arrow keypress
+
+  let loadRa0 = 0
+  let loadDec0 = 0
+  let loadMargin = 0
+  let fetching = false
+
+  async function loadObjects() {
+    if (fetching) return
+    fetching = true
+    const margin = fov * 1.5
+    objects = await getObjectsInArea(ra0 - margin, ra0 + margin, dec0 - margin, dec0 + margin)
+    loadRa0 = ra0
+    loadDec0 = dec0
+    loadMargin = margin
+    fetching = false
+  }
 
   async function init(latitude, longitude) {
     lat = latitude
@@ -20,12 +39,45 @@
     const z = zenith(lat, lon, time)
     ra0 = z.ra
     dec0 = z.dec
-    const margin = fov * 1.5
-    objects = await getObjectsInArea(ra0 - margin, ra0 + margin, dec0 - margin, dec0 + margin)
+    await loadObjects()
     loading = false
   }
 
+  function maybeReload() {
+    if (fetching) return
+    const rawDRa = Math.abs(ra0 - loadRa0)
+    const dRa = Math.min(rawDRa, 360 - rawDRa)
+    const dDec = Math.abs(dec0 - loadDec0)
+    // Reload when view centre drifts past half the load margin, or FOV grew beyond what was loaded
+    if (dRa > loadMargin * 0.5 || dDec > loadMargin * 0.5 || fov > loadMargin / 1.5) {
+      loadObjects()
+    }
+  }
+
+  function handleKey(e) {
+    if (e.key === '+' || e.key === '=') {
+      fov = Math.max(5, fov * (1 - FOV_STEP))
+    } else if (e.key === '-') {
+      fov = Math.min(180, fov * (1 + FOV_STEP))
+    } else if (e.key === 'ArrowRight') {
+      const step = fov * PAN_STEP / Math.cos(dec0 * Math.PI / 180)
+      ra0 = ((ra0 + step) % 360 + 360) % 360
+    } else if (e.key === 'ArrowLeft') {
+      const step = fov * PAN_STEP / Math.cos(dec0 * Math.PI / 180)
+      ra0 = ((ra0 - step) % 360 + 360) % 360
+    } else if (e.key === 'ArrowUp') {
+      dec0 = Math.min(90, dec0 + fov * PAN_STEP)
+    } else if (e.key === 'ArrowDown') {
+      dec0 = Math.max(-90, dec0 - fov * PAN_STEP)
+    } else {
+      return
+    }
+    e.preventDefault()
+    maybeReload()
+  }
+
   onMount(() => {
+    window.addEventListener('keydown', handleKey)
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         pos => init(pos.coords.latitude, pos.coords.longitude),
@@ -35,6 +87,10 @@
     } else {
       init(lat, lon)
     }
+  })
+
+  onDestroy(() => {
+    window.removeEventListener('keydown', handleKey)
   })
 </script>
 

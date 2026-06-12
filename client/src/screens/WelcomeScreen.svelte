@@ -89,7 +89,7 @@
             const id = objectIdFromDso(dso)
             if (id) {
               const ra_deg = dso.pos[0] * 15
-              items.push({ constellation, ...dso, pos: [ra_deg, dso.pos[1]], id, type: 'dso', zone: computeZone(ra_deg, dso.pos[1]) })
+              items.push({ constellation, ...dso, pos: [ra_deg, dso.pos[1]], id, type: 'dso', dsoType: dso.type, zone: computeZone(ra_deg, dso.pos[1]) })
             }
           }
         }

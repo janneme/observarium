@@ -714,8 +714,8 @@ Technical notes:
   cos_c = sin(Dec₀)·sin(Dec) + cos(Dec₀)·cos(Dec)·cos(Δα)
   x_proj = cos(Dec)·sin(Δα) / cos_c
   y_proj = (cos(Dec₀)·sin(Dec) − sin(Dec₀)·cos(Dec)·cos(Δα)) / cos_c
-  x_px = W/2 + x_proj · (W / FOV_rad)
-  y_px = H/2 − y_proj · (H / FOV_rad)  ← y-axis flipped
+  x_px = W/2 + x_proj · (H / FOV_rad)
+  y_px = H/2 − y_proj · (H / FOV_rad)  ← y-axis flipped; scale uses H
   ```
 - **Alt/Az for horizon:** Use Astronomy Engine `Horizon()` to convert
   `(RA, Dec)` → `(Altitude, Azimuth)` for current time and location.
@@ -724,39 +724,116 @@ Technical notes:
   arbitrary sky rotation (used in quizzes and Finder View).
 - Write unit tests for the projection math with a few known star positions.
 
+Implementation notes:
+
+- `client/src/lib/skymath.js`: pure-math module (no DOM). Exports
+  `projectGnomonic(ra, dec, ra0, dec0)` → `{x, y}` (normalised), `null` when
+  `cos_c ≤ 0`; `toPixel(x, y, W, H, fovDeg, rotation)` → `{px, py}`;
+  `projectToPixel` (convenience wrapper); `isOnScreen(px, py, W, H, margin)`.
+  Scale factor is `H / toRad(fovDeg)` so FOV is the vertical field of view.
+- `client/src/lib/skymath.test.js`: Vitest unit tests — centre projects to
+  `(W/2, H/2)`, pole offset reaches top edge, RA wrap-around, rotation matrix,
+  and behind-plane null return.
+- `client/src/lib/horizon.js`: thin `astronomy-engine` wrapper. Exports
+  `getLST`, `getAltitude`, `isAboveHorizon`, `zenith` (RA = LST, Dec = lat).
+- `client/src/components/SkyCanvas.svelte`: canvas component. Props: `ra0`,
+  `dec0`, `fov`, `rotation`, `objects`, `lat`, `lon`, `time`. Tracks canvas
+  size with `ResizeObserver`. RAF loop redraws only when `dirty = true`.
+  `updateAboveMap` pre-computes per-object `isAboveHorizon` on each
+  `objects`/`lat`/`lon`/`time` change and stores results in a `Map` keyed
+  by object `id` — avoids calling Astronomy Engine once per star per frame.
+- **Horizon overlay:** 72 azimuth sample points at altitude = 0 are converted
+  to equatorial coordinates via direction cosines
+  (`dec = arcsin(cos(φ)·cos(az))`, `ha = atan2(−sin(az), −sin(φ)·cos(az))`),
+  projected, sorted by canvas-x, and the below-horizon region filled with a
+  semi-transparent overlay plus a dashed horizon line. In gnomonic projection
+  the horizon is a straight line, so edge extrapolation is exact.
+
 ---
 
-### Step 19: Main Screen — star & DSO rendering
+### Step 19: Main Screen — star & DSO rendering ✅
 
 **README refs:** §5.2, §2.1 fields 1–9  
 **Deliverable:** Main Screen renders stars and DSOs correctly scaled by magnitude,
-with horizon boundary and variable-star markers.
+with horizon boundary and FOV-aware magnitude filtering.
 
 Technical notes:
 
-- **Magnitude → radius:** `r = MAX_RADIUS · 10^(−0.2 · (mag − MIN_MAG))`,
-  clamp to `[0.5, MAX_RADIUS]`. `MAX_RADIUS` ≈ 6 px, `MIN_MAG` = brightest
-  star in dataset.
-- **Star colour:** derive from spectral class stored in Step 3. Map to CSS
-  colour in nightly mode: all stars rendered in a desaturated version to
-  preserve eye adaptation (bright star = brighter red/orange rather than white).
-  In daily mode use natural colours.
-- **DSO symbols:** draw recognisable SVG-like canvas shapes per type —
-  open cluster (dashed circle), globular (circle with cross), galaxy (ellipse
-  at orientation angle), planetary nebula (circle with lines), nebula (square).
-  Scale symbol size from the stored angular size field.
-- **Variable star marker:** if `var_range > 2`, draw a small concentric ring
-  around the star dot with a CSS pulse animation (SVG overlay on canvas).
-- **Horizon line:** query Astronomy Engine for the azimuth range visible at
-  current lat/lon/time; render as a filled polygon of sky-below-horizon in a
-  dark overlay colour.
-- **Adaptive magnitude limit:** as FOV decreases, increase `NORMAL_VIEW_MAX_STAR_MAGNITUDE`
-  linearly up to a sensible cap (e.g. +2 mag per halving of FOV).
-- **Spatial query:** use `getObjectsInArea(ra_min, ra_max, dec_min, dec_max)`
-  from `client/src/lib/db.js` to fetch only the objects that fall within the
-  visible sky area. Derive the bounding box from the current `(RA₀, Dec₀, FOV)`
-  before each render. This avoids loading all objects into memory and scales to
-  mag-12 datasets (~1.4 M stars).
+- **Adaptive magnitude limit** — logarithmic formula anchored so each halving
+  of FOV raises the limit by 1 magnitude (constant apparent star density):
+  ```js
+  const FOV_FOR_STAR_MAG_5 = 120   // FOV (°) at which mag limit = 5
+  function adaptiveMagLimit(fovDeg) {
+    return Math.min(9, Math.max(5, 5 + Math.log2(FOV_FOR_STAR_MAG_5 / fovDeg)))
+  }
+  ```
+  Examples: FOV=120°→6, FOV=60°→7, FOV=30°→8, FOV=15°→9 (hard cap).
+  `FOV_FOR_STAR_MAG_5` is a calibrated constant — **do not change** without
+  explicit instruction; it was set deliberately after visual testing.
+
+- **DSO magnitude limit** — tied to the star limit, offset to match extended-
+  object visual brightness relative to stars:
+  ```js
+  const dsoMagLim = 8 + 0.5 * (magLim - 5)
+  ```
+  Anchored at (starMag=5 → dsoMag=8) and (starMag=13 → dsoMag=12).
+  DSOs without a recorded magnitude default to mag=8 (always shown).
+
+- **Dynamic star radius** — range-anchored linear interpolation; the faintest
+  visible star always renders at `MIN_R` px, while the brightest star scales
+  with FOV so it is not oversized at wide angles:
+  ```js
+  const BRIGHT_MAG = 2.0
+  const MIN_R = 1.5
+  const FOV_REF_SIZE = 30   // reference FOV in degrees
+  const MAX_R_AT_REF = 5    // max radius at FOV_REF_SIZE
+  function starRadius(mag) {
+    const magLim = adaptiveMagLimit(fov)
+    const fovScale = Math.sqrt(FOV_REF_SIZE / fov)
+    const maxR = Math.min(MAX_R_AT_REF * fovScale, 10)
+    const t = Math.max(0, Math.min(1, (magLim - mag) / (magLim - BRIGHT_MAG)))
+    return MIN_R + (maxR - MIN_R) * t
+  }
+  ```
+  At FOV=30° bright stars reach 5 px; at FOV=120° they shrink to ~2.9 px.
+  At any FOV, the faintest star at `magLim` renders at exactly 1.5 px.
+
+- **Two-pass rendering** in `draw()`:
+  - Pass 1: DSOs filtered by `dsoMagLim`; drawn first so stars paint on top.
+  - Pass 2: stars and double stars filtered by `magLim`.
+  - Stars missing a magnitude value (`mag == null`) are excluded in pass 2
+    (they are not in the catalog at all); DSOs missing a magnitude default
+    to 8 and pass the filter.
+
+- **DSO symbols**: canvas shapes per type. When the angular size maps to less
+  than `DSO_SYMBOL_THRESHOLD × min(W,H)` pixels, a fixed-size symbol
+  (`SYM_R = 8 px`) is drawn; otherwise a size-proportional shape is used.
+  Types: open cluster (dashed circle), globular cluster (circle + cross),
+  planetary nebula (circle + tick marks), spiral/elliptical galaxy (ellipse
+  at orientation angle), dark nebula (dashed square), emission/reflection
+  nebula (open square), galaxy cluster (pentagon), quasar/BL Lac (× cross).
+
+- **Double star marker**: drawn as a normal star dot (via `drawStar`) plus an
+  outer ring at `starRadius + 2.5 px`, rendered above-horizon only.
+
+- **Star colour**: nightly mode renders all stars in `#e06a5a` (desaturated
+  red to preserve dark-adaptation); daily mode uses the spectral `clr` field
+  from the catalog. Below-horizon objects use `globalAlpha = 0.22`/`0.20`.
+
+- **Spatial query** (`MainScreen.svelte`): loads objects via
+  `getObjectsInArea(ra0 − margin, ra0 + margin, dec0 − margin, dec0 + margin)`
+  where `margin = fov × 1.5`. The loaded set is cached; `maybeReload()` issues
+  a fresh query only when the view centre has drifted more than 50% of the
+  margin or the FOV has grown beyond what was loaded. A `fetching` flag
+  prevents concurrent DB queries.
+
+- **Keyboard navigation** (`MainScreen.svelte`):
+  - `+`/`=`: zoom in → `fov × 0.80`, clamped to minimum 5°.
+  - `-`: zoom out → `fov × 1.20`, clamped to maximum 180°.
+  - Arrow keys: pan by `fov × 0.50`; RA step is divided by `cos(dec)` so
+    that the angular distance on sky stays constant at all declinations.
+  - After every key event `maybeReload()` is called to trigger re-fetch
+    if the new view is outside the already-loaded area.
 
 ---
 
