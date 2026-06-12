@@ -42,10 +42,10 @@ def _collect_json(mag: int | None = None) -> dict:
     out: dict = {}
     for p in sorted(DATA_OUT.glob("*.json")):
         name = p.name
+        # Stars are now delivered via CSV; exclude all stars JSON files.
+        if name.startswith("stars.m") or name.startswith("stars_t1.") or name.startswith("stars_t2."):
+            continue
         if mag is not None:
-            # Include only stars.m{mag}.json for stars files
-            if name.startswith("stars") and not name.startswith(f"stars.m{mag}"):
-                continue
             # For double_stars: prefer mag-specific file; skip generic when mag file exists
             if name == "double_stars.json" and (DATA_OUT / f"double_stars.m{mag}.json").exists():
                 continue
@@ -62,12 +62,30 @@ def _collect_json(mag: int | None = None) -> dict:
     return out
 
 
-def _write_objects_zip(objects_obj: dict, target: Path) -> None:
+def _collect_csv(mag: int | None = None) -> dict[str, Path]:
+    """Return {'stars_t1.csv': path, 'stars_t2.csv': path} for the given mag."""
+    out: dict[str, Path] = {}
+    for p in sorted(DATA_OUT.glob("*.csv")):
+        name = p.name
+        if name.startswith("stars_t1.m"):
+            if mag is not None and name != f"stars_t1.m{mag}.csv":
+                continue
+            out["stars_t1.csv"] = p
+        elif name.startswith("stars_t2.m"):
+            if mag is not None and name != f"stars_t2.m{mag}.csv":
+                continue
+            out["stars_t2.csv"] = p
+    return out
+
+
+def _write_objects_zip(objects_obj: dict, extra_files: dict[str, Path], target: Path) -> None:
     tmp_json = target.with_suffix(".json.tmp")
     with tmp_json.open("wb") as fh:
         fh.write(json.dumps(objects_obj, separators=(",", ":")).encode("utf-8"))
     with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(tmp_json, arcname="objects.json")
+        for arcname, path in extra_files.items():
+            zf.write(path, arcname=arcname)
     tmp_json.unlink()
 
 
@@ -115,13 +133,14 @@ def main() -> int:
     mag = int(mag_env) if mag_env and mag_env.isdigit() else None
 
     objects = _collect_json(mag=mag)
+    csv_files = _collect_csv(mag=mag)
     tmp_dir = ROOT / "tmp"
     tmp_dir.mkdir(exist_ok=True)
     objects_zip = tmp_dir / "objects.zip"
     images_zip = tmp_dir / "images.zip"
 
     print("Building objects.zip...")
-    _write_objects_zip(objects, objects_zip)
+    _write_objects_zip(objects, csv_files, objects_zip)
     print("Building images.zip...")
     _write_images_zip(images_zip)
 

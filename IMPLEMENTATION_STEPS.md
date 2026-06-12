@@ -662,34 +662,56 @@ Technical notes:
 
 - IndexedDB schema (use the `idb` npm library for a Promise-based wrapper):
   - Store `objects` — keyPath `id` (e.g. `"star_HIP71683"`), one record per
-    object across all types. Index `by_zone` on field `zone` (integer sky-grid
-    cell, DB version 2 — see sky-zone index note below).
+    DSO/double-star/etc. Index `by_zone` on field `zone` (integer sky-grid
+    cell, DB version 2 — see sky-zone index note below). Stars are no longer
+    stored here; see two-tier star storage note below.
   - Store `images` — keyPath `catalogueId`, value is a Blob.
   - Store `observations` — keyPath `date` (ISO date string).
   - Store `meta` — keyPath `key`; used for `dataHash`, `lastSync`,
-    `telescopes`, `eyepieces`, `findingPaths`, `quizStates`.
-- **Sky-zone spatial index (DB version 2):** loading all 1.4 M mag-12 stars
-  into JS memory at once (~200 MB) is impractical. Instead every object record
-  carries a `zone` integer identifying its 5°×5° sky-grid cell. Cells are
-  indexed in the IDB `objects` store under `by_zone`.
+    `telescopes`, `eyepieces`, `findingPaths`, `quizStates`, and the
+    Tier-1 star blob (`stars_t1`).
+  - Store `zones_t2` — keyPath `zone`; one record per 5°×5° sky cell, value
+    is a CSV blob of Tier-2 stars (mag > 9.0). Added in DB version 3.
+- **Sky-zone spatial index (DB version 2):** every DSO and double-star record
+  carries a `zone` integer identifying its 5°×5° sky-grid cell, indexed under
+  `by_zone`.
   - Zone formula: `dec_cell = clamp(floor((dec+90)/5), 0, 35)`,
     `ra_cell = floor(ra/5) % 72`, `zone = dec_cell * 72 + ra_cell`.
-    Gives 2592 cells (72 RA × 36 Dec). At mag 12, ~550 stars/cell average.
+    Gives 2592 cells (72 RA × 36 Dec).
   - Within each Dec band the zone integers are contiguous, enabling one
     IDB range query per band. RA wrap-around (viewport crossing 0°/360°) is
     handled with two range queries per affected Dec band.
   - `computeZone(ra_deg, dec_deg)` is exported from `db.js` and called during
-    `parseObjects` in `WelcomeScreen.svelte` for every star, DSO, and double
-    star.
-  - `getObjectsInArea(ra_min, ra_max, dec_min, dec_max)` in `db.js` issues the
-    range queries and returns a flat array of matching objects.
+    `parseObjects` in `WelcomeScreen.svelte` for DSOs and double stars.
   - DB version bump from 1 → 2 creates the `by_zone` index in the `upgrade`
-    callback. Existing records loaded without a `zone` field are not in the
-    index; reload data via the Welcome Screen once after this change.
+    callback.
+- **Two-tier star storage (DB version 3):** stars are split by magnitude rather
+  than stored in the `objects` store.
+  - Tier-1 (mag ≤ 9.0): stored as a single CSV blob in `meta` under key
+    `stars_t1`. Parsed once into `_tier1Cache` (in-memory array, sorted by mag
+    ascending) and reused for all subsequent queries without hitting IDB.
+  - Tier-2 (mag > 9.0): stored as per-zone CSV blobs in `zones_t2`, one record
+    per 5°×5° cell. Only the zones overlapping the current viewport are fetched,
+    and only when `mag_limit > T1_MAG_LIMIT` (9.0).
+  - Write helpers: `storeTier1Blob(csvText)` (puts blob in `meta`, invalidates
+    cache) and `bulkPutZoneT2Blobs(items)` (batch-writes zone records).
+  - DB version 3 upgrade creates `zones_t2` and clears the `objects` store
+    (stale star rows from prior schema are removed; fresh data is reloaded as
+    CSV blobs on next download).
+  - `getObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_limit)` queries
+    three sources in order: (1) Tier-1 in-memory cache, (2) Tier-2 `zones_t2`
+    blobs (skipped when `mag_limit ≤ T1_MAG_LIMIT`), (3) `objects` store for
+    DSOs and double stars.
+  - RA full-sky guard: `_inRA()` returns `true` unconditionally when
+    `span = ra_max − ra_min ≥ 360°`, preventing a pathological tiny window
+    that modulo arithmetic would otherwise produce at wide FOVs. The same guard
+    is present in `_zonesForArea()`.
 - Loading sequence (README §5.1): call `POST /login` → store token in
   `sessionStorage` → call `GET /objects-url` → fetch ZIP → JSZip unpack →
-  insert into `objects` store with a progress callback → repeat for images →
-  call `GET /observations` → insert into `observations` store.
+  store `stars_t1.csv` via `storeTier1Blob` → ingest `stars_t2.csv` zone-by-zone
+  via `bulkPutZoneT2Blobs` → parse `objects.json` and insert DSOs/double stars
+  into `objects` store via `bulkPutObjects` → repeat for images → call
+  `GET /observations` → insert into `observations` store.
 - Progress bar: compute percentage from `JSZip` `onUpdate` callback
   (gives loaded bytes) combined with known content-length from response headers.
 - After loading, navigate to Main Screen via Svelte client-side routing
@@ -762,14 +784,29 @@ Technical notes:
 - **Adaptive magnitude limit** — logarithmic formula anchored so each halving
   of FOV raises the limit by 1 magnitude (constant apparent star density):
   ```js
-  const FOV_FOR_STAR_MAG_5 = 120   // FOV (°) at which mag limit = 5
+  // FOV_FOR_STAR_MAG_5=480: fov=240→6, fov=120→7, fov=60→8, fov=30→9,
+  //   fov=15→10, fov=7.5→11, fov=3.75→12 (hard cap).
+  const FOV_FOR_STAR_MAG_5 = 480
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(9, Math.max(5, 5 + Math.log2(FOV_FOR_STAR_MAG_5 / fovDeg)))
+    return Math.min(12, Math.max(5, 5 + Math.log2(FOV_FOR_STAR_MAG_5 / fovDeg)))
   }
   ```
-  Examples: FOV=120°→6, FOV=60°→7, FOV=30°→8, FOV=15°→9 (hard cap).
-  `FOV_FOR_STAR_MAG_5` is a calibrated constant — **do not change** without
-  explicit instruction; it was set deliberately after visual testing.
+  Used by `SkyCanvas` to decide which objects to render on the canvas.
+
+- **Step-function mag limit for DB queries** — a coarser step function maps
+  FOV to a fetch mag limit for `getObjectsInArea`. This avoids re-fetching IDB
+  on every pixel of zoom:
+  ```js
+  function fovToMagLimit(f) {
+    if (f >= 60) return 6
+    if (f >= 30) return 7
+    if (f >= 20) return 8
+    if (f >= 10) return 10
+    return 12
+  }
+  ```
+  `MainScreen` tracks `loadMagLimit = fovToMagLimit(fov)` after each fetch and
+  triggers a reload when zooming in raises the limit (`fovToMagLimit(fov) > loadMagLimit`).
 
 - **DSO magnitude limit** — tied to the star limit, offset to match extended-
   object visual brightness relative to stars:
@@ -788,10 +825,11 @@ Technical notes:
   const FOV_REF_SIZE = 30   // reference FOV in degrees
   const MAX_R_AT_REF = 5    // max radius at FOV_REF_SIZE
   function starRadius(mag) {
+    const m = Array.isArray(mag) ? mag[0] : mag  // double stars store [primary, secondary]
     const magLim = adaptiveMagLimit(fov)
     const fovScale = Math.sqrt(FOV_REF_SIZE / fov)
     const maxR = Math.min(MAX_R_AT_REF * fovScale, 10)
-    const t = Math.max(0, Math.min(1, (magLim - mag) / (magLim - BRIGHT_MAG)))
+    const t = Math.max(0, Math.min(1, (magLim - m) / (magLim - BRIGHT_MAG)))
     return MIN_R + (maxR - MIN_R) * t
   }
   ```
@@ -821,11 +859,15 @@ Technical notes:
   from the catalog. Below-horizon objects use `globalAlpha = 0.22`/`0.20`.
 
 - **Spatial query** (`MainScreen.svelte`): loads objects via
-  `getObjectsInArea(ra0 − margin, ra0 + margin, dec0 − margin, dec0 + margin)`
-  where `margin = fov × 1.5`. The loaded set is cached; `maybeReload()` issues
-  a fresh query only when the view centre has drifted more than 50% of the
-  margin or the FOV has grown beyond what was loaded. A `fetching` flag
-  prevents concurrent DB queries.
+  `getObjectsInArea(ra0 − margin, ra0 + margin, dec0 − margin, dec0 + margin,
+  fovToMagLimit(fov))` where `margin = fov × 1.5`. After each fetch,
+  `loadRa0`, `loadDec0`, `loadMargin`, and `loadMagLimit` are recorded.
+  `maybeReload()` issues a fresh query when any of the following hold:
+  - View centre drifted more than 50% of `loadMargin` in RA or Dec.
+  - FOV has grown beyond what was loaded (`fov > loadMargin / 1.5`).
+  - Zooming in raises the step-function mag limit (`fovToMagLimit(fov) > loadMagLimit`).
+
+  A `fetching` flag prevents concurrent DB queries.
 
 - **Keyboard navigation** (`MainScreen.svelte`):
   - `+`/`=`: zoom in → `fov × 0.80`, clamped to minimum 5°.

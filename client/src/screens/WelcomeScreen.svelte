@@ -4,7 +4,7 @@
   import CustomInput from '../components/CustomInput.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import { login, getObjectsUrl, getImagesUrl, getObservations } from '../lib/api.js'
-  import { bulkPutObjects, bulkPutImages, bulkPutObservations, setMeta, computeZone } from '../lib/db.js'
+  import { bulkPutObjects, bulkPutImages, bulkPutObservations, setMeta, computeZone, storeTier1Blob, bulkPutZoneT2Blobs } from '../lib/db.js'
   import { keyboardActive } from '../stores/keyboard.js'
 
   let username = ''
@@ -69,20 +69,46 @@
     return null
   }
 
+  async function ingestT2Csv(csvText) {
+    // Parse lines (skipping header), group by zone integer, and store in chunks.
+    const lines = csvText.split('\n')
+    const CHUNK = 100
+    let chunk = []
+    let currentZone = -1
+    let zoneLines = []
+
+    async function flushZone() {
+      if (currentZone >= 0 && zoneLines.length > 0) {
+        chunk.push({ zone: currentZone, csv: zoneLines.join('\n') })
+        if (chunk.length >= CHUNK) {
+          await bulkPutZoneT2Blobs(chunk.splice(0))
+        }
+      }
+    }
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i]
+      if (!line.trim()) continue
+      const commaIdx = line.indexOf(',')
+      const zone = parseInt(line.substring(0, commaIdx), 10)
+      if (zone !== currentZone) {
+        await flushZone()
+        currentZone = zone
+        zoneLines = [line]
+      } else {
+        zoneLines.push(line)
+      }
+    }
+    await flushZone()
+    if (chunk.length > 0) await bulkPutZoneT2Blobs(chunk)
+  }
+
   function parseObjects(objectsJson) {
     const items = []
     for (const [key, value] of Object.entries(objectsJson)) {
       if (key.startsWith('stars')) {
-        // value is {constellation: [star, ...], ...}
-        for (const [constellation, stars] of Object.entries(value)) {
-          for (const star of stars) {
-            const id = objectIdFromStar(star)
-            if (id) {
-              const ra_deg = star.pos[0] * 15  // source stores RA in hours
-              items.push({ constellation, ...star, pos: [ra_deg, star.pos[1]], id, type: 'star', zone: computeZone(ra_deg, star.pos[1]) })
-            }
-          }
-        }
+        // Stars are now delivered via CSV blobs; skip JSON star entries.
+        continue
       } else if (key === 'dso') {
         for (const [constellation, dsos] of Object.entries(value)) {
           for (const dso of dsos) {
@@ -148,6 +174,23 @@
       objectsSize = objectsStr.length
       const objectsJson = JSON.parse(objectsStr)
 
+      // Ingest Tier-1 CSV blob (stored as single meta entry).
+      const t1File = zip.file('stars_t1.csv')
+      if (t1File) {
+        const t1Text = await t1File.async('string')
+        objectsSize += t1Text.length
+        await storeTier1Blob(t1Text)
+      }
+
+      // Ingest Tier-2 CSV, splitting into per-zone blobs.
+      const t2File = zip.file('stars_t2.csv')
+      if (t2File) {
+        const t2Text = await t2File.async('string')
+        objectsSize += t2Text.length
+        await ingestT2Csv(t2Text)
+      }
+
+      // DSOs and double stars from objects.json.
       const objectItems = parseObjects(objectsJson)
       await bulkPutObjects(objectItems)
 

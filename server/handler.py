@@ -307,8 +307,8 @@ def _route_presign(path: str, method: str, event: dict):
             return build_response(401, {"error": "Authorization required"})
         try:
             verify_jwt(token)
-        except Exception:
-            traceback.print_exc()
+        except Exception as exc:
+            print(f"[auth] token rejected: {exc}")
             return build_response(401, {"error": "Invalid token"})
         try:
             out = handle_presign_key("objects.zip")
@@ -323,8 +323,8 @@ def _route_presign(path: str, method: str, event: dict):
             return build_response(401, {"error": "Authorization required"})
         try:
             verify_jwt(token)
-        except Exception:
-            traceback.print_exc()
+        except Exception as exc:
+            print(f"[auth] token rejected: {exc}")
             return build_response(401, {"error": "Invalid token"})
         try:
             out = handle_presign_key("images.zip")

@@ -37,6 +37,38 @@ _SPECTRAL_COLOURS: dict[str, str] = {
 }
 _DEFAULT_COLOUR: str = "#ffffff"
 
+# Ordered colour palette used for the CSV encoding.  The index (0–7) stored in
+# the CSV maps back to the hex string on the client via COLOR_PALETTE in db.js.
+# Must stay in sync with COLOR_PALETTE in client/src/lib/db.js.
+COLOR_PALETTE: list[str] = [
+    "#92b5ff",  # 0 — O  blue-white
+    "#b2c5ff",  # 1 — B  blue-white
+    "#cad8ff",  # 2 — A  white (slight blue)
+    "#f8f7ff",  # 3 — F  white-yellow
+    "#fff4e8",  # 4 — G  yellow (Sun-like)
+    "#ffd2a1",  # 5 — K  orange
+    "#ff8f6b",  # 6 — M  orange-red
+    "#ffffff",  # 7 — default / unknown
+]
+_COLOUR_TO_IDX: dict[str, int] = {c: i for i, c in enumerate(COLOR_PALETTE)}
+
+# Stars with mag ≤ this limit go into Tier-1 (always in memory after startup).
+# Stars with mag > this limit go into Tier-2 (fetched per zone on demand).
+T1_MAG_LIMIT: float = 9.0
+
+# Zone grid constants — must match ZONE_RA_CELLS / ZONE_DEC_CELLS in db.js.
+_ZONE_RA_CELLS: int = 72   # 360 / 5
+_ZONE_DEC_CELLS: int = 36  # 180 / 5
+_ZONE_RA_BUCKET: float = 5.0
+_ZONE_DEC_BUCKET: float = 5.0
+
+
+def _compute_zone(ra_deg: float, dec_deg: float) -> int:
+    """Compute the sky-zone integer matching computeZone() in db.js."""
+    ra_cell = int(ra_deg / _ZONE_RA_BUCKET) % _ZONE_RA_CELLS
+    dec_cell = min(_ZONE_DEC_CELLS - 1, int((dec_deg + 90) / _ZONE_DEC_BUCKET))
+    return dec_cell * _ZONE_RA_CELLS + ra_cell
+
 
 def spectral_colour(spect: str) -> str:
     """Return a CSS hex colour for a Harvard spectral class string.
@@ -344,6 +376,7 @@ class StarPipeline:
         else:
             n_dbl_stars = 0
             n_dbl_pairs = 0
+        self._write_csv(stars)
         return self._write(
             stars,
             n_curated,
@@ -730,6 +763,95 @@ class StarPipeline:
         for s in tagged[:top_n]:
             s.pop("_lsun", None)
             s.pop("_lsun_phrase", None)
+
+    def _write_csv(
+        self,
+        stars: list[dict[str, Any]],
+    ) -> tuple[Path, Path]:
+        """Write Tier-1 and Tier-2 star CSVs alongside the JSON output.
+
+        Returns (path_t1, path_t2).
+        """
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        mag_tag = f"m{self._max_mag:g}"
+        path_t1 = self._output_dir / f"stars_t1.{mag_tag}.csv"
+        path_t2 = self._output_dir / f"stars_t2.{mag_tag}.csv"
+
+        def _mag_sort(s: dict[str, Any]) -> float:
+            m = s["mag"]
+            return m[0] if isinstance(m, list) else m
+
+        def _encode_mag(m: Any) -> str:
+            if isinstance(m, list):
+                return f"{m[0]:.2f}:{m[1]:.2f}"
+            return f"{m:.2f}"
+
+        def _col_idx(s: dict[str, Any]) -> int:
+            return _COLOUR_TO_IDX.get(s.get("clr", ""), len(COLOR_PALETTE) - 1)
+
+        t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm"
+        t1_fixed_cols = 10   # columns before the optional trailing group
+        t2_header = "z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd"
+
+        tier1 = sorted([s for s in stars if _mag_sort(s) <= T1_MAG_LIMIT], key=_mag_sort)
+        tier2 = sorted(
+            [s for s in stars if _mag_sort(s) > T1_MAG_LIMIT],
+            key=lambda s: (_compute_zone(s["pos"][0] * 15, s["pos"][1]), _mag_sort(s)),
+        )
+
+        with path_t1.open("w", encoding="utf-8", newline="") as fh:
+            fh.write(t1_header + "\n")
+            for s in tier1:
+                ra_deg = s["pos"][0] * 15
+                dec = s["pos"][1]
+                row: list[str] = [
+                    f"{ra_deg:.4f}",
+                    f"{dec:.4f}",
+                    _encode_mag(s["mag"]),
+                    str(_col_idx(s)),
+                    str(s["hip"]) if s.get("hip") else "",
+                    str(s["hd"]) if s.get("hd") else "",
+                    (s.get("spect") or "")[:2],
+                    f"{s['dist']:.1f}" if s.get("dist") is not None else "",
+                    f"{s['pm_ra']:.2f}" if s.get("pm_ra") is not None else "",
+                    f"{s['pm_dec']:.2f}" if s.get("pm_dec") is not None else "",
+                    # optional trailing
+                    str(s["flam"]) if s.get("flam") else "",
+                    s.get("bay") or "",
+                    "1" if s.get("dbl") else "",
+                    s.get("name") or "",
+                    s.get("note") or "",
+                    s.get("smr") or "",
+                ]
+                # Strip trailing empty optional columns to save space.
+                while len(row) > t1_fixed_cols and row[-1] == "":
+                    row.pop()
+                fh.write(",".join(row) + "\n")
+
+        with path_t2.open("w", encoding="utf-8", newline="") as fh:
+            fh.write(t2_header + "\n")
+            for s in tier2:
+                ra_deg = s["pos"][0] * 15
+                dec = s["pos"][1]
+                zone = _compute_zone(ra_deg, dec)
+                row = [
+                    str(zone),
+                    f"{ra_deg:.4f}",
+                    f"{dec:.4f}",
+                    _encode_mag(s["mag"]),
+                    str(_col_idx(s)),
+                    str(s["hip"]) if s.get("hip") else "",
+                    str(s["hd"]) if s.get("hd") else "",
+                    (s.get("spect") or "")[:2],
+                    f"{s['dist']:.1f}" if s.get("dist") is not None else "",
+                    f"{s['pm_ra']:.2f}" if s.get("pm_ra") is not None else "",
+                    f"{s['pm_dec']:.2f}" if s.get("pm_dec") is not None else "",
+                ]
+                fh.write(",".join(row) + "\n")
+
+        print(f"Stars CSV T1    : {len(tier1):,} rows → {path_t1}")
+        print(f"Stars CSV T2    : {len(tier2):,} rows → {path_t2}")
+        return path_t1, path_t2
 
     # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def _write(

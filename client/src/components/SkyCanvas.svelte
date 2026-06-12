@@ -48,20 +48,21 @@
   const MAX_R_AT_REF = 5
 
   function starRadius(mag) {
+    const m = Array.isArray(mag) ? mag[0] : mag
     const magLim = adaptiveMagLimit(fov)
     const fovScale = Math.sqrt(FOV_REF_SIZE / fov)
     const maxR = Math.min(MAX_R_AT_REF * fovScale, 10)
-    const t = Math.max(0, Math.min(1, (magLim - mag) / (magLim - BRIGHT_MAG)))
+    const t = Math.max(0, Math.min(1, (magLim - m) / (magLim - BRIGHT_MAG)))
     return MIN_R + (maxR - MIN_R) * t
   }
 
   // FOV (degrees) at which the magnitude limit reaches its floor of 5.
   // Each halving of FOV raises the limit by 1 mag (constant star surface density).
-  // e.g. FOV_FOR_STAR_MAG_5=240: fov=120→6, fov=60→7, fov=30→8, fov=15→9.
-  const FOV_FOR_STAR_MAG_5 = 120
+  // e.g. FOV_FOR_STAR_MAG_5=480: fov=240→6, fov=120→7, fov=60→8, fov=30→9, fov=15→10, fov=7.5→11, fov=3.75→12.
+  const FOV_FOR_STAR_MAG_5 = 480
 
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(9, Math.max(5, 5 + Math.log2(FOV_FOR_STAR_MAG_5 / fovDeg)))
+    return Math.min(12, Math.max(5, 5 + Math.log2(FOV_FOR_STAR_MAG_5 / fovDeg)))
   }
 
   // DSO angular size in arcmin → canvas pixels. Returns raw value (no min clamp) for threshold check.
@@ -338,7 +339,8 @@
     for (const obj of objects) {
       if (!obj.pos) continue
       if (obj.type === 'star' || obj.type === 'double_star') {
-        if ((obj.mag ?? 99) > magLim) continue
+        const objMag = Array.isArray(obj.mag) ? obj.mag[0] : (obj.mag ?? 99)
+        if (objMag > magLim) continue
         const [ra, dec] = obj.pos
         const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
         if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue

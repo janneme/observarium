@@ -1,3 +1,4 @@
+- Dev server logs (both client and server output) are written to /tmp/observarium.log
 - No authoring comments (like "Created with Claude")
 - Prefer OOP
 - Max function/method size: 50 lines, max file size: 1000 lines; refactor proactively to avoid exceeding these limits

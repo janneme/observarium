@@ -19,16 +19,26 @@
   let loadRa0 = 0
   let loadDec0 = 0
   let loadMargin = 0
+  let loadMagLimit = 0
   let fetching = false
+
+  function fovToMagLimit(f) {
+    if (f >= 60) return 6
+    if (f >= 30) return 7
+    if (f >= 20) return 8
+    if (f >= 10) return 10
+    return 12
+  }
 
   async function loadObjects() {
     if (fetching) return
     fetching = true
     const margin = fov * 1.5
-    objects = await getObjectsInArea(ra0 - margin, ra0 + margin, dec0 - margin, dec0 + margin)
+    objects = await getObjectsInArea(ra0 - margin, ra0 + margin, dec0 - margin, dec0 + margin, fovToMagLimit(fov))
     loadRa0 = ra0
     loadDec0 = dec0
     loadMargin = margin
+    loadMagLimit = fovToMagLimit(fov)
     fetching = false
   }
 
@@ -48,8 +58,8 @@
     const rawDRa = Math.abs(ra0 - loadRa0)
     const dRa = Math.min(rawDRa, 360 - rawDRa)
     const dDec = Math.abs(dec0 - loadDec0)
-    // Reload when view centre drifts past half the load margin, or FOV grew beyond what was loaded
-    if (dRa > loadMargin * 0.5 || dDec > loadMargin * 0.5 || fov > loadMargin / 1.5) {
+    // Reload when view centre drifts, FOV grew beyond what was loaded, or zoom-in raises mag limit
+    if (dRa > loadMargin * 0.5 || dDec > loadMargin * 0.5 || fov > loadMargin / 1.5 || fovToMagLimit(fov) > loadMagLimit) {
       loadObjects()
     }
   }

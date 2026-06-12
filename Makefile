@@ -27,7 +27,7 @@ dev-client: ## Start the Vite dev server for the Svelte client
 	cd client && VITE_APP_VERSION_DATE=$$(date +%Y-%m-%d) npm run dev
 
 data-prep: ## Run the data preparation pipeline
-	cd data_prep && python main.py $(ARGS)
+	cd data_prep && uv run python main.py $(ARGS)
 
 data-upload: ## Detect changed data files, re-zip and upload to storage backend
 	@echo "Running data upload (STORAGE=$(STORAGE) MAG=$(mag))"
