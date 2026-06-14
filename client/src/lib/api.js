@@ -27,10 +27,9 @@ export async function login(username, password) {
   sessionStorage.setItem('token', data.access_token)
 }
 
-export async function getObjectsUrl() {
-  const res = await authFetch('/objects-url')
-  const data = await res.json()
-  return data.url
+export async function getManifest() {
+  const res = await authFetch('/manifest')
+  return res.json()
 }
 
 export async function getImagesUrl() {

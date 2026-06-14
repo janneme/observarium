@@ -116,6 +116,17 @@ def parse_args() -> argparse.Namespace:
         help="Minimum double-star separation in arcsec for inclusion (default: %(default)s).",
     )
     parser.add_argument(
+        "--double-max-mag",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        dest="double_max_mag",
+        help=(
+            "Magnitude limit for double-star inclusion, independent of --max-mag "
+            "(default: same as --max-mag). Output filename is still driven by --max-mag."
+        ),
+    )
+    parser.add_argument(
         "--extreme-stars-num",
         type=int,
         default=EXTREME_STARS_NUM,
@@ -167,6 +178,8 @@ def main() -> None:
     if args.var_max_mag is None:
         effective_max = args.max_mag if args.max_mag is not None else MAX_STAR_MAGNITUDE
         args.var_max_mag = float(math.ceil(0.75 * effective_max))
+    if args.double_max_mag is None:
+        args.double_max_mag = args.max_mag if args.max_mag is not None else MAX_STAR_MAGNITUDE
 
     # Determine targets and star kwargs
     if args.group == "stars":
@@ -260,7 +273,8 @@ def _build_runners(
             _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(limit=args.image_limit),
         "double_stars": lambda: __import__("double_stars_cli").main(
-            max_mag=args.max_mag,
+            max_mag=args.double_max_mag,
+            stars_max_mag=args.max_mag,
             min_sep=args.min_double_star_sep,
             embed_into_stars=True,
             only_mode=(args.only == "double_stars"),

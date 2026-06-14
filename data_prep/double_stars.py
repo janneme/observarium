@@ -108,8 +108,8 @@ class DoubleStarMatcher:
         stars: list[dict[str, Any]],
         max_mag: float,
         min_sep: float,
-    ) -> tuple[int, int]:
-        """Attach double-star metadata under `dbl`; return (stars_with_dbl, pair_count)."""
+    ) -> tuple[int, int, int]:
+        """Attach double-star metadata under `dbl`; return (stars_with_dbl, pair_count, phys_count)."""
         tsv_path = self._downloader.fetch(WDS_VIZIER_URL, WDS_FILENAME)
         systems = self._load_systems(tsv_path, max_mag=max_mag, min_sep=min_sep)
 
@@ -126,7 +126,7 @@ class DoubleStarMatcher:
 
         stars_with_hip = [s for s in stars if isinstance(s.get("hip"), int)]
         if not stars_with_hip:
-            return 0, 0
+            return 0, 0, 0
 
         return self._apply_systems_to_stars(systems, stars_with_hip)
 
@@ -142,15 +142,17 @@ class DoubleStarMatcher:
                 continue
             for pair in system.get("pairs", []):
                 pair["period"] = period
+                pair.setdefault("phys", pair["comp"])
 
     def _apply_systems_to_stars(
         self,
         systems: list[dict[str, Any]],
         stars_with_hip: list[dict[str, Any]],
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int]:
         """Match systems to stars, attach `dbl` payloads, and return counts."""
         bins = self._build_spatial_bins(stars_with_hip)
         pair_count = 0
+        phys_count = 0
         touched: set[int] = set()
         for system in systems:
             matched = self._find_direct_match(system, stars_with_hip)
@@ -168,7 +170,8 @@ class DoubleStarMatcher:
             if not self._passes_mag_check(matched, system):
                 continue
             pair_count += self._attach_payload_and_count(matched, system, touched)
-        return len(touched), pair_count
+            phys_count += sum(1 for p in system.get("pairs", []) if "phys" in p)
+        return len(touched), pair_count, phys_count
 
     @staticmethod
     def _build_payload(system: dict[str, Any]) -> dict[str, Any]:

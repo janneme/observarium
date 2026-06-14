@@ -3,8 +3,8 @@
   import JSZip from 'jszip'
   import CustomInput from '../components/CustomInput.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
-  import { login, getObjectsUrl, getImagesUrl, getObservations } from '../lib/api.js'
-  import { bulkPutObjects, bulkPutImages, bulkPutObservations, setMeta, computeZone, storeTier1Blob, bulkPutZoneT2Blobs } from '../lib/db.js'
+  import { login, getManifest, getImagesUrl, getObservations } from '../lib/api.js'
+  import { bulkPutObjects, bulkPutImages, bulkPutObservations, setMeta, computeZone, storeTier1Blob, bulkPutZoneT2Blobs, storeManifest, getStoredManifest, getCompletedChunks, markChunkComplete } from '../lib/db.js'
   import { keyboardActive } from '../stores/keyboard.js'
 
   let username = ''
@@ -69,38 +69,42 @@
     return null
   }
 
-  async function ingestT2Csv(csvText) {
-    // Parse lines (skipping header), group by zone integer, and store in chunks.
-    const lines = csvText.split('\n')
-    const CHUNK = 100
-    let chunk = []
-    let currentZone = -1
-    let zoneLines = []
+  async function downloadZip(url, onProgress) {
+    const cb = onProgress || (() => {})
+    const data = await fetchWithProgress(url, cb)
+    return JSZip.loadAsync(data)
+  }
 
-    async function flushZone() {
-      if (currentZone >= 0 && zoneLines.length > 0) {
-        chunk.push({ zone: currentZone, csv: zoneLines.join('\n') })
-        if (chunk.length >= CHUNK) {
-          await bulkPutZoneT2Blobs(chunk.splice(0))
-        }
-      }
-    }
+  async function ingestT1(url) {
+    const zip = await downloadZip(url)
+    const file = zip.file('stars_t1.csv')
+    if (!file) throw new Error('stars_t1.csv not found in stars_t1.zip')
+    const text = await file.async('string')
+    await storeTier1Blob(text)
+  }
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i]
-      if (!line.trim()) continue
-      const commaIdx = line.indexOf(',')
-      const zone = parseInt(line.substring(0, commaIdx), 10)
-      if (zone !== currentZone) {
-        await flushZone()
-        currentZone = zone
-        zoneLines = [line]
-      } else {
-        zoneLines.push(line)
-      }
+  async function ingestObjects(url) {
+    const zip = await downloadZip(url)
+    const file = zip.file('objects.json')
+    if (!file) throw new Error('objects.json not found in objects.zip')
+    const text = await file.async('string')
+    const objectsJson = JSON.parse(text)
+    const items = parseObjects(objectsJson)
+    await bulkPutObjects(items)
+    const metaKeys = extractMetaKeys(objectsJson)
+    for (const [k, v] of Object.entries(metaKeys)) await setMeta(k, v)
+  }
+
+  async function ingestChunk(url, filename, onProgress) {
+    const zip = await downloadZip(url, onProgress)
+    for (const [entryName, file] of Object.entries(zip.files)) {
+      if (file.dir || !entryName.endsWith('.csv')) continue
+      const zone = parseInt(entryName.replace('.csv', ''), 10)
+      if (isNaN(zone)) continue
+      const csv = await file.async('string')
+      await bulkPutZoneT2Blobs([{ zone, csv }])
     }
-    await flushZone()
-    if (chunk.length > 0) await bulkPutZoneT2Blobs(chunk)
+    await markChunkComplete(filename)
   }
 
   function parseObjects(objectsJson) {
@@ -158,46 +162,31 @@
         await login(username, password)
       }
 
-      // Step 2 — objects
-      const objectsUrl = await getObjectsUrl()
-      const objectsData = await fetchWithProgress(objectsUrl, p => { objectsProgress = p * 0.5 })
-
-      const zip = await JSZip.loadAsync(objectsData, {
-        onUpdate(metadata) {
-          if (metadata.percent != null) objectsProgress = 0.5 + metadata.percent / 100 * 0.5
-        }
-      })
-
-      const objectsFile = zip.file('objects.json')
-      if (!objectsFile) throw new Error('objects.json not found in ZIP')
-      const objectsStr = await objectsFile.async('string')
-      objectsSize = objectsStr.length
-      const objectsJson = JSON.parse(objectsStr)
-
-      // Ingest Tier-1 CSV blob (stored as single meta entry).
-      const t1File = zip.file('stars_t1.csv')
-      if (t1File) {
-        const t1Text = await t1File.async('string')
-        objectsSize += t1Text.length
-        await storeTier1Blob(t1Text)
+      // Step 2 — objects (manifest-driven)
+      const manifest = await getManifest()
+      const completedChunks = await getCompletedChunks()
+      const t2Total = manifest.t2_chunks
+        .filter(c => !completedChunks.has(c.filename))
+        .reduce((s, c) => s + c.size, 0)
+      const totalBytes = manifest.stars_t1.size + manifest.objects.size + t2Total
+      objectsSize = totalBytes
+      let bytesLoaded = 0
+      const onChunkProgress = (chunkSize) => (p) => {
+        objectsProgress = (bytesLoaded + chunkSize * p) / totalBytes
       }
-
-      // Ingest Tier-2 CSV, splitting into per-zone blobs.
-      const t2File = zip.file('stars_t2.csv')
-      if (t2File) {
-        const t2Text = await t2File.async('string')
-        objectsSize += t2Text.length
-        await ingestT2Csv(t2Text)
+      await ingestT1(manifest.stars_t1.url)
+      bytesLoaded += manifest.stars_t1.size
+      objectsProgress = bytesLoaded / totalBytes
+      await ingestObjects(manifest.objects.url)
+      bytesLoaded += manifest.objects.size
+      objectsProgress = bytesLoaded / totalBytes
+      for (const chunk of manifest.t2_chunks) {
+        if (completedChunks.has(chunk.filename)) continue
+        await ingestChunk(chunk.url, chunk.filename, onChunkProgress(chunk.size))
+        bytesLoaded += chunk.size
+        objectsProgress = bytesLoaded / totalBytes
       }
-
-      // DSOs and double stars from objects.json.
-      const objectItems = parseObjects(objectsJson)
-      await bulkPutObjects(objectItems)
-
-      const metaKeys = extractMetaKeys(objectsJson)
-      for (const [k, v] of Object.entries(metaKeys)) {
-        await setMeta(k, v)
-      }
+      await storeManifest(manifest)
       objectsProgress = 1
 
       // Step 3 — images

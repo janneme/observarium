@@ -112,19 +112,24 @@ def handle_presign_key(key: str) -> dict:
 
 
 def handle_data_hash() -> dict:
-    """Return ETag information for objects.zip and images.zip in data bucket.
-
-    If an object is missing, its value will be null.
-    """
-    keys = {"objects": "objects.zip", "images": "images.zip"}
+    """Return SHA-256 of manifest.json from data bucket."""
     backend = storage_backend.get_backend()
-    out: dict = {}
-    for name, key in keys.items():
-        try:
-            out[name] = backend.get_hash(key)
-        except Exception:
-            out[name] = None
-    return out
+    try:
+        manifest_hash = backend.read_bytes("manifest.hash").decode("utf-8").strip()
+        return {"hash": manifest_hash}
+    except Exception:
+        return {"hash": None}
+
+
+def handle_manifest() -> dict:
+    """Read manifest.json and augment with pre-signed download URLs."""
+    backend = storage_backend.get_backend()
+    manifest = json.loads(backend.read_bytes("manifest.json"))
+    manifest["stars_t1"]["url"] = backend.generate_presigned_get(manifest["stars_t1"]["filename"])
+    manifest["objects"]["url"] = backend.generate_presigned_get(manifest["objects"]["filename"])
+    for chunk in manifest.get("t2_chunks", []):
+        chunk["url"] = backend.generate_presigned_get(chunk["filename"])
+    return manifest
 
 
 def handle_login(event: dict) -> dict:
@@ -301,22 +306,6 @@ def _route_presign(path: str, method: str, event: dict):
     if method != "GET":
         return None
 
-    if path == "/objects-url":
-        token = _get_bearer_token_from_event(event)
-        if not token:
-            return build_response(401, {"error": "Authorization required"})
-        try:
-            verify_jwt(token)
-        except Exception as exc:
-            print(f"[auth] token rejected: {exc}")
-            return build_response(401, {"error": "Invalid token"})
-        try:
-            out = handle_presign_key("objects.zip")
-            return build_response(200, out)
-        except Exception:
-            traceback.print_exc()
-            return build_response(500, {"error": "Could not generate presigned URL"})
-
     if path == "/images-url":
         token = _get_bearer_token_from_event(event)
         if not token:
@@ -333,6 +322,25 @@ def _route_presign(path: str, method: str, event: dict):
             traceback.print_exc()
             return build_response(500, {"error": "Could not generate presigned URL"})
 
+    return None
+
+
+def _route_manifest(path: str, method: str, event: dict):
+    if path == "/manifest" and method == "GET":
+        token = _get_bearer_token_from_event(event)
+        if not token:
+            return build_response(401, {"error": "Authorization required"})
+        try:
+            verify_jwt(token)
+        except Exception as exc:
+            print(f"[auth] token rejected: {exc}")
+            return build_response(401, {"error": "Invalid token"})
+        try:
+            out = handle_manifest()
+            return build_response(200, out)
+        except Exception:
+            traceback.print_exc()
+            return build_response(500, {"error": "Could not generate manifest"})
     return None
 
 
@@ -371,6 +379,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
         _route_health,
         _route_login,
         _route_presign,
+        _route_manifest,
         _route_data_hash,
         _route_observations,
     )

@@ -13,6 +13,8 @@
   export let lat = 51.5
   export let lon = 0
   export let time = new Date()
+  export let showFovCircle = false
+  export let flashIds = new Set()
 
   let canvas
   let W = 0, H = 0
@@ -24,7 +26,7 @@
 
   const unsubTheme = theme.subscribe(v => { currentTheme = v; dirty = true })
 
-  $: { ra0; dec0; fov; rotation; objects; lat; lon; time; dirty = true }
+  $: { ra0; dec0; fov; rotation; objects; lat; lon; time; showFovCircle; flashIds; dirty = true }
 
   $: updateAboveMap(lat, lon, time, objects)
 
@@ -37,29 +39,30 @@
     dirty = true
   }
 
-  // Dynamic magnitude → pixel radius.
-  // The faintest visible star (at adaptive magLim) always renders at MIN_R px.
-  // The brightest star (BRIGHT_MAG) renders at maxR, which shrinks at wide FOV
-  // (fewer visual clutter) and grows at narrow FOV (faint stars more visible).
-  // Linear interpolation in magnitude space between the two endpoints.
-  const BRIGHT_MAG = 2.0
-  const MIN_R = 1.2   // faintest visible star, any FOV
-  const MAX_R = 4.5   // brightest star (Sirius-class), any FOV
+  // Dynamic magnitude → pixel radius, expressed in vmin so the result is
+  // independent of physical pixel density.  1 vmin = 1% of min(W, H).
+  // The interpolation window is always MAG_RANGE wide, sliding with magLim:
+  // faintest rendered star → MIN_R_VMIN, stars brighter than (magLim - MAG_RANGE) → MAX_R_VMIN.
+  const MAG_RANGE = 6
+  const MIN_R_VMIN = 0.08   // faintest visible star (at magLim), in vmin
+  const MAX_R_VMIN = 0.35   // brightest star (mag ≤ magLim − MAG_RANGE), in vmin
 
   function starRadius(mag) {
     const m = Array.isArray(mag) ? mag[0] : mag
     const magLim = adaptiveMagLimit(fov)
-    const t = Math.max(0, Math.min(1, (magLim - m) / (magLim - BRIGHT_MAG)))
-    return MIN_R + (MAX_R - MIN_R) * t
+    const t = Math.max(0, Math.min(1, (magLim - m) / MAG_RANGE))
+    const vmin = Math.min(W, H) / 100
+    return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin
   }
 
-  // FOV (degrees) at which the magnitude limit reaches its floor of 5.
-  // Each halving of FOV raises the limit by 1 mag (constant star surface density).
-  // e.g. FOV_FOR_STAR_MAG_5=480: fov=240→6, fov=120→7, fov=60→8, fov=30→9, fov=15→10, fov=7.5→11, fov=3.75→12.
-  const FOV_FOR_STAR_MAG_5 = 480
+  // Log-linear interpolation: mag 5 at FOV_MAG5, mag 14 at FOV_MAG14.
+  const FOV_MAG5 = 120   // FOV (°) where rendering depth floor is mag 5
+  const FOV_MAG14 = 2    // FOV (°) where rendering depth ceiling is mag 14
 
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(12, Math.max(5, 5 + Math.log2(FOV_FOR_STAR_MAG_5 / fovDeg)))
+    return Math.min(14, Math.max(5,
+      5 + 9 * Math.log2(FOV_MAG5 / fovDeg) / Math.log2(FOV_MAG5 / FOV_MAG14)
+    ))
   }
 
   // DSO angular size in arcmin → canvas pixels. Returns raw value (no min clamp) for threshold check.
@@ -161,19 +164,52 @@
     ctx.globalAlpha = 1
   }
 
+  // Variable star: solid ring around the disk (Hipparcos convention, amplitude ≥ 1 mag)
+  function addVariableRing(ctx, obj, pt, above) {
+    const nightly = currentTheme === 'nightly'
+    const r = starRadius(obj.mag ?? 5)
+    ctx.globalAlpha = above ? 0.7 : 0.15
+    ctx.beginPath()
+    ctx.arc(pt.px, pt.py, r + Math.max(2.5, r * 0.8), 0, Math.PI * 2)
+    ctx.strokeStyle = nightly ? '#e06a5a' : '#ffffff'
+    ctx.lineWidth = 0.9
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+
+  // Double star: short jutting line at 45° from the disk edge (Hipparcos convention)
+  function addDoubleJut(ctx, obj, pt, above) {
+    if (!above) return
+    const nightly = currentTheme === 'nightly'
+    const r = starRadius(obj.mag ?? 5)
+    const jut = Math.max(3, r * 1.2)
+    ctx.globalAlpha = 0.65
+    ctx.beginPath()
+    ctx.moveTo(pt.px + Math.SQRT1_2 * r,         pt.py - Math.SQRT1_2 * r)
+    ctx.lineTo(pt.px + Math.SQRT1_2 * (r + jut), pt.py - Math.SQRT1_2 * (r + jut))
+    ctx.strokeStyle = nightly ? '#e06a5a' : '#ffffff'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+
   function drawDoubleStar(ctx, obj, pt, above) {
     drawStar(ctx, obj, pt, above)
-    if (above) {
-      const nightly = currentTheme === 'nightly'
-      const r = starRadius(obj.mag ?? 5) + 2.5
-      ctx.globalAlpha = 0.5
-      ctx.beginPath()
-      ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
-      ctx.strokeStyle = nightly ? '#e06a5a' : '#ffffff'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
-      ctx.globalAlpha = 1
-    }
+    addDoubleJut(ctx, obj, pt, above)
+  }
+
+  const FINDER_FOV = 7.5
+
+  function drawFovCircle(ctx) {
+    const fovRad = fov * Math.PI / 180
+    const r = Math.tan(FINDER_FOV / 2 * Math.PI / 180) * H / fovRad
+    ctx.beginPath()
+    ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([6, 4])
+    ctx.stroke()
+    ctx.setLineDash([])
   }
 
   function drawDso(ctx, obj, pt, above) {
@@ -308,6 +344,7 @@
 
     drawHorizonOverlay(ctx)
 
+    const renderedPx = new Map()
     const magLim = adaptiveMagLimit(fov)
     // DSO limit: anchored at starMag=5→dsoMag=8, starMag=13→dsoMag=12 (linear in mag space).
     // DSOs are extended objects; their visual limit lags stars by 3 mags at naked-eye FOV,
@@ -329,6 +366,7 @@
       const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
       if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
       drawDso(ctx, obj, pt, aboveMap.get(obj.id) ?? false)
+      renderedPx.set(obj.id, { px: pt.px, py: pt.py })
       tally(obj.dsoType ?? 'galaxy')
     }
 
@@ -342,10 +380,29 @@
         const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
         if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
         const above = aboveMap.get(obj.id) ?? false
-        if (obj.type === 'star') { drawStar(ctx, obj, pt, above); tally('star') }
-        else { drawDoubleStar(ctx, obj, pt, above); tally('double_star') }
+        const isDouble = obj.type === 'double_star'
+        const isVariable = Array.isArray(obj.mag) && (obj.mag[1] - obj.mag[0]) >= 1
+        drawStar(ctx, obj, pt, above)
+        if (isVariable) addVariableRing(ctx, obj, pt, above)
+        if (isDouble) addDoubleJut(ctx, obj, pt, above)
+        renderedPx.set(obj.id, { px: pt.px, py: pt.py })
+        tally(isDouble ? 'double_star' : 'star')
       }
     }
+
+    if (flashIds.size > 0) {
+      ctx.strokeStyle = currentTheme === 'nightly' ? '#ff0000' : '#ffff00'
+      ctx.lineWidth = 2
+      ctx.setLineDash([])
+      for (const [id, p] of renderedPx) {
+        if (flashIds.has(id)) {
+          ctx.beginPath()
+          ctx.arc(p.px, p.py, 15, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+      }
+    }
+    if (showFovCircle) drawFovCircle(ctx)
 
     console.log(`[SkyCanvas] fov=${fov}° starMagLim=${magLim.toFixed(1)} dsoMagLim=${dsoMagLim.toFixed(1)} | db:${dbStars.length} noMag:${noMagStars} magPass:${magPassStars} onScreen:`, survey)
     dirty = false

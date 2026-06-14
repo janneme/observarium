@@ -319,11 +319,11 @@ Implementation notes:
 
 ---
 
-### Step 9: Data bundling & `make data-upload`
+### Step 9: Data bundling & `make data-upload` ✅
 
 **README refs:** §3.1.3, §3.1.4, §3.2.2  
-**Deliverable:** `make data-upload` bundles object data and images into ZIPs and
-syncs them to the configured storage backend.
+**Deliverable:** `make data-upload` bundles object data and images into ZIPs,
+generates a manifest, and syncs everything to the configured storage backend.
 
 Storage backend selection:
 
@@ -333,24 +333,43 @@ Storage backend selection:
 - `STORAGE=s3` stores artifacts in the S3 data bucket (`DATA_BUCKET`).
 - The storage abstraction must be usable from both `data_prep/` and `server/`.
 
-Key namespace must be identical across backends:
+Key namespace (identical across backends):
 
-- Bundles: `objects.zip`, `images.zip` at the top level.
-- Observations: `observations/{username}.json`.
+- `stars_t1.zip` — T1 star CSV (mag ≤ 9.0), single entry `stars_t1.csv`.
+- `objects.zip` — merged `objects.json` (DSOs, double stars, constellations,
+  solar system, moon features; no star entries).
+- `t2_000.zip`, `t2_001.zip`, … — T2 star chunks (mag > 9.0), one entry per
+  zone named `{zone:04d}.csv`; headerless rows `z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd`.
+- `images.zip` — unchanged; excluded from manifest-driven download.
+- `manifest.json` — describes all payload files (excludes `images.zip`).
+- `manifest.hash` — hex SHA-256 of `manifest.json`.
+- `observations/{username}.json`.
 
 Technical notes:
 
-- Merge all `data_prep/output/*.json` files into one `objects.json`. Use
-  `json.dumps` with `separators=(',',':')` (no whitespace) to minimise size.
-- Create `objects.zip` using Python `zipfile` with `ZIP_DEFLATED` for
-  `objects.json`.
-- Create `images.zip` using `ZIP_DEFLATED` level 0 (`compresslevel=0`,
-  equivalent to STORE) for all JPEG files in `images/`.
-- Change detection in `make data-upload`: compare SHA-256 of local ZIPs
-  against the backend's stored content identifier (hash/etag). Sync only if
-  different.
-- `make data-upload` is called as step 3 of the full `make deploy` sequence
-  (README §3.1.4).
+- **T2 bin-packing:** zones are packed sequentially, accumulating until the
+  estimated compressed size (`raw_bytes / 3.0`) exceeds `TARGET_CHUNK_BYTES`
+  (5 MB), then a new chunk starts. Produces `t2_NNN.zip` files of roughly 5 MB
+  each (last chunk smaller).
+- **`manifest.json` format:**
+  ```json
+  {
+    "version": "YYYY-MM-DD",
+    "stars_t1": {"filename": "stars_t1.zip", "hash": "sha256:…", "size": 12345},
+    "objects":  {"filename": "objects.zip",  "hash": "sha256:…", "size": 12345},
+    "t2_chunks": [
+      {"filename": "t2_000.zip", "hash": "sha256:…", "size": 12345, "zones": [0,1,…]},
+      …
+    ]
+  }
+  ```
+- **`manifest.hash`:** plain-text hex SHA-256 of `manifest.json`; used by
+  `GET /data-hash` so the client can detect data updates with one small request.
+- Change detection: compare SHA-256 of each local artifact against the
+  backend's stored copy; sync only if different.
+- `images.zip` is built and synced as before but is intentionally excluded from
+  the manifest — it uses a separate pre-signed URL flow via `GET /images-url`.
+- `make data-upload` is called as step 3 of the full `make deploy` sequence.
 
 Validation order (mandatory):
 
@@ -470,7 +489,7 @@ Implementation notes:
   cryptography ≥43.0.0 (no build-system section needed for non-package projects).
 - Implemented full HTTP router in `handler.py`:
   - `build_response()` helper adds CORS headers to all responses
-  - Routes: `GET /` (health check), `POST /login`, `GET /objects-url`,
+  - Routes: `GET /` (health check), `POST /login`, `GET /manifest`,
     `GET /images-url`, `GET /data-hash`, `GET /observations`,
     `POST /observations`, `DELETE /observations/{date}`
   - All endpoints except health check return 501 (not yet implemented) with
@@ -526,38 +545,43 @@ Technical notes:
 
 ---
 
-### Step 13: Lambda — data endpoints (pre-signed URLs) ✅
+### Step 13: Lambda — data endpoints ✅
 
 **README refs:** §3.2.1 (read objects, read images), §3.2.2  
-**Deliverable:** `GET /objects-url` and `GET /images-url` return pre-signed S3 URLs.
+**Deliverable:** `GET /manifest` returns the full manifest with pre-signed
+download URLs; `GET /images-url` returns a pre-signed URL for `images.zip`;
+`GET /data-hash` returns the SHA-256 of `manifest.json`.
 
 Technical notes:
 
-- Both endpoints require a valid Cognito JWT (use the helper from Step 12).
-- Generate pre-signed URL with `boto3` S3 client
-  `generate_presigned_url("get_object", ...)` with `ExpiresIn=300` (5 minutes).
-- `GET /data-hash` returns the ETag of both S3 objects (no authentication
-  required — used by the client's hash-check before deciding whether to
-  re-download; README §5.13). ETags are retrieved via `head_object`.
+- `GET /manifest` requires a valid Cognito JWT (Step 12). Reads `manifest.json`
+  from the storage backend, then augments each entry (`stars_t1`, `objects`, and
+  every element in `t2_chunks`) with a `url` field pointing to a pre-signed
+  GET URL. Returns the augmented manifest as JSON.
+- `GET /images-url` requires a valid JWT and returns a pre-signed URL for
+  `images.zip` (unchanged from the original design).
+- `GET /data-hash` (no authentication) reads `manifest.hash` from storage and
+  returns `{"hash": "<hex-sha256>"}`. Used by the client to detect data updates
+  with a single small request before deciding whether to re-download.
 
 ---
 
-### Step 13b: Data endpoints — support `STORAGE=local` via storage backend
+### Step 13b: Data endpoints — support `STORAGE=local` via storage backend ✅
 
-**Deliverable:** `GET /objects-url`, `GET /images-url`, and `GET /data-hash`
+**Deliverable:** `GET /manifest`, `GET /images-url`, and `GET /data-hash`
 work in both `STORAGE=local` and `STORAGE=s3` modes by using the shared storage
 abstraction.
 
 Technical notes:
 
-- `STORAGE=s3`: preserve Step 13 behaviour (pre-signed S3 URLs; `/data-hash`
-  reports the S3 bundle identifiers).
-- `STORAGE=local`:
-  - `/objects-url` and `/images-url` return URLs to local server routes
-    (e.g. `/data/objects.zip` and `/data/images.zip`) that stream the bundles
-    from the local storage backend.
-  - `/data-hash` returns bundle identifiers derived from local storage
-    (e.g. SHA-256).
+- `STORAGE=s3`: pre-signed S3 GET URLs with `ExpiresIn=300` (5 minutes) for all
+  manifest entries and `images.zip`.
+- `STORAGE=local`: `backend.generate_presigned_get(key)` returns
+  `http://localhost:8787/local-storage/{key}`, which the local server streams
+  directly from the `storage/` directory. No change needed in handler logic —
+  the backend abstraction handles both cases transparently.
+- `/data-hash` reads `manifest.hash` from backend in both modes (plain-text
+  SHA-256 written by `data_upload.py` during bundle generation).
 
 ---
 
@@ -707,13 +731,25 @@ Technical notes:
     that modulo arithmetic would otherwise produce at wide FOVs. The same guard
     is present in `_zonesForArea()`.
 - Loading sequence (README §5.1): call `POST /login` → store token in
-  `sessionStorage` → call `GET /objects-url` → fetch ZIP → JSZip unpack →
-  store `stars_t1.csv` via `storeTier1Blob` → ingest `stars_t2.csv` zone-by-zone
-  via `bulkPutZoneT2Blobs` → parse `objects.json` and insert DSOs/double stars
-  into `objects` store via `bulkPutObjects` → repeat for images → call
+  `sessionStorage` → call `GET /manifest` → read `completedChunks` from
+  IDB meta → compute `totalBytes` (sum of `size` for incomplete entries) →
+  fetch and ingest `stars_t1.zip` via `ingestT1` (`storeTier1Blob`) →
+  fetch and ingest `objects.zip` via `ingestObjects` (`bulkPutObjects`, `setMeta`
+  for constellations/solar_system/moon_features) → for each `t2_chunks` entry
+  not already completed: fetch and ingest `t2_NNN.zip` via `ingestChunk`
+  (`bulkPutZoneT2Blobs`, `markChunkComplete`) → call `storeManifest` to persist
+  manifest sans URLs → fetch images via `GET /images-url` → call
   `GET /observations` → insert into `observations` store.
-- Progress bar: compute percentage from `JSZip` `onUpdate` callback
-  (gives loaded bytes) combined with known content-length from response headers.
+- Resume support: `completedChunks` (IDB meta key) tracks finished chunk
+  filenames; already-completed chunks are skipped on reload.
+- Progress accuracy: `totalBytes` is known before any download starts (sum of
+  `size` fields for incomplete entries); `objectsProgress` tracks exact byte
+  offset across sequential chunk downloads.
+- Per-chunk progress: `onChunkProgress(chunkSize)` returns a callback that
+  maps `[0..1]` download progress for one chunk into the global `[0..1]`
+  progress scale.
+- Progress bar: percentage computed from streaming `Content-Length` via
+  `fetchWithProgress`; images progress splits 70% network / 30% JSZip unpack.
 - After loading, navigate to Main Screen via Svelte client-side routing
   (use `svelte-spa-router`).
 
@@ -878,7 +914,7 @@ Technical notes:
 
 ---
 
-### Step 20: Main Screen — interactions
+### Step 20: Main Screen — interactions ✅
 
 **README refs:** §5.2 (interactions), §4.1 (FOV circle toggle)  
 **Deliverable:** Pan, pinch-zoom, tap-to-select, FOV circle, and boundary
@@ -1104,14 +1140,20 @@ Technical notes:
 
 Technical notes:
 
-- Call `GET /data-hash` (Step 13/13b) — returns content identifiers for
-  `objects.zip` and `images.zip` (ETags in `STORAGE=s3`, hashes in
-  `STORAGE=local`, depending on backend). Compare against the `dataHash` values
-  stored in the `meta` IndexedDB store after the last successful load.
+- Call `GET /data-hash` — returns `{"hash": "<hex-sha256>"}` of the current
+  `manifest.json`. Compare against the `dataManifest.version` (or recompute
+  from stored manifest bytes) to determine whether any data changed.
+- If the hash differs, call `GET /manifest` and compare each entry's `hash`
+  field (`"sha256:…"`) against the corresponding entry in the stored manifest
+  (`getStoredManifest()`). Only re-download entries whose hash changed.
+  - `stars_t1` or `objects` changed → re-ingest that single ZIP.
+  - Individual `t2_chunks` entries changed → `clearCompletedChunks()` for
+    those filenames, then re-ingest those chunks only.
 - Show separate status per data type ("Object data: up to date",
-  "Images: update available").
-- Re-download and re-process only the changed ZIP(s), using the same flow as
-  the Welcome Screen (Step 17).
+  "Star data: update available", "N of M chunks updated").
+- Re-download uses the same `ingestT1`, `ingestObjects`, `ingestChunk` helpers
+  as the Welcome Screen (Step 17); call `storeManifest` after all re-downloads
+  complete.
 
 ---
 

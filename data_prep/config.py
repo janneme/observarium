@@ -44,6 +44,22 @@ ATHYG_FULL_FILENAMES: tuple[str, str] = ("athyg_v33-1.csv.gz", "athyg_v33-2.csv.
 ATHYG_FULL_MAG_THRESHOLD: float = 11.0
 
 # ---------------------------------------------------------------------------
+# Gaia DR3 supplement (fills the gap above the AT-HYG / Tycho-2 ceiling)
+# ---------------------------------------------------------------------------
+
+#: Activate the Gaia supplement only when max_mag exceeds this value.
+#: Below ~11.5 the AT-HYG/Tycho-2 catalogue is already complete.
+GAIA_MAG_THRESHOLD: float = 11.5
+
+#: Hard ceiling applied to Gaia queries regardless of --max-mag.
+#: G ≈ 14 gives roughly 5-8 M additional stars (Europe-visible, non-Tycho).
+GAIA_DEFAULT_MAX_MAG: float = 14.0
+
+#: Cache filename template for the downloaded Gaia supplement.
+#: Parameters: max_mag (numeric) and min_dec (numeric).
+GAIA_FILENAME_TEMPLATE: str = "gaia_dr3_m{max_mag:g}_d{min_dec:g}.csv.gz"
+
+# ---------------------------------------------------------------------------
 # Deep sky objects (OpenNGC)
 # ---------------------------------------------------------------------------
 

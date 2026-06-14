@@ -210,12 +210,19 @@ export async function bulkPutZoneT2Blobs(items) {
 // --------------------------------------------------------------------------
 
 export async function hasData() {
-  const db = await getDB();
-  const row = await db.get("meta", "stars_t1");
-  if (row) return true;
-  // Backward compatibility: old-format data has no T1 blob but may have objects.
-  const count = await db.count("objects");
-  return count > 0;
+  const manifest = await getStoredManifest();
+  if (!manifest) {
+    const db = await getDB();
+    const row = await db.get("meta", "stars_t1");
+    if (row) return true;
+    const count = await db.count("objects");
+    return count > 0;
+  }
+  const completed = await getCompletedChunks();
+  return (
+    manifest.t2_chunks.every((c) => completed.has(c.filename)) &&
+    !!(await getMeta("stars_t1"))
+  );
 }
 
 export async function getMeta(key) {
@@ -227,6 +234,37 @@ export async function getMeta(key) {
 export async function setMeta(key, value) {
   const db = await getDB();
   await db.put("meta", { key, value });
+}
+
+export async function storeManifest(manifest) {
+  const stored = {
+    version: manifest.version,
+    stars_t1: { filename: manifest.stars_t1.filename, hash: manifest.stars_t1.hash, size: manifest.stars_t1.size },
+    objects: { filename: manifest.objects.filename, hash: manifest.objects.hash, size: manifest.objects.size },
+    t2_chunks: manifest.t2_chunks.map(({ filename, hash, size, zones }) => ({ filename, hash, size, zones })),
+  };
+  await setMeta("dataManifest", stored);
+}
+
+export async function getStoredManifest() {
+  return getMeta("dataManifest");
+}
+
+export async function getCompletedChunks() {
+  const arr = await getMeta("completedChunks");
+  return new Set(arr || []);
+}
+
+export async function markChunkComplete(filename) {
+  const arr = (await getMeta("completedChunks")) || [];
+  if (!arr.includes(filename)) {
+    arr.push(filename);
+    await setMeta("completedChunks", arr);
+  }
+}
+
+export async function clearCompletedChunks() {
+  await setMeta("completedChunks", []);
 }
 
 export async function bulkPutObjects(items) {

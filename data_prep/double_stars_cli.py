@@ -20,6 +20,7 @@ from double_stars import DoubleStarMatcher
 
 def main(
     max_mag: float | None = None,
+    stars_max_mag: float | None = None,
     min_sep: float = 2.0,
     embed_into_stars: bool = True,
     only_mode: bool = False,
@@ -28,10 +29,13 @@ def main(
     """Export double-star systems and optionally embed dbl metadata into an
     existing `stars.m{mag}.json` file when *max_mag* is provided.
 
-    If *embed_into_stars* is True and *max_mag* is specified, the function
-    will load `output/stars.m{max_mag}.json`, attach `dbl` entries and
-    overwrite that file. A standalone `double_stars.json` is always written.
+    *max_mag* controls which WDS pairs are included (double-star magnitude limit).
+    *stars_max_mag* controls which stars file is read/written; defaults to *max_mag*.
+    If *embed_into_stars* is True, the function will load
+    `output/stars.m{stars_max_mag}.json`, attach `dbl` entries and overwrite it.
+    A standalone `double_stars.json` is always written.
     """
+    file_mag = stars_max_mag if stars_max_mag is not None else max_mag
     sources_dir = Path(__file__).parent / "sources"
     cache_dir = Path(__file__).parent / "cache"
     output_dir = Path(__file__).parent / "output"
@@ -42,8 +46,8 @@ def main(
     # requested stars file doesn't exist, fail early and instruct the user
     # to initialize/run the stars pipeline first so they can re-run with
     # embedding enabled.
-    if only_mode and embed_into_stars and max_mag is not None:
-        stars_file = output_dir / f"stars.m{max_mag:g}.json"
+    if only_mode and embed_into_stars and file_mag is not None:
+        stars_file = output_dir / f"stars.m{file_mag:g}.json"
         if not stars_file.exists():
             print(
                 f"Stars file {stars_file} not found.\n"
@@ -73,8 +77,8 @@ def main(
             )
 
     # Optionally embed into existing stars file
-    if embed_into_stars and max_mag is not None:
-        stars_file = output_dir / f"stars.m{max_mag:g}.json"
+    if embed_into_stars and file_mag is not None:
+        stars_file = output_dir / f"stars.m{file_mag:g}.json"
         if not stars_file.exists():
             print(f"Stars file {stars_file} not found; skipping embedding.")
             return
@@ -82,9 +86,9 @@ def main(
         with stars_file.open("r", encoding="utf-8") as fh:
             grouped_stars = json.load(fh)
         flat: list[dict] = []
-        for _const, lst in grouped_stars.items():
+        for lst in grouped_stars.values():
             flat.extend(lst)
-        n_dbl_stars, n_pairs = matcher.attach(flat, max_mag=max_mag, min_sep=min_sep)
+        n_dbl_stars, n_pairs, n_phys_pairs = matcher.attach(flat, max_mag=max_mag or 8.0, min_sep=min_sep)
         # Rebuild grouped structure preserving original constellation keys
         # The `stars.m{mag}.json` file is already grouped by constellation
         # keys; we flattened it earlier in the same order. Re-slice `flat`
@@ -102,7 +106,7 @@ def main(
             print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs")
         else:
             if debug:
-                print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs")
+                print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs, {n_phys_pairs} physical")
 
         # Emit a stars-like summary so this command's output matches the
         # `--only stars` run. Recompute basic stats from the updated file.
@@ -161,7 +165,7 @@ def main(
             size_mb = stars_file.stat().st_size / 1_048_576
             print(
                 f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
-                f"(sep >= {min_sep} arcsec)"
+                f"({n_phys_pairs} physical, sep >= {min_sep} arcsec)"
             )
             print(f"Output         : {stars_file} ({size_mb:.2f} MB)")
             return
@@ -178,7 +182,7 @@ def main(
             )
             print(
                 f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
-                f"(sep >= {min_sep} arcsec)"
+                f"({n_phys_pairs} physical, sep >= {min_sep} arcsec)"
             )
             note_parts = (
                 ([f"{n_curated} curated"] if n_curated else [])
@@ -200,7 +204,7 @@ def main(
             print(f"Variable stars : {n_variable} encoded with amplitude >= {VARIABLE_THRESHOLD}")
             print(
                 f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
-                f"(sep >= {min_sep} arcsec)"
+                f"({n_phys_pairs} physical, sep >= {min_sep} arcsec)"
             )
             print(f"Star notes     : {notes_summary}")
             print(f"Output         : {stars_file} ({size_mb:.2f} MB)")

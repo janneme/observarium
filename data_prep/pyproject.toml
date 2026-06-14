@@ -23,6 +23,9 @@ dev = [
 testpaths = ["tests"]
 # Adds data_prep/ itself to sys.path so tests can import stars, config, etc.
 pythonpath = ["."]
+markers = [
+    "network: tests that make real network requests (deselect with -m 'not network')",
+]
 
 [tool.ruff]
 line-length = 100

@@ -15,12 +15,16 @@ from config import (
     ATHYG_FULL_URLS,
     ATHYG_URL,
     EUROPE_MIN_DEC,
-        EXTREME_STARS_NUM,
+    EXTREME_STARS_NUM,
+    GAIA_DEFAULT_MAX_MAG,
+    GAIA_FILENAME_TEMPLATE,
+    GAIA_MAG_THRESHOLD,
     MAX_STAR_MAGNITUDE,
     VARIABLE_THRESHOLD,
 )
 from double_stars import DoubleStarMatcher
 from downloader import Downloader
+from gaia import fetch_gaia, load_gaia_stars
 
 # ---------------------------------------------------------------------------
 # Spectral class → approximate CSS colour (B−V colour index approximation)
@@ -351,6 +355,21 @@ class StarPipeline:
         notes_path = self._sources_dir / "notes_stars.csv"
         notes = _load_notes(notes_path)
         stars, n_curated, _ = self._process(csv_paths, var_index or {}, notes)
+
+        # Gaia DR3 supplement — fills the gap above the AT-HYG / Tycho-2 ceiling
+        if self._max_mag > GAIA_MAG_THRESHOLD:
+            gaia_max = min(self._max_mag, GAIA_DEFAULT_MAX_MAG)
+            fname = GAIA_FILENAME_TEMPLATE.format(
+                max_mag=gaia_max, min_dec=EUROPE_MIN_DEC
+            )
+            gaia_cache = self._downloader._cache_dir / fname
+            fetch_gaia(gaia_max, EUROPE_MIN_DEC, gaia_cache, min_mag=GAIA_MAG_THRESHOLD)
+            gaia_stars = load_gaia_stars(
+                gaia_cache, gaia_max, EUROPE_MIN_DEC, COLOR_PALETTE
+            )
+            print(f"Gaia supplement : {len(gaia_stars):,} stars loaded")
+            stars.extend(gaia_stars)
+
         # Compute luminosities and annotate the most luminous stars. Recompute
         # the post-annotation auto-note count so only the top N are reported
         # as auto-generated notes.
@@ -368,7 +387,7 @@ class StarPipeline:
         summary_ids: set[int] = {id(s) for s in stars if s.get("_auto_note")}
         n_auto = len(summary_ids)
         if attach_double:
-            n_dbl_stars, n_dbl_pairs = self._double_matcher.attach(
+            n_dbl_stars, n_dbl_pairs, n_phys_pairs = self._double_matcher.attach(
                 stars,
                 max_mag=self._max_mag,
                 min_sep=self._min_double_star_sep,
@@ -376,6 +395,7 @@ class StarPipeline:
         else:
             n_dbl_stars = 0
             n_dbl_pairs = 0
+            n_phys_pairs = 0
         self._write_csv(stars)
         return self._write(
             stars,
@@ -383,6 +403,7 @@ class StarPipeline:
             n_auto,
             n_dbl_stars,
             n_dbl_pairs,
+            n_phys_pairs,
             show_variables=(bool(var_index) and (show_summary or self._debug)),
             show_double=(attach_double and (show_summary or self._debug)),
             show_summary=show_summary,
@@ -861,6 +882,7 @@ class StarPipeline:
         n_auto: int,
         n_dbl_stars: int,
         n_dbl_pairs: int,
+        n_phys_pairs: int,
         show_variables: bool = False,
         show_double: bool = False,
         show_summary: bool = True,
@@ -923,7 +945,7 @@ class StarPipeline:
             if show_double:
                 print(
                     f"Double stars   : {n_dbl_stars} stars with {n_dbl_pairs} pairs "
-                    f"(sep >= {self._min_double_star_sep} arcsec)"
+                    f"({n_phys_pairs} physical, sep >= {self._min_double_star_sep} arcsec)"
                 )
             print(f"Star notes     : {notes_summary}")
             print(f"Output         : {out} ({size_mb:.2f} MB)")
