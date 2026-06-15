@@ -79,7 +79,7 @@
     const nightly = currentTheme === 'nightly'
     const r = SYM_R
     ctx.globalAlpha = above ? 0.85 : 0.2
-    ctx.strokeStyle = nightly ? '#d09ab8' : '#99c0ff'
+    ctx.strokeStyle = nightly ? '#880000' : '#99c0ff'
     ctx.lineWidth = 1
     ctx.setLineDash([])
 
@@ -159,7 +159,7 @@
     ctx.globalAlpha = above ? 0.92 : 0.22
     ctx.beginPath()
     ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
-    ctx.fillStyle = nightly ? '#e06a5a' : (obj.clr || '#ffffff')
+    ctx.fillStyle = nightly ? '#e00000' : (obj.clr || '#ffffff')
     ctx.fill()
     ctx.globalAlpha = 1
   }
@@ -171,7 +171,7 @@
     ctx.globalAlpha = above ? 0.7 : 0.15
     ctx.beginPath()
     ctx.arc(pt.px, pt.py, r + Math.max(2.5, r * 0.8), 0, Math.PI * 2)
-    ctx.strokeStyle = nightly ? '#e06a5a' : '#ffffff'
+    ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
     ctx.lineWidth = 0.9
     ctx.stroke()
     ctx.globalAlpha = 1
@@ -187,7 +187,7 @@
     ctx.beginPath()
     ctx.moveTo(pt.px + Math.SQRT1_2 * r,         pt.py - Math.SQRT1_2 * r)
     ctx.lineTo(pt.px + Math.SQRT1_2 * (r + jut), pt.py - Math.SQRT1_2 * (r + jut))
-    ctx.strokeStyle = nightly ? '#e06a5a' : '#ffffff'
+    ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
     ctx.lineWidth = 1.2
     ctx.stroke()
     ctx.globalAlpha = 1
@@ -203,9 +203,10 @@
   function drawFovCircle(ctx) {
     const fovRad = fov * Math.PI / 180
     const r = Math.tan(FINDER_FOV / 2 * Math.PI / 180) * H / fovRad
+    if (r > Math.min(W, H) / 2) return
     ctx.beginPath()
     ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)'
+    ctx.strokeStyle = currentTheme === 'nightly' ? 'rgba(224,0,0,0.4)' : 'rgba(255,255,255,0.4)'
     ctx.lineWidth = 1.5
     ctx.setLineDash([6, 4])
     ctx.stroke()
@@ -223,7 +224,7 @@
     const sz = Math.max(4, Math.min(50, rawSz))
     const r = sz / 2
     ctx.globalAlpha = above ? 0.85 : 0.2
-    ctx.strokeStyle = nightly ? '#d09ab8' : '#99c0ff'
+    ctx.strokeStyle = nightly ? '#880000' : '#99c0ff'
     ctx.lineWidth = 1
     ctx.setLineDash([])
 
@@ -328,7 +329,7 @@
     ctx.beginPath()
     ctx.moveTo(0, pyLeft)
     ctx.lineTo(W, pyRight)
-    ctx.strokeStyle = 'rgba(128,128,128,0.45)'
+    ctx.strokeStyle = currentTheme === 'nightly' ? 'rgba(136,0,0,0.45)' : 'rgba(128,128,128,0.45)'
     ctx.lineWidth = 1
     ctx.setLineDash([6, 4])
     ctx.stroke()

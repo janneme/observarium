@@ -937,11 +937,12 @@ Technical notes:
   global Svelte store.
 - **FOV circle:** when enabled (Menu toggle, README §C4), draw a dashed circle
   on the canvas representing `FINDER_FOV` degrees diameter, centred on the
-  current view centre.
+  current view centre. The circle is suppressed when its radius would exceed
+  `min(W, H) / 2` (i.e. it would clip the canvas edge).
 
 ---
 
-### Step 21: Top bar + menu
+### Step 21: Top bar + menu ✅
 
 **README refs:** §4.1, §4.2  
 **Deliverable:** Top bar with all elements and a slide-in menu with all toggle

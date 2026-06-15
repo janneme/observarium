@@ -3,18 +3,21 @@
   --fg: #111111;
   --accent: #cc0000;
   --key-border: rgba(0,0,0,0.12);
+  --surface-bg: rgba(0,0,0,0.7);
+  --surface-fg: rgba(255,255,255,0.9);
+  --menu-bg: transparent;
 }
 
 :root[data-theme='nightly'] {
   --bg: #000000;
-  /* Softer red for content to improve readability when combined with blue accents */
-  --fg: #e06a5a;
-  /* Blue accent (not for main content); used in borders/icons */
-  --accent: #3b63ff;
-  --accent-border: rgba(59,99,255,0.32);
-  --button-bg-hover: rgba(59,99,255,0.06);
-  /* Lighter, red-tinged border in nightly to match text color */
-  --key-border: rgba(224,106,90,0.16);
+  --fg: #e00000;
+  --accent: #cc0000;
+  --accent-border: rgba(200,0,0,0.32);
+  --button-bg-hover: rgba(200,0,0,0.06);
+  --key-border: rgba(224,0,0,0.16);
+  --surface-bg: rgba(0,0,0,0.7);
+  --surface-fg: #e00000;
+  --menu-bg: transparent;
 }
 
 body, main {

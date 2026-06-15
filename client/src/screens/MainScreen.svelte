@@ -1,6 +1,9 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
   import SkyCanvas from '../components/SkyCanvas.svelte'
+  import TopBar from '../components/TopBar.svelte'
+  import MenuPanel from '../components/MenuPanel.svelte'
+  import DateTimePicker from '../components/DateTimePicker.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
@@ -35,6 +38,9 @@
   let flashIds = new Set()
   let flashTimer = null
   const pointers = new Map()
+
+  let menuOpen = false
+  let showPicker = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -198,8 +204,18 @@
     maybeReload()
   }
 
+  function handleWheel(e) {
+    // ctrlKey=true is how Chrome/Safari report trackpad pinch on desktop
+    if (e.ctrlKey) {
+      e.preventDefault()
+      fov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(NORMAL_VIEW_MAX_FOV, fov * Math.pow(1.008, e.deltaY)))
+      maybeReload()
+    }
+  }
+
   onMount(() => {
     window.addEventListener('keydown', handleKey)
+    window.addEventListener('wheel', handleWheel, { passive: false })
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         pos => init(pos.coords.latitude, pos.coords.longitude),
@@ -213,6 +229,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKey)
+    window.removeEventListener('wheel', handleWheel)
     if (flashTimer) clearTimeout(flashTimer)
   })
 </script>
@@ -229,6 +246,22 @@
     <div class="hint">Locating…</div>
   {:else}
     <SkyCanvas {ra0} {dec0} {fov} {objects} {lat} {lon} {time} showFovCircle={$showFovCircle} {flashIds} />
+  {/if}
+
+  <TopBar
+    {time}
+    on:menutoggle={() => { menuOpen = !menuOpen }}
+    on:timepick={() => { showPicker = true }}
+  />
+
+  <MenuPanel open={menuOpen} on:close={() => { menuOpen = false }} />
+
+  {#if showPicker}
+    <DateTimePicker
+      {time}
+      on:pick={(e) => { time = e.detail; showPicker = false }}
+      on:cancel={() => { showPicker = false }}
+    />
   {/if}
 </div>
 
