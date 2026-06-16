@@ -969,7 +969,7 @@ Technical notes:
 
 ---
 
-### Step 22: Constellation rendering
+### Step 22: Constellation rendering ✅
 
 **README refs:** §2.1e, §4.2  
 **Deliverable:** Constellation lines, boundaries and name labels toggled via
@@ -988,10 +988,51 @@ Technical notes:
 - Lines and boundaries are drawn on a separate off-screen canvas and composited
   onto the main canvas — avoids re-projecting all stars when only toggles change.
 
+Implementation notes:
+
+- Constellation data loaded from IDB `meta["constellations"]` in `onMount`
+  via `getMeta`; stored in the `constellations` reactive variable.
+- Centroid computed client-side via circular mean of boundary vertices
+  (boundary RA is in hours; converted to degrees × 15 before projection).
+- HIP lookup built from the `objects` prop per draw call; line segments
+  where either HIP is missing (out-of-area star) are silently skipped.
+- `showConstellationNames` is a separate store/prop from `showConstellationLines`;
+  name labels are toggled independently.
+- Boundary segments use 8-step RA/Dec subdivision instead of a simple
+  endpoint test; this preserves the visible portion of segments that cross
+  the hemisphere edge (where one endpoint would project to null).
+- `showDsos` and `showHorizon` are wired through `MainScreen` as `SkyCanvas`
+  props; draw calls are guarded by these flags.
+- All props wired from `stores/ui.js` through `MainScreen`.
+
 **← MVP is deployable after this step.**
 At this point the app loads data, authenticates, shows a navigable star chart
 with constellation overlays, and object selection is functional. Deploy to S3
 with `make deploy` and verify on a real Android device.
+
+### Step 22a: About panel ✅
+
+**Deliverable:** Informational modal accessible via the "About" button in the
+menu, showing the app name, build version, and data source credits.
+
+Implementation notes:
+
+- `client/src/components/AboutPanel.svelte`: centered fixed overlay (backdrop
+  z-index 50, panel z-index 51). Dispatches a `close` event; closes on backdrop
+  click, close-button click, or Escape key.
+- `on:pointerdown|stopPropagation` on the panel div prevents `MainScreen`'s
+  `setPointerCapture` from intercepting pointer events, which would otherwise
+  swallow the close-button click.
+- Version string from `import.meta.env.VITE_APP_VERSION_DATE` (falls back to
+  `'0.1.0'`).
+- Data sources credited: AT-HYG v3.3 / Gaia DR3, OpenNGC, Stellarium modern
+  sky culture, WDS via VizieR, USGS / IAU Gazetteer.
+- Nightly theme overrides via `:global([data-theme='nightly'])`: background
+  `#110000`, text `#ff8080`, icon accent `#cc2200` (G=0 rule observed).
+- `MenuPanel` dispatches an `about` event on button click; `MainScreen` handles
+  it with `showAbout = true` and conditionally renders `<AboutPanel>`.
+- Note: this is a static info panel. Step 32 spec calls for augmenting with live
+  IndexedDB stats (record counts, storage size). That enhancement is deferred.
 
 ---
 

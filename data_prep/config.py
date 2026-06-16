@@ -84,12 +84,12 @@ NON_MESSIER_NUM: int = 250
 # Constellations (Stellarium modern IAU skyculture)
 # ---------------------------------------------------------------------------
 
-#: Stellarium modern IAU skyculture index with lines, names and B1875 boundaries.
+#: Stellarium modern skyculture index with lines, names and B1875 boundaries.
 CONSTELLATIONS_IAU_URL: str = (
     "https://raw.githubusercontent.com/Stellarium/stellarium/master"
-    "/skycultures/modern_iau/index.json"
+    "/skycultures/modern/index.json"
 )
-CONSTELLATIONS_IAU_FILENAME: str = "stellarium_modern_iau_index.json"
+CONSTELLATIONS_IAU_FILENAME: str = "stellarium_modern_index.json"
 
 # ---------------------------------------------------------------------------
 # Double stars (WDS) and moon features

@@ -4,6 +4,7 @@
   import { projectToPixel, isOnScreen } from '../lib/skymath.js'
   import { isAboveHorizon, getLST } from '../lib/horizon.js'
   import { theme } from '../stores/theme.js'
+  import { getMeta } from '../lib/db.js'
 
   export let ra0 = 0
   export let dec0 = 0
@@ -14,6 +15,11 @@
   export let lon = 0
   export let time = new Date()
   export let showFovCircle = false
+  export let showConstellationLines = false
+  export let showConstellationNames = false
+  export let showConstellationBoundaries = false
+  export let showDsos = true
+  export let showHorizon = true
   export let flashIds = new Set()
 
   let canvas
@@ -23,10 +29,11 @@
   let observer
   let currentTheme = get(theme)
   let aboveMap = new Map()
+  let constellations = null
 
   const unsubTheme = theme.subscribe(v => { currentTheme = v; dirty = true })
 
-  $: { ra0; dec0; fov; rotation; objects; lat; lon; time; showFovCircle; flashIds; dirty = true }
+  $: { ra0; dec0; fov; rotation; objects; lat; lon; time; showFovCircle; showConstellationLines; showConstellationNames; showConstellationBoundaries; showDsos; showHorizon; flashIds; dirty = true }
 
   $: updateAboveMap(lat, lon, time, objects)
 
@@ -284,6 +291,110 @@
     ctx.globalAlpha = 1
   }
 
+  // Circular mean of boundary vertices → [ra_h, dec_d] centroid for a constellation.
+  function _conCentroid(con) {
+    if (!con.bounds || con.bounds.length === 0) return null
+    const seen = new Set()
+    let sinSum = 0, cosSum = 0, decSum = 0, n = 0
+    for (const seg of con.bounds) {
+      for (const v of seg) {
+        const key = v[0] + ',' + v[1]
+        if (seen.has(key)) continue
+        seen.add(key)
+        const ang = v[0] / 24 * 2 * Math.PI
+        sinSum += Math.sin(ang)
+        cosSum += Math.cos(ang)
+        decSum += v[1]
+        n++
+      }
+    }
+    if (n === 0) return null
+    let ra_c = Math.atan2(sinSum, cosSum) / (2 * Math.PI) * 24
+    if (ra_c < 0) ra_c += 24
+    return [ra_c, decSum / n]
+  }
+
+  function drawConstellationBoundaries(ctx) {
+    if (!constellations) return
+    const nightly = currentTheme === 'nightly'
+    ctx.strokeStyle = nightly ? 'rgba(136,0,0,0.45)' : 'rgba(80,100,180,0.45)'
+    ctx.lineWidth = 1.0
+    ctx.setLineDash([3, 6])
+
+    // Subdivide each segment so that when one endpoint is behind the gnomonic
+    // projection plane (>90° from view centre), the visible portion still draws.
+    const STEPS = 8
+    for (const con of Object.values(constellations)) {
+      for (const seg of con.bounds) {
+        const ra1h = seg[0][0], dec1 = seg[0][1]
+        const ra2h = seg[1][0], dec2 = seg[1][1]
+        // Shortest-path RA interpolation across the 0h/24h wrap
+        let dRa = ra2h - ra1h
+        if (dRa > 12) dRa -= 24
+        if (dRa < -12) dRa += 24
+
+        let inPath = false
+        for (let i = 0; i <= STEPS; i++) {
+          const t = i / STEPS
+          const ra = (((ra1h + t * dRa) * 15) % 360 + 360) % 360
+          const dec = dec1 + t * (dec2 - dec1)
+          const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
+          if (pt) {
+            if (!inPath) { ctx.beginPath(); ctx.moveTo(pt.px, pt.py); inPath = true }
+            else { ctx.lineTo(pt.px, pt.py) }
+          } else {
+            if (inPath) { ctx.stroke(); inPath = false }
+          }
+        }
+        if (inPath) ctx.stroke()
+      }
+    }
+    ctx.setLineDash([])
+  }
+
+  function drawConstellationLines(ctx) {
+    if (!constellations) return
+    const nightly = currentTheme === 'nightly'
+    const hipMap = new Map()
+    for (const obj of objects) {
+      if (obj.hip) hipMap.set(obj.hip, obj.pos)
+    }
+    ctx.strokeStyle = nightly ? 'rgba(136,0,0,0.55)' : 'rgba(100,120,220,0.5)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([])
+    for (const con of Object.values(constellations)) {
+      for (const [hip_a, hip_b] of con.lines) {
+        const posA = hipMap.get(hip_a)
+        const posB = hipMap.get(hip_b)
+        if (!posA || !posB) continue
+        const ptA = projectToPixel(posA[0], posA[1], ra0, dec0, W, H, fov, rotation)
+        const ptB = projectToPixel(posB[0], posB[1], ra0, dec0, W, H, fov, rotation)
+        if (!ptA || !ptB) continue
+        if (!isOnScreen(ptA.px, ptA.py, W, H, 40) && !isOnScreen(ptB.px, ptB.py, W, H, 40)) continue
+        ctx.beginPath()
+        ctx.moveTo(ptA.px, ptA.py)
+        ctx.lineTo(ptB.px, ptB.py)
+        ctx.stroke()
+      }
+    }
+  }
+
+  function drawConstellationNames(ctx) {
+    if (!constellations) return
+    const nightly = currentTheme === 'nightly'
+    ctx.fillStyle = nightly ? 'rgba(136,0,0,0.75)' : 'rgba(160,185,230,0.8)'
+    ctx.font = '11px system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const con of Object.values(constellations)) {
+      const c = _conCentroid(con)
+      if (!c) continue
+      const pt = projectToPixel(c[0] * 15, c[1], ra0, dec0, W, H, fov, rotation)
+      if (!pt || !isOnScreen(pt.px, pt.py, W, H, 0)) continue
+      ctx.fillText(con.name, pt.px, pt.py)
+    }
+  }
+
   // Horizon is a great circle → projects to a straight line in gnomonic.
   // Sample 72 azimuth points, sort by px, extrapolate to canvas edges, fill below.
   function drawHorizonOverlay(ctx) {
@@ -343,7 +454,11 @@
     ctx.fillStyle = '#000'
     ctx.fillRect(0, 0, W, H)
 
-    drawHorizonOverlay(ctx)
+    if (showHorizon) drawHorizonOverlay(ctx)
+
+    if (showConstellationBoundaries) drawConstellationBoundaries(ctx)
+    if (showConstellationLines) drawConstellationLines(ctx)
+    if (showConstellationNames) drawConstellationNames(ctx)
 
     const renderedPx = new Map()
     const magLim = adaptiveMagLimit(fov)
@@ -360,15 +475,17 @@
     function tally(label) { survey[label] = (survey[label] ?? 0) + 1 }
 
     // Pass 1: DSOs (rendered first so stars paint on top)
-    for (const obj of objects) {
-      if (!obj.pos || obj.type !== 'dso') continue
-      if ((obj.mag ?? 8) > dsoMagLim) continue
-      const [ra, dec] = obj.pos
-      const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
-      if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
-      drawDso(ctx, obj, pt, aboveMap.get(obj.id) ?? false)
-      renderedPx.set(obj.id, { px: pt.px, py: pt.py })
-      tally(obj.dsoType ?? 'galaxy')
+    if (showDsos) {
+      for (const obj of objects) {
+        if (!obj.pos || obj.type !== 'dso') continue
+        if ((obj.mag ?? 8) > dsoMagLim) continue
+        const [ra, dec] = obj.pos
+        const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
+        if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
+        drawDso(ctx, obj, pt, aboveMap.get(obj.id) ?? false)
+        renderedPx.set(obj.id, { px: pt.px, py: pt.py })
+        tally(obj.dsoType ?? 'galaxy')
+      }
     }
 
     // Pass 2: stars and double stars (rendered on top of DSOs)
@@ -415,6 +532,10 @@
   }
 
   onMount(() => {
+    getMeta('constellations').then(data => {
+      if (data) { constellations = data; dirty = true }
+    })
+
     observer = new ResizeObserver(entries => {
       for (const e of entries) {
         W = e.contentRect.width

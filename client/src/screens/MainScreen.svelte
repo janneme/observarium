@@ -4,11 +4,12 @@
   import TopBar from '../components/TopBar.svelte'
   import MenuPanel from '../components/MenuPanel.svelte'
   import DateTimePicker from '../components/DateTimePicker.svelte'
+  import AboutPanel from '../components/AboutPanel.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { showFovCircle } from '../stores/ui.js'
+  import { showFovCircle, showConstellationLines, showConstellationNames, showConstellationBoundaries, showDsos, showHorizon } from '../stores/ui.js'
 
   let lat = 48.2     // default: Vienna
   let lon = 16.37
@@ -29,7 +30,7 @@
   let fetching = false
 
   const NORMAL_VIEW_MIN_FOV = 2
-  const NORMAL_VIEW_MAX_FOV = 60
+  const NORMAL_VIEW_MAX_FOV = 120
   const EUROPE_MIN_DEC = -35
   const TAP_THRESHOLD = 5
   const TAP_RADIUS = 20
@@ -41,6 +42,7 @@
 
   let menuOpen = false
   let showPicker = false
+  let showAbout = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -245,7 +247,7 @@
   {#if loading}
     <div class="hint">Locating…</div>
   {:else}
-    <SkyCanvas {ra0} {dec0} {fov} {objects} {lat} {lon} {time} showFovCircle={$showFovCircle} {flashIds} />
+    <SkyCanvas {ra0} {dec0} {fov} {objects} {lat} {lon} {time} showFovCircle={$showFovCircle} showConstellationLines={$showConstellationLines} showConstellationNames={$showConstellationNames} showConstellationBoundaries={$showConstellationBoundaries} showDsos={$showDsos} showHorizon={$showHorizon} {flashIds} />
   {/if}
 
   <TopBar
@@ -254,7 +256,7 @@
     on:timepick={() => { showPicker = true }}
   />
 
-  <MenuPanel open={menuOpen} on:close={() => { menuOpen = false }} />
+  <MenuPanel open={menuOpen} on:close={() => { menuOpen = false }} on:about={() => { showAbout = true }} />
 
   {#if showPicker}
     <DateTimePicker
@@ -262,6 +264,10 @@
       on:pick={(e) => { time = e.detail; showPicker = false }}
       on:cancel={() => { showPicker = false }}
     />
+  {/if}
+
+  {#if showAbout}
+    <AboutPanel on:close={() => { showAbout = false }} />
   {/if}
 </div>
 

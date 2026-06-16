@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte'
   import {
     showConstellationLines,
+    showConstellationNames,
     showConstellationBoundaries,
     showDsos,
     showHorizon,
@@ -54,7 +55,24 @@
       <span class="item-lbl">Const.<br>Lines</span>
     </button>
 
-    <!-- 3: Toggle constellation boundaries -->
+    <!-- 3: Toggle constellation names -->
+    <button class="grid-item" class:off={!$showConstellationNames} on:click={() => showConstellationNames.update(v => !v)} aria-label="Toggle constellation names">
+      <div class="icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="4" cy="6" r="2" fill="currentColor" stroke="none"/>
+          <circle cx="20" cy="8" r="1.6" fill="currentColor" stroke="none"/>
+          <circle cx="14" cy="19" r="1.6" fill="currentColor" stroke="none"/>
+          <line x1="8" y1="9" x2="13" y2="11" stroke-linecap="round" stroke-width="1.2" stroke-dasharray="1.5 1.5"/>
+          <text x="12" y="6" font-size="6" text-anchor="middle" fill="currentColor" stroke="none" style="font-style:italic">α</text>
+        </svg>
+        {#if !$showConstellationNames}
+          <svg class="strike" viewBox="0 0 24 24"><line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        {/if}
+      </div>
+      <span class="item-lbl">Const.<br>Names</span>
+    </button>
+
+    <!-- 4: Toggle constellation boundaries -->
     <button class="grid-item" class:off={!$showConstellationBoundaries} on:click={() => showConstellationBoundaries.update(v => !v)} aria-label="Toggle constellation boundaries">
       <div class="icon-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2.2">
@@ -264,7 +282,7 @@
     </button>
 
     <!-- 18: About -->
-    <button class="grid-item" on:click={stub} aria-label="About">
+    <button class="grid-item" on:click={() => { dispatch('about'); close() }} aria-label="About">
       <div class="icon-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
           <circle cx="12" cy="12" r="10"/>
