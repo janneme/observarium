@@ -6,11 +6,12 @@
   import DateTimePicker from '../components/DateTimePicker.svelte'
   import AboutPanel from '../components/AboutPanel.svelte'
   import DataSyncPanel from '../components/DataSyncPanel.svelte'
+  import FinderPanel from '../components/FinderPanel.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { showFovCircle, showConstellationLines, showConstellationNames, showConstellationBoundaries, showDsos, showHorizon } from '../stores/ui.js'
+  import { showFovCircle, showConstellationLines, showConstellationNames, showConstellationBoundaries, showDsos, showHorizon, finderViewActive } from '../stores/ui.js'
 
   let lat = 48.2     // default: Vienna
   let lon = 16.37
@@ -274,6 +275,10 @@
 
   {#if showSync}
     <DataSyncPanel on:close={() => { showSync = false }} />
+  {/if}
+
+  {#if $finderViewActive}
+    <FinderPanel mainRa0={ra0} mainDec0={dec0} {lat} {lon} {time} />
   {/if}
 </div>
 

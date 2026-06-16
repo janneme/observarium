@@ -21,6 +21,7 @@
   export let showDsos = true
   export let showHorizon = true
   export let flashIds = new Set()
+  export let finderMode = false
 
   let canvas
   let W = 0, H = 0
@@ -33,7 +34,7 @@
 
   const unsubTheme = theme.subscribe(v => { currentTheme = v; dirty = true })
 
-  $: { ra0; dec0; fov; rotation; objects; lat; lon; time; showFovCircle; showConstellationLines; showConstellationNames; showConstellationBoundaries; showDsos; showHorizon; flashIds; dirty = true }
+  $: { ra0; dec0; fov; rotation; objects; lat; lon; time; showFovCircle; showConstellationLines; showConstellationNames; showConstellationBoundaries; showDsos; showHorizon; flashIds; finderMode; dirty = true }
 
   $: updateAboveMap(lat, lon, time, objects)
 
@@ -166,9 +167,26 @@
     ctx.globalAlpha = above ? 0.92 : 0.22
     ctx.beginPath()
     ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
-    ctx.fillStyle = nightly ? '#e00000' : (obj.clr || '#ffffff')
+    let fill
+    if (nightly) {
+      fill = '#e00000'
+    } else if (finderMode) {
+      const m = Array.isArray(obj.mag) ? obj.mag[0] : (obj.mag ?? 99)
+      fill = (m <= 3 && obj.clr) ? _blendToWhite(obj.clr, 0.72) : '#ffffff'
+    } else {
+      fill = obj.clr || '#ffffff'
+    }
+    ctx.fillStyle = fill
     ctx.fill()
     ctx.globalAlpha = 1
+  }
+
+  function _blendToWhite(hex, t) {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    const h = v => Math.round(v + (255 - v) * t).toString(16).padStart(2, '0')
+    return `#${h(r)}${h(g)}${h(b)}`
   }
 
   function _darkenHex(hex, factor) {

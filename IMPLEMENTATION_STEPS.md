@@ -1038,7 +1038,7 @@ Implementation notes:
 
 ## Phase 4 — Object Discovery
 
-### Step 23: Finder View
+### Step 23: Finder View ✅
 
 **README refs:** §5.3, §5.3.1, §5.3.2  
 **Deliverable:** Finder View screen with round clip, fixed FOV, swipe-only
@@ -1058,6 +1058,28 @@ Technical notes:
   the `findingPaths` IndexedDB meta entry.
 - "Record guide to find object" button: always rendered; navigates to screen
   5.12 (README §5.3.2).
+
+Implementation notes:
+
+- `client/src/components/FinderPanel.svelte`: fixed full-screen overlay
+  (`position: fixed; inset: 0; z-index: 100`) with a column flex layout.
+  Circle occupies `calc(100vw - 2vh)` square with `1vh` margin on all sides,
+  so the sky view takes up as much width as possible while remaining a circle.
+- `clip-path: circle(50%)` applied to the inner `.circle-wrap` div (not the
+  container) so the `::after` ring border on `.circle-container` renders
+  outside the clipped region.
+- `on:pointerdown|stopPropagation` on the overlay prevents `MainScreen`'s
+  `pointerdown` handler (which calls `e.preventDefault()`) from suppressing
+  synthesized `click` events on the overlay's children.
+- `finderMode` prop added to `SkyCanvas`: in daily theme, stars with mag > 3
+  render white; stars mag ≤ 3 render their spectral colour blended 72% toward
+  white (`_blendToWhite`), mimicking the faint colour tints visible to the eye
+  for only the brightest stars. Nightly theme is unaffected.
+- Keyboard arrow keys pan the finder by `FINDER_FOV / 3` (2.5°) per press,
+  with RA step divided by `cos(dec)`. The listener is registered in capture
+  phase (`addEventListener('keydown', handler, true)`) so it intercepts before
+  `MainScreen`'s handler and the main view does not pan simultaneously.
+  Mounted/destroyed with `onMount`/`onDestroy`.
 
 ---
 
