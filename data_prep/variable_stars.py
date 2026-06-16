@@ -22,10 +22,11 @@ _VIZIER_TAP_URL = "https://tapvizier.cds.unistra.fr/TAPVizieR/tap"
 
 # VizieR TAP: GCVS bright variables with documented amplitude.
 _GCVS_ADQL = """\
-SELECT "VarName", "magMax", "Min1"
+SELECT TOP 100000 "VarName", "magMax", "Min1"
 FROM   "B/gcvs/gcvs_cat"
 WHERE  "magMax" <= {max_mag}
   AND  "Min1"   IS NOT NULL
+ORDER BY "magMax"
 """
 
 # SIMBAD TAP: GCVS identifier → HIP identifier crossmatch.
@@ -75,9 +76,23 @@ class VariableStarPipeline:
         """Return the path to the cached CSV for this magnitude limit."""
         return self._cache_dir / f"variable_stars_m{self._max_mag:g}.csv"
 
+    @classmethod
+    def find_best_cached_mag(cls, cache_dir: Path, max_mag: float) -> float | None:
+        """Return the highest cached magnitude <= max_mag, or None if none found."""
+        best: float | None = None
+        for p in cache_dir.glob("variable_stars_m*.csv"):
+            try:
+                mag = float(p.stem[len("variable_stars_m"):])
+            except ValueError:
+                continue
+            if mag <= max_mag and (best is None or mag > best):
+                best = mag
+        return best
+
     def run(self) -> Path:
         """Fetch GCVS + HIP crossmatch, write CSV, return its path."""
         gcvs_rows = self._fetch_gcvs()
+        print(f"GCVS           : {len(gcvs_rows):,} entries with magMax <= {self._max_mag}")
         xmatch = self._fetch_hip_xmatch(gcvs_rows)
         rows = self._merge(gcvs_rows, xmatch)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -86,12 +101,12 @@ class VariableStarPipeline:
             writer = csv.writer(fh)
             writer.writerow(_CSV_FIELDS)
             writer.writerows(rows)
-        if self._debug:
-            print(f"Variable stars : {len(rows):,} written \u2192 {out.name}")
+        print(f"Variable stars : {len(rows):,} written \u2192 {out.name}")
         return out
 
     def _fetch_gcvs(self) -> list[dict[str, Any]]:
         """Query VizieR TAP for GCVS bright variables."""
+        print(f"Querying VizieR GCVS (magMax <= {self._max_mag})\u2026")
         tap = TapPlus(url=_VIZIER_TAP_URL)
         job = tap.launch_job(_GCVS_ADQL.format(max_mag=self._max_mag))
         rows: list[dict[str, Any]] = []
@@ -103,14 +118,13 @@ class VariableStarPipeline:
             except (ValueError, TypeError):
                 continue
             rows.append({"var_name": var_name, "mag_max": mag_max, "min1": min1})
-        if self._debug:
-            print(f"GCVS           : {len(rows):,} entries with magMax <= {self._max_mag}")
         return rows
 
     def _fetch_hip_xmatch(
         self, gcvs_rows: list[dict[str, Any]]
     ) -> dict[str, str]:
         """Return mapping SIMBAD 'V* ...' id → 'HIP XXXXX' id."""
+        print(f"Crossmatching {len(gcvs_rows)} GCVS entries with SIMBAD HIP…")
         simbad_ids = [_gcvs_simbad_id(r["var_name"]) for r in gcvs_rows]
         placeholders = ", ".join(f"'{sid}'" for sid in simbad_ids)
         table = Simbad.query_tap(_HIP_XMATCH_ADQL.format(placeholders=placeholders))

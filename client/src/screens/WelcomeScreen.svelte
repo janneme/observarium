@@ -1,10 +1,9 @@
 <script>
   import { push } from 'svelte-spa-router'
-  import JSZip from 'jszip'
   import CustomInput from '../components/CustomInput.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
-  import { login, getManifest, getImagesUrl, getObservations } from '../lib/api.js'
-  import { bulkPutObjects, bulkPutImages, bulkPutObservations, setMeta, computeZone, storeTier1Blob, bulkPutZoneT2Blobs, storeManifest, getStoredManifest, getCompletedChunks, markChunkComplete } from '../lib/db.js'
+  import { login } from '../lib/api.js'
+  import { runSync } from '../lib/datasync.js'
   import { keyboardActive } from '../stores/keyboard.js'
 
   let username = ''
@@ -32,119 +31,6 @@
     return `${bytes} B`
   }
 
-  async function fetchWithProgress(url, onProgress) {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`)
-    const contentLength = res.headers.get('Content-Length')
-    const total = contentLength ? parseInt(contentLength, 10) : 0
-    const reader = res.body.getReader()
-    const chunks = []
-    let received = 0
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      chunks.push(value)
-      received += value.length
-      if (total > 0) onProgress(received / total)
-    }
-    const merged = new Uint8Array(received)
-    let offset = 0
-    for (const chunk of chunks) {
-      merged.set(chunk, offset)
-      offset += chunk.length
-    }
-    return merged
-  }
-
-  function objectIdFromStar(star) {
-    if (star.hip) return `star_HIP${star.hip}`
-    if (star.hd) return `star_HD${star.hd}`
-    return null
-  }
-
-  function objectIdFromDso(dso) {
-    if (dso.m) return `dso_M${String(dso.m).padStart(3, '0')}`
-    if (dso.ngc) return `dso_NGC${dso.ngc}`
-    if (dso.ic) return `dso_IC${dso.ic}`
-    return null
-  }
-
-  async function downloadZip(url, onProgress) {
-    const cb = onProgress || (() => {})
-    const data = await fetchWithProgress(url, cb)
-    return JSZip.loadAsync(data)
-  }
-
-  async function ingestT1(url) {
-    const zip = await downloadZip(url)
-    const file = zip.file('stars_t1.csv')
-    if (!file) throw new Error('stars_t1.csv not found in stars_t1.zip')
-    const text = await file.async('string')
-    await storeTier1Blob(text)
-  }
-
-  async function ingestObjects(url) {
-    const zip = await downloadZip(url)
-    const file = zip.file('objects.json')
-    if (!file) throw new Error('objects.json not found in objects.zip')
-    const text = await file.async('string')
-    const objectsJson = JSON.parse(text)
-    const items = parseObjects(objectsJson)
-    await bulkPutObjects(items)
-    const metaKeys = extractMetaKeys(objectsJson)
-    for (const [k, v] of Object.entries(metaKeys)) await setMeta(k, v)
-  }
-
-  async function ingestChunk(url, filename, onProgress) {
-    const zip = await downloadZip(url, onProgress)
-    for (const [entryName, file] of Object.entries(zip.files)) {
-      if (file.dir || !entryName.endsWith('.csv')) continue
-      const zone = parseInt(entryName.replace('.csv', ''), 10)
-      if (isNaN(zone)) continue
-      const csv = await file.async('string')
-      await bulkPutZoneT2Blobs([{ zone, csv }])
-    }
-    await markChunkComplete(filename)
-  }
-
-  function parseObjects(objectsJson) {
-    const items = []
-    for (const [key, value] of Object.entries(objectsJson)) {
-      if (key.startsWith('stars')) {
-        // Stars are now delivered via CSV blobs; skip JSON star entries.
-        continue
-      } else if (key === 'dso') {
-        for (const [constellation, dsos] of Object.entries(value)) {
-          for (const dso of dsos) {
-            const id = objectIdFromDso(dso)
-            if (id) {
-              const ra_deg = dso.pos[0] * 15
-              items.push({ constellation, ...dso, pos: [ra_deg, dso.pos[1]], id, type: 'dso', dsoType: dso.type, zone: computeZone(ra_deg, dso.pos[1]) })
-            }
-          }
-        }
-      } else if (key.startsWith('double_stars')) {
-        // value is {wds_id: {wds, disc, pos, pairs, ...}}
-        for (const [wdsId, ds] of Object.entries(value)) {
-          const ra_deg = ds.pos[0] * 15
-          items.push({ ...ds, pos: [ra_deg, ds.pos[1]], id: `double_WDS${wdsId}`, type: 'double_star', zone: computeZone(ra_deg, ds.pos[1]) })
-        }
-      } else {
-        // constellations, solar_system, moon_features → store in meta
-        // (handled separately after this function)
-      }
-    }
-    return items
-  }
-
-  function extractMetaKeys(objectsJson) {
-    const meta = {}
-    for (const key of ['constellations', 'solar_system', 'moon_features']) {
-      if (objectsJson[key] !== undefined) meta[key] = objectsJson[key]
-    }
-    return meta
-  }
-
   async function handleLoad() {
     if (!hasToken && (!username || !password)) {
       errorMsg = 'Enter username and password'
@@ -157,68 +43,18 @@
     observationsDone = false
 
     try {
-      // Step 1 — authenticate (skip if we already have a token)
       if (!hasToken) {
         await login(username, password)
       }
 
-      // Step 2 — objects (manifest-driven)
-      const manifest = await getManifest()
-      const completedChunks = await getCompletedChunks()
-      const t2Total = manifest.t2_chunks
-        .filter(c => !completedChunks.has(c.filename))
-        .reduce((s, c) => s + c.size, 0)
-      const totalBytes = manifest.stars_t1.size + manifest.objects.size + t2Total
-      objectsSize = totalBytes
-      let bytesLoaded = 0
-      const onChunkProgress = (chunkSize) => (p) => {
-        objectsProgress = (bytesLoaded + chunkSize * p) / totalBytes
-      }
-      await ingestT1(manifest.stars_t1.url)
-      bytesLoaded += manifest.stars_t1.size
-      objectsProgress = bytesLoaded / totalBytes
-      await ingestObjects(manifest.objects.url)
-      bytesLoaded += manifest.objects.size
-      objectsProgress = bytesLoaded / totalBytes
-      for (const chunk of manifest.t2_chunks) {
-        if (completedChunks.has(chunk.filename)) continue
-        await ingestChunk(chunk.url, chunk.filename, onChunkProgress(chunk.size))
-        bytesLoaded += chunk.size
-        objectsProgress = bytesLoaded / totalBytes
-      }
-      await storeManifest(manifest)
-      objectsProgress = 1
-
-      // Step 3 — images
-      const imagesUrl = await getImagesUrl()
-      const imagesData = await fetchWithProgress(imagesUrl, p => { imagesProgress = p * 0.7 })
-
-      const imagesZip = await JSZip.loadAsync(imagesData, {
-        onUpdate(metadata) {
-          if (metadata.percent != null) imagesProgress = 0.7 + metadata.percent / 100 * 0.3
-        }
+      const result = await runSync({
+        onObjectsProgress: p => { objectsProgress = p },
+        onImagesProgress: p => { imagesProgress = p },
+        onObservationsDone: () => { observationsDone = true },
       })
-
-      const imageItems = []
-      for (const [filename, file] of Object.entries(imagesZip.files)) {
-        if (file.dir) continue
-        const ext = filename.split('.').pop().toLowerCase()
-        const catalogueId = filename.replace(/\.[^.]+$/, '')
-        const blob = await file.async('blob')
-        const mimeType = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'
-        imageItems.push({ catalogueId, blob: new Blob([blob], { type: mimeType }), filename })
-      }
-      imagesSize = imageItems.reduce((s, item) => s + item.blob.size, 0)
-      await bulkPutImages(imageItems)
-      imagesProgress = 1
-
-      // Step 4 — observations
-      const observations = await getObservations()
-      observationsSize = JSON.stringify(observations).length
-      if (Array.isArray(observations) && observations.length > 0) {
-        await bulkPutObservations(observations)
-      }
-      observationsDone = true
+      objectsSize = result.objectsSize
+      imagesSize = result.imagesSize
+      observationsSize = result.observationsSize
 
       phase = 'done'
     } catch (err) {

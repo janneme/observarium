@@ -5,6 +5,7 @@
   import MenuPanel from '../components/MenuPanel.svelte'
   import DateTimePicker from '../components/DateTimePicker.svelte'
   import AboutPanel from '../components/AboutPanel.svelte'
+  import DataSyncPanel from '../components/DataSyncPanel.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
@@ -43,6 +44,7 @@
   let menuOpen = false
   let showPicker = false
   let showAbout = false
+  let showSync = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -256,7 +258,7 @@
     on:timepick={() => { showPicker = true }}
   />
 
-  <MenuPanel open={menuOpen} on:close={() => { menuOpen = false }} on:about={() => { showAbout = true }} />
+  <MenuPanel open={menuOpen} on:close={() => { menuOpen = false }} on:about={() => { showAbout = true }} on:update={() => { showSync = true }} />
 
   {#if showPicker}
     <DateTimePicker
@@ -268,6 +270,10 @@
 
   {#if showAbout}
     <AboutPanel on:close={() => { showAbout = false }} />
+  {/if}
+
+  {#if showSync}
+    <DataSyncPanel on:close={() => { showSync = false }} />
   {/if}
 </div>
 

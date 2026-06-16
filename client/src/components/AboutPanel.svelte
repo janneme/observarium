@@ -1,11 +1,30 @@
 <script>
-  import { createEventDispatcher } from 'svelte'
+  import { onMount, createEventDispatcher } from 'svelte'
+  import { getCatalogueCounts } from '../lib/db.js'
 
   const dispatch = createEventDispatcher()
   const version = import.meta.env.VITE_APP_VERSION_DATE || '0.1.0'
 
+  let counts = undefined  // undefined = loading, null = no data synced yet
+
   function close() { dispatch('close') }
   function handleKeydown(e) { if (e.key === 'Escape') close() }
+
+  function fmt(n) {
+    if (n == null) return '—'
+    return n.toLocaleString()
+  }
+
+  $: val = (n) => counts === undefined ? '…' : fmt(counts?.[n])
+
+  onMount(async () => {
+    try {
+      counts = await getCatalogueCounts()
+    } catch (e) {
+      console.error('[AboutPanel] getCatalogueCounts failed:', e)
+      counts = null
+    }
+  })
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -32,34 +51,19 @@
     <p class="tagline">A sky atlas for visual observers</p>
     <p class="version">Build {version}</p>
 
-    <h3 class="section-head">Data sources</h3>
-    <ul class="credits">
-      <li>
-        <span class="src-name">Stars</span>
-        AT-HYG v3.3 (Tycho-2 + Hipparcos + Yale GC) &amp; Gaia DR3 supplement
-        <span class="licence">astronexus · CC-BY-SA 4.0</span>
-      </li>
-      <li>
-        <span class="src-name">Deep sky objects</span>
-        OpenNGC
-        <span class="licence">Mattia Verga · CC-BY-SA 4.0</span>
-      </li>
-      <li>
-        <span class="src-name">Constellation lines &amp; boundaries</span>
-        Stellarium modern sky culture
-        <span class="licence">Stellarium contributors · GPL v2</span>
-      </li>
-      <li>
-        <span class="src-name">Double stars</span>
-        Washington Double Star Catalog (WDS) via VizieR
-        <span class="licence">US Naval Observatory · public domain</span>
-      </li>
-      <li>
-        <span class="src-name">Moon features</span>
-        USGS / IAU Gazetteer of Planetary Nomenclature
-        <span class="licence">public domain</span>
-      </li>
-    </ul>
+    <h3 class="section-head">Catalogue</h3>
+    <dl class="counts">
+      <dt>Stars</dt>             <dd>{val('stars')}</dd>
+      <dt>Variable stars</dt>    <dd>{val('variableStars')}</dd>
+      <dt>Double stars</dt>      <dd>{val('doubleStars')}</dd>
+      <dt>Galaxies</dt>          <dd>{val('galaxies')}</dd>
+      <dt>Open clusters</dt>     <dd>{val('openClusters')}</dd>
+      <dt>Globular clusters</dt> <dd>{val('globularClusters')}</dd>
+      <dt>Planetary nebulae</dt> <dd>{val('planetaryNebulae')}</dd>
+      <dt>Other nebulae</dt>     <dd>{val('nebulae')}</dd>
+      <dt>DSO images</dt>        <dd>{val('dsoImages')}</dd>
+      <dt>Asteroids</dt>         <dd>{val('asteroids')}</dd>
+    </dl>
   </div>
 </div>
 
@@ -159,31 +163,23 @@
   opacity: 0.5;
 }
 
-.credits {
+.counts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 16px;
   margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
-.credits li {
+.counts dt {
   font-size: 0.82rem;
-  line-height: 1.45;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  opacity: 0.7;
 }
 
-.src-name {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-.licence {
-  font-size: 0.72rem;
-  opacity: 0.45;
+.counts dd {
+  margin: 0;
+  font-size: 0.82rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 :global([data-theme='nightly']) .panel {

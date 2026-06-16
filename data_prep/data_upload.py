@@ -77,6 +77,34 @@ def _find_csv(mag: int | None, prefix: str) -> Path | None:
     return matches[-1] if matches else None
 
 
+def _count_t1_stats(t1_path: Path) -> dict:
+    """Count T1 stars, variable stars, and double stars in the T1 CSV.
+
+    T1 CSV header: ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm
+    Index 2 = mg (colon-separated range means variable).
+    Index 12 = db (non-empty means double star).
+    """
+    stars = 0
+    variable = 0
+    double = 0
+    with t1_path.open("r", encoding="utf-8") as fh:
+        first = True
+        for line in fh:
+            if first:
+                first = False
+                continue
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            stars += 1
+            cols = line.split(",", 13)
+            if len(cols) > 2 and ":" in cols[2]:
+                variable += 1
+            if len(cols) > 12 and cols[12]:
+                double += 1
+    return {"stars": stars, "variable": variable, "double": double}
+
+
 def _write_stars_t1_zip(t1_path: Path, target: Path) -> None:
     with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(t1_path, arcname="stars_t1.csv")
@@ -97,9 +125,17 @@ def _write_chunk_zip(target: Path, zone_data: dict[int, str]) -> None:
             zf.writestr(f"{zone:04d}.csv", csv)
 
 
-def _pack_t2_chunks(t2_path: Path, out_dir: Path) -> list[tuple[str, list[int]]]:
-    """Bin-pack zones from T2 CSV into chunk ZIPs. Returns list of (filename, zones)."""
+def _pack_t2_chunks(
+    t2_path: Path, out_dir: Path
+) -> tuple[list[tuple[str, list[int]]], dict]:
+    """Bin-pack zones from T2 CSV into chunk ZIPs. Returns (chunks, stats).
+
+    T2 CSV format: z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd (no header in zone blobs).
+    Index 3 = mg; colon-separated range means variable star.
+    """
     zones: dict[int, list[str]] = {}
+    t2_stars = 0
+    t2_variable = 0
     with t2_path.open("r", encoding="utf-8") as fh:
         first = True
         for line in fh:
@@ -109,9 +145,12 @@ def _pack_t2_chunks(t2_path: Path, out_dir: Path) -> list[tuple[str, list[int]]]
                 continue  # skip header
             if not line.strip():
                 continue
-            comma = line.index(",")
-            zone = int(line[:comma])
+            cols = line.split(",", 4)
+            zone = int(cols[0])
             zones.setdefault(zone, []).append(line)
+            t2_stars += 1
+            if len(cols) > 3 and ":" in cols[3]:
+                t2_variable += 1
 
     chunks: list[tuple[str, list[int]]] = []
     chunk_idx = 0
@@ -140,7 +179,7 @@ def _pack_t2_chunks(t2_path: Path, out_dir: Path) -> list[tuple[str, list[int]]]
         _write_chunk_zip(out_dir / chunk_name, current_zone_data)
         chunks.append((chunk_name, list(current_zones)))
 
-    return chunks
+    return chunks, {"stars": t2_stars, "variable": t2_variable}
 
 
 def _write_images_zip(target: Path) -> None:
@@ -199,15 +238,18 @@ def main() -> int:
     _write_objects_zip(objects, objects_zip)
 
     print("Building stars_t1.zip...")
+    t1_stats = {"stars": 0, "variable": 0, "double": 0}
     if t1_path:
+        t1_stats = _count_t1_stats(t1_path)
         _write_stars_t1_zip(t1_path, stars_t1_zip)
     else:
         print("  WARNING: stars_t1 CSV not found, skipped")
 
     print("Packing T2 chunks...")
     t2_chunks: list[tuple[str, list[int]]] = []
+    t2_stats = {"stars": 0, "variable": 0}
     if t2_path:
-        t2_chunks = _pack_t2_chunks(t2_path, TMP_DIR)
+        t2_chunks, t2_stats = _pack_t2_chunks(t2_path, TMP_DIR)
         print(f"  {len(t2_chunks)} chunks produced")
     else:
         print("  WARNING: stars_t2 CSV not found, no T2 chunks")
@@ -218,6 +260,13 @@ def main() -> int:
     print("Generating manifest...")
     manifest = {
         "version": date.today().isoformat(),
+        "stats": {
+            "stars_t1": t1_stats["stars"],
+            "variable_t1": t1_stats["variable"],
+            "double_t1": t1_stats["double"],
+            "stars_t2": t2_stats["stars"],
+            "variable_t2": t2_stats["variable"],
+        },
         "stars_t1": {
             "filename": "stars_t1.zip",
             "hash": "sha256:" + _sha256(stars_t1_zip) if stars_t1_zip.exists() else "",

@@ -184,6 +184,10 @@ def main() -> None:
     # Determine targets and star kwargs
     if args.group == "stars":
         targets = ["variable_stars", "stars", "double_stars"]
+    elif args.only == "variable_stars":
+        # variable_stars alone produces only a cache file; always follow with
+        # stars so the output is complete and uploadable in one step.
+        targets = ["variable_stars", "stars"]
     else:
         targets = [args.only] if args.only else _ALL_CATEGORIES
     star_kwargs: dict[str, float] = {}
@@ -203,8 +207,6 @@ def main() -> None:
 
 def _prepare_var_index(args: argparse.Namespace) -> dict[int, tuple[float, float]]:
     """Prepare and return the variable-star index for star enrichment."""
-    if args.only == "stars":
-        return {}
     var_pipeline = VariableStarPipeline(
         _SOURCES_DIR, args.var_max_mag, cache_dir=_CACHE_DIR, debug=args.debug
     )
@@ -212,16 +214,26 @@ def _prepare_var_index(args: argparse.Namespace) -> dict[int, tuple[float, float
         if not var_pipeline.csv_path().exists():
             var_pipeline.run()
     else:
-        # Strict mode: require existing variable-star CSV
+        # Strict mode: require existing variable-star CSV (exact or best-match fallback)
         if not var_pipeline.csv_path().exists():
-            csv_name = var_pipeline.csv_path().name
-            print(
-                f"Variable-star data {csv_name} not found.\n"
-                "Run 'python main.py --only variable_stars --var-max-mag "
-                f"{args.var_max_mag}'\n"
-                "or 'python main.py --group stars' to create it, then re-run."
-            )
-            sys.exit(2)
+            best_mag = VariableStarPipeline.find_best_cached_mag(_CACHE_DIR, args.var_max_mag)
+            if best_mag is not None:
+                var_pipeline = VariableStarPipeline(
+                    _SOURCES_DIR, best_mag, cache_dir=_CACHE_DIR, debug=args.debug
+                )
+                print(
+                    f"Variable stars : using {var_pipeline.csv_path().name}"
+                    f" (best match for magMax ≤ {args.var_max_mag:g})"
+                )
+            else:
+                csv_name = var_pipeline.csv_path().name
+                print(
+                    f"Variable-star data {csv_name} not found.\n"
+                    "Run 'python main.py --only variable_stars --var-max-mag "
+                    f"{args.var_max_mag}'\n"
+                    "or 'python main.py --group stars' to create it, then re-run."
+                )
+                sys.exit(2)
     return var_pipeline.load_index()
 
 

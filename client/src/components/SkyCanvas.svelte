@@ -171,15 +171,26 @@
     ctx.globalAlpha = 1
   }
 
+  function _darkenHex(hex, factor) {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    const h = v => Math.round(v * factor).toString(16).padStart(2, '0')
+    return `#${h(r)}${h(g)}${h(b)}`
+  }
+
   // Variable star: solid ring around the disk (Hipparcos convention, amplitude ≥ 1 mag)
   function addVariableRing(ctx, obj, pt, above) {
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
     ctx.globalAlpha = above ? 0.7 : 0.15
     ctx.beginPath()
-    ctx.arc(pt.px, pt.py, r + Math.max(2.5, r * 0.8), 0, Math.PI * 2)
-    ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
-    ctx.lineWidth = 0.9
+    const gap = Math.max(1.5, r * 1.5)
+    const lw  = Math.max(0.9, r * 1.0)
+    ctx.arc(pt.px, pt.py, r + gap, 0, Math.PI * 2)
+    const starColor = nightly ? '#e00000' : (obj.clr || '#ffffff')
+    ctx.strokeStyle = _darkenHex(starColor, 0.45)
+    ctx.lineWidth = lw
     ctx.stroke()
     ctx.globalAlpha = 1
   }

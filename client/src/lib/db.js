@@ -244,6 +244,9 @@ export async function storeManifest(manifest) {
     t2_chunks: manifest.t2_chunks.map(({ filename, hash, size, zones }) => ({ filename, hash, size, zones })),
   };
   await setMeta("dataManifest", stored);
+  if (manifest.stats) {
+    await setMeta("catalogueStats", manifest.stats);
+  }
 }
 
 export async function getStoredManifest() {
@@ -272,6 +275,37 @@ export async function bulkPutObjects(items) {
   const tx = db.transaction("objects", "readwrite");
   await Promise.all(items.map((item) => tx.store.put(item)));
   await tx.done;
+  const counts = {};
+  for (const item of items) {
+    const key = item.type === "dso" ? (item.dsoType || "unknown") : item.type;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  await setMeta("catalogueObjectCounts", counts);
+}
+
+export async function getCatalogueCounts() {
+  const db = await getDB();
+  const [starStats, objCounts, solarSystem, imageCount] = await Promise.all([
+    getMeta("catalogueStats"),
+    getMeta("catalogueObjectCounts"),
+    getMeta("solar_system"),
+    db.count("images"),
+  ]);
+  if (!starStats && !objCounts) return null;
+  const s = starStats || {};
+  const o = objCounts || {};
+  return {
+    stars: (s.stars_t1 || 0) + (s.stars_t2 || 0),
+    variableStars: (s.variable_t1 || 0) + (s.variable_t2 || 0),
+    doubleStars: (s.double_t1 || 0) + (o.double_star || 0),
+    galaxies: (o.galaxy || 0) + (o["elliptical galaxy"] || 0) + (o["spiral galaxy"] || 0),
+    openClusters: o["open cluster"] || 0,
+    globularClusters: o["globular cluster"] || 0,
+    planetaryNebulae: o["planetary nebula"] || 0,
+    nebulae: (o["emission nebula"] || 0) + (o["reflection nebula"] || 0) + (o["dark nebula"] || 0),
+    dsoImages: imageCount || 0,
+    asteroids: solarSystem?.minor_planets?.length || 0,
+  };
 }
 
 export async function bulkPutImages(items) {
