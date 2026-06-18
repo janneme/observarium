@@ -1083,7 +1083,7 @@ Implementation notes:
 
 ---
 
-### Step 24: Search screen
+### Step 24: Search screen ✅
 
 **README refs:** §5.4  
 **Deliverable:** Fully functional Search screen with instant results, in-app

@@ -14,7 +14,7 @@ function flashKey(label) {
 const _current = writable(null)
 
 // True when any input has keyboard focus — use to show/hide OnScreenKeyboard.
-export const keyboardActive = derived(_current, $c => $c !== null)
+export const keyboardActive = derived(_current, ($c) => $c !== null)
 
 export function register(target) {
   _current.set(target)
@@ -74,18 +74,24 @@ export function handleKeyDown(e) {
   let handled = true
   let label = null
   if (e.key === 'Backspace') {
-    cur.backspace(); label = 'BACKSPACE'
+    cur.backspace()
+    label = 'BACKSPACE'
   } else if (e.key === 'Enter') {
-    if (typeof cur.enter === 'function') cur.enter(); else cur.insertChar('\n')
+    if (typeof cur.enter === 'function') cur.enter()
+    else cur.insertChar('\n')
     label = 'ENTER'
   } else if (e.key === 'ArrowLeft') {
-    cur.moveLeft(); label = 'LEFT'
+    cur.moveLeft()
+    label = 'LEFT'
   } else if (e.key === 'ArrowRight') {
-    cur.moveRight(); label = 'RIGHT'
+    cur.moveRight()
+    label = 'RIGHT'
   } else if (e.key === 'ArrowUp') {
-    cur.moveUp(); label = 'UP'
+    cur.moveUp()
+    label = 'UP'
   } else if (e.key === 'ArrowDown') {
-    cur.moveDown(); label = 'DOWN'
+    cur.moveDown()
+    label = 'DOWN'
   } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
     cur.insertChar(e.key)
     label = e.key === ' ' ? 'SPACE' : e.key

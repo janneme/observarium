@@ -13,7 +13,7 @@
 
   let hasToken = !!sessionStorage.getItem('token')
 
-  let phase = 'idle'  // idle | loading | done | error
+  let phase = 'idle' // idle | loading | done | error
   let errorMsg = ''
 
   // Per-phase progress: each is 0..1
@@ -48,9 +48,15 @@
       }
 
       const result = await runSync({
-        onObjectsProgress: p => { objectsProgress = p },
-        onImagesProgress: p => { imagesProgress = p },
-        onObservationsDone: () => { observationsDone = true },
+        onObjectsProgress: (p) => {
+          objectsProgress = p
+        },
+        onImagesProgress: (p) => {
+          imagesProgress = p
+        },
+        onObservationsDone: () => {
+          observationsDone = true
+        },
       })
       objectsSize = result.objectsSize
       imagesSize = result.imagesSize
@@ -82,14 +88,12 @@
     <div class="app-version">v{appVersion}</div>
 
     <p class="app-description">
-      Mobile astronomy companion — identify sky objects, find them through the
-      finder scope, track observations, and test your knowledge with quizzes.
+      Mobile astronomy companion — identify sky objects, find them through the finder scope, track observations, and
+      test your knowledge with quizzes.
     </p>
 
     {#if phase === 'idle' || phase === 'error'}
-      <p class="welcome-text">
-        Welcome. Load your observation data to get started.
-      </p>
+      <p class="welcome-text">Welcome. Load your observation data to get started.</p>
 
       <div class="form">
         {#if !hasToken}
@@ -115,7 +119,11 @@
           <div class="progress-track">
             <div class="progress-bar" style="width: {Math.round(objectsProgress * 100)}%"></div>
           </div>
-          <span class="phase-pct">{Math.round(objectsProgress * 100)}%{phase === 'done' && objectsSize ? ` (${formatSize(objectsSize)})` : ''}</span>
+          <span class="phase-pct"
+            >{Math.round(objectsProgress * 100)}%{phase === 'done' && objectsSize
+              ? ` (${formatSize(objectsSize)})`
+              : ''}</span
+          >
         </div>
 
         <div class="phase-row">
@@ -123,7 +131,11 @@
           <div class="progress-track">
             <div class="progress-bar" style="width: {Math.round(imagesProgress * 100)}%"></div>
           </div>
-          <span class="phase-pct">{Math.round(imagesProgress * 100)}%{phase === 'done' && imagesSize ? ` (${formatSize(imagesSize)})` : ''}</span>
+          <span class="phase-pct"
+            >{Math.round(imagesProgress * 100)}%{phase === 'done' && imagesSize
+              ? ` (${formatSize(imagesSize)})`
+              : ''}</span
+          >
         </div>
 
         <div class="phase-row">
@@ -131,7 +143,11 @@
           <div class="progress-track">
             <div class="progress-bar" style="width: {observationsDone ? 100 : 0}%"></div>
           </div>
-          <span class="phase-pct">{observationsDone ? '100' : '0'}%{phase === 'done' && observationsSize ? ` (${formatSize(observationsSize)})` : ''}</span>
+          <span class="phase-pct"
+            >{observationsDone ? '100' : '0'}%{phase === 'done' && observationsSize
+              ? ` (${formatSize(observationsSize)})`
+              : ''}</span
+          >
         </div>
       </div>
 
@@ -149,138 +165,138 @@
 </div>
 
 <style>
-.welcome-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  height: 100vh;
-  overflow: hidden;
-  padding: 1rem;
-  box-sizing: border-box;
-}
+  .welcome-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100vh;
+    overflow: hidden;
+    padding: 1rem;
+    box-sizing: border-box;
+  }
 
-.welcome-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 1.5rem;
-  box-sizing: border-box;
-}
+  .welcome-card {
+    width: 100%;
+    max-width: 420px;
+    padding: 1.5rem;
+    box-sizing: border-box;
+  }
 
-.app-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--fg);
-}
+  .app-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+  }
 
-.app-subtitle {
-  font-size: 0.9rem;
-  opacity: 0.6;
-  margin-bottom: 0.25rem;
-}
+  .app-subtitle {
+    font-size: 0.9rem;
+    opacity: 0.6;
+    margin-bottom: 0.25rem;
+  }
 
-.app-version {
-  font-size: 0.75rem;
-  opacity: 0.4;
-  margin-bottom: 1.25rem;
-}
+  .app-version {
+    font-size: 0.75rem;
+    opacity: 0.4;
+    margin-bottom: 1.25rem;
+  }
 
-.app-description {
-  font-size: 0.85rem;
-  opacity: 0.65;
-  line-height: 1.5;
-  margin: 0 0 1.25rem;
-}
+  .app-description {
+    font-size: 0.85rem;
+    opacity: 0.65;
+    line-height: 1.5;
+    margin: 0 0 1.25rem;
+  }
 
-.welcome-text {
-  margin: 0 0 1.25rem;
-  opacity: 0.75;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
+  .welcome-text {
+    margin: 0 0 1.25rem;
+    opacity: 0.75;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
 
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
 
-label {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-bottom: -0.25rem;
-}
+  label {
+    font-size: 0.8rem;
+    opacity: 0.7;
+    margin-bottom: -0.25rem;
+  }
 
-.error-msg {
-  font-size: 0.85rem;
-  color: var(--accent);
-  padding: 0.25rem 0;
-}
+  .error-msg {
+    font-size: 0.85rem;
+    color: var(--accent);
+    padding: 0.25rem 0;
+  }
 
-.load-btn {
-  margin-top: 0.75rem;
-  padding: 0.65rem 1rem;
-  font-size: 1rem;
-  cursor: pointer;
-  border-radius: 6px;
-  border: 1px solid rgba(127,127,127,0.25);
-  background: none;
-  color: var(--fg);
-  transition: opacity 120ms ease;
-}
+  .load-btn {
+    margin-top: 0.75rem;
+    padding: 0.65rem 1rem;
+    font-size: 1rem;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    background: none;
+    color: var(--fg);
+    transition: opacity 120ms ease;
+  }
 
-.load-btn:hover {
-  opacity: 0.8;
-}
+  .load-btn:hover {
+    opacity: 0.8;
+  }
 
-.phases {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-}
+  .phases {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
 
-.phase-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
+  .phase-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
 
-.phase-label {
-  width: 90px;
-  font-size: 0.85rem;
-  opacity: 0.75;
-  flex-shrink: 0;
-}
+  .phase-label {
+    width: 90px;
+    font-size: 0.85rem;
+    opacity: 0.75;
+    flex-shrink: 0;
+  }
 
-.progress-track {
-  flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(127,127,127,0.15);
-  overflow: hidden;
-}
+  .progress-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(127, 127, 127, 0.15);
+    overflow: hidden;
+  }
 
-.progress-bar {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 3px;
-  transition: width 100ms linear;
-}
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 100ms linear;
+  }
 
-.phase-pct {
-  min-width: 36px;
-  text-align: right;
-  font-size: 0.8rem;
-  opacity: 0.6;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
+  .phase-pct {
+    min-width: 36px;
+    text-align: right;
+    font-size: 0.8rem;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
 
-.loading-hint {
-  margin-top: 1rem;
-  font-size: 0.85rem;
-  opacity: 0.55;
-}
+  .loading-hint {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    opacity: 0.55;
+  }
 </style>

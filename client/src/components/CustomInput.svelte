@@ -35,13 +35,25 @@
     setCursor(cursor - 1)
   }
 
-  function moveLeft() { if (cursor > 0) setCursor(cursor - 1) }
-  function moveRight() { if (cursor < value.length) setCursor(cursor + 1) }
-  function moveUp() { /* no-op for single-line */ }
-  function moveDown() { /* no-op for single-line */ }
+  function moveLeft() {
+    if (cursor > 0) setCursor(cursor - 1)
+  }
+  function moveRight() {
+    if (cursor < value.length) setCursor(cursor + 1)
+  }
+  function moveUp() {
+    /* no-op for single-line */
+  }
+  function moveDown() {
+    /* no-op for single-line */
+  }
 
   let el
   let focused = false
+
+  export function focus() {
+    el?.focus()
+  }
 
   function onFocus() {
     focused = true
@@ -54,7 +66,10 @@
     unregister(api)
   }
 
-  function enter() { el.blur() }
+  function enter() {
+    dispatch('enter')
+    el.blur()
+  }
 
   const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter }
 
@@ -74,40 +89,63 @@
 >
   <!-- hidden native input so <label for="..."> associates correctly -->
   {#if id}
-    <input id={id} value={value} tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;" />
+    <input
+      {id}
+      {value}
+      tabindex="-1"
+      aria-hidden="true"
+      style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;"
+    />
   {/if}
 
   {#if focused}
     {#if value.length}
       {#if mask}
-        <span class="before">{'•'.repeat(cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{'•'.repeat(value.length - cursor)}</span>
+        <span class="before">{'•'.repeat(cursor)}</span><span class="caret" aria-hidden="true"></span><span
+          class="after">{'•'.repeat(value.length - cursor)}</span
+        >
       {:else}
-        <span class="before">{value.slice(0,cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{value.slice(cursor)}</span>
+        <span class="before">{value.slice(0, cursor)}</span><span class="caret" aria-hidden="true"></span><span
+          class="after">{value.slice(cursor)}</span
+        >
       {/if}
     {:else}
       <span class="caret" aria-hidden="true"></span><span class="placeholder">{placeholder}</span>
     {/if}
+  {:else if value.length}
+    <span>{mask ? '•'.repeat(value.length) : value}</span>
   {:else}
-    {#if value.length}
-      <span>{mask ? '•'.repeat(value.length) : value}</span>
-    {:else}
-      <span class="placeholder">{placeholder}</span>
-    {/if}
+    <span class="placeholder">{placeholder}</span>
   {/if}
 </div>
 
 <style>
-.custom-input {
-  min-height: 2rem;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid rgba(127,127,127,0.08);
-  border-radius: 4px;
-  outline: none;
-}
-.custom-input:focus {
-  box-shadow: 0 0 0 2px rgba(59,99,255,0.06);
-}
-.placeholder { opacity: 0.5 }
-.caret { display:inline-block; width:2px; height:1em; background:var(--fg); animation: blink 0.8s steps(1) infinite; vertical-align:middle; border-radius:1px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06) }
-@keyframes blink { 50% { opacity: 0 } }
+  .custom-input {
+    min-height: 2rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid rgba(127, 127, 127, 0.08);
+    border-radius: 4px;
+    outline: none;
+  }
+  .custom-input:focus {
+    box-shadow: 0 0 0 2px rgba(59, 99, 255, 0.06);
+  }
+  .placeholder {
+    opacity: 0.5;
+  }
+  .caret {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--fg);
+    animation: blink 0.8s steps(1) infinite;
+    vertical-align: middle;
+    border-radius: 1px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
 </style>

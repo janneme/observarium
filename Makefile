@@ -33,11 +33,13 @@ data-upload: ## Detect changed data files, re-zip and upload to storage backend
 	@echo "Running data upload (STORAGE=$(STORAGE) MAG=$(mag))"
 	cd data_prep && MAG=$(mag) STORAGE=$(STORAGE) PYTHONPATH=.. uv run python data_upload.py
 
-lint: ## Run ruff and pylint on all Python packages
+lint: ## Run ruff, pylint, eslint, prettier, and svelte-check on all packages
 	@printf '\033[1;36m==> Linting server\033[0m\n'
 	$(MAKE) -C server lint
 	@printf '\033[1;36m==> Linting data_prep\033[0m\n'
 	$(MAKE) -C data_prep lint
+	@printf '\033[1;36m==> Linting client\033[0m\n'
+	$(MAKE) -C client lint
 
 test: ## Run server and data-prep test suites (from repo root)
 	@printf '\033[1;36m==> Running server tests\033[0m\n'

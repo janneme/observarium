@@ -7,13 +7,25 @@
   import AboutPanel from '../components/AboutPanel.svelte'
   import DataSyncPanel from '../components/DataSyncPanel.svelte'
   import FinderPanel from '../components/FinderPanel.svelte'
+  import SearchPanel from '../components/SearchPanel.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { showFovCircle, showConstellationLines, showConstellationNames, showConstellationBoundaries, showDsos, showHorizon, finderViewActive } from '../stores/ui.js'
+  import {
+    showFovCircle,
+    showConstellationLines,
+    showConstellationNames,
+    showConstellationBoundaries,
+    showDsos,
+    showHorizon,
+    finderViewActive,
+    searchViewActive,
+    pendingFocus,
+  } from '../stores/ui.js'
+  import { get } from 'svelte/store'
 
-  let lat = 48.2     // default: Vienna
+  let lat = 48.2 // default: Vienna
   let lon = 16.37
   let time = new Date()
   let ra0 = 0
@@ -22,8 +34,8 @@
   let objects = []
   let loading = true
 
-  const FOV_STEP = 0.20   // fractional FOV change per +/- keypress
-  const PAN_STEP = 0.50   // fraction of FOV to pan per arrow keypress
+  const FOV_STEP = 0.2 // fractional FOV change per +/- keypress
+  const PAN_STEP = 0.5 // fraction of FOV to pan per arrow keypress
 
   let loadRa0 = 0
   let loadDec0 = 0
@@ -50,7 +62,7 @@
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
   function fovToMagLimit(f) {
-    return Math.min(14, Math.ceil(Math.max(5, 5 + 9 * Math.log2(120 / f) / Math.log2(60))))
+    return Math.min(14, Math.ceil(Math.max(5, 5 + (9 * Math.log2(120 / f)) / Math.log2(60))))
   }
 
   async function loadObjects() {
@@ -82,36 +94,38 @@
     const dRa = Math.min(rawDRa, 360 - rawDRa)
     const dDec = Math.abs(dec0 - loadDec0)
     // Reload when view centre drifts, FOV grew beyond what was loaded, or zoom-in raises mag limit
-    if (dRa > loadMargin * 0.5 || dDec > loadMargin * 0.5 || fov > loadMargin / 1.5 || fovToMagLimit(fov) > loadMagLimit) {
+    if (
+      dRa > loadMargin * 0.5 ||
+      dDec > loadMargin * 0.5 ||
+      fov > loadMargin / 1.5 ||
+      fovToMagLimit(fov) > loadMagLimit
+    ) {
       loadObjects()
     }
   }
 
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(14, Math.max(5, 5 + 9 * Math.log2(120 / fovDeg) / Math.log2(60)))
+    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(120 / fovDeg)) / Math.log2(60)))
   }
 
   function applyPan(dx, dy, raC, decC, W, H, fovDeg) {
-    const fovRad = fovDeg * Math.PI / 180
+    const fovRad = (fovDeg * Math.PI) / 180
     const scale = H / fovRad
     const x = -dx / scale
     const y = dy / scale
     const rho = Math.sqrt(x * x + y * y)
     if (rho < 1e-10) return { ra0: raC, dec0: decC }
-    const dec0_r = decC * Math.PI / 180
+    const dec0_r = (decC * Math.PI) / 180
     const c = Math.atan(rho)
-    const sinC = Math.sin(c), cosC = Math.cos(c)
-    const dec_r = Math.asin(Math.max(-1, Math.min(1,
-      cosC * Math.sin(dec0_r) + y * sinC * Math.cos(dec0_r) / rho
-    )))
-    const ra_r = raC * Math.PI / 180 + Math.atan2(
-      x * sinC,
-      rho * Math.cos(dec0_r) * cosC - y * Math.sin(dec0_r) * sinC
-    )
+    const sinC = Math.sin(c),
+      cosC = Math.cos(c)
+    const dec_r = Math.asin(Math.max(-1, Math.min(1, cosC * Math.sin(dec0_r) + (y * sinC * Math.cos(dec0_r)) / rho)))
+    const ra_r =
+      (raC * Math.PI) / 180 + Math.atan2(x * sinC, rho * Math.cos(dec0_r) * cosC - y * Math.sin(dec0_r) * sinC)
     const decMin = EUROPE_MIN_DEC + fovDeg / 2
     return {
-      ra0: ((ra_r * 180 / Math.PI) % 360 + 360) % 360,
-      dec0: Math.max(decMin, Math.min(90, dec_r * 180 / Math.PI))
+      ra0: ((((ra_r * 180) / Math.PI) % 360) + 360) % 360,
+      dec0: Math.max(decMin, Math.min(90, (dec_r * 180) / Math.PI)),
     }
   }
 
@@ -127,11 +141,12 @@
     if (pointers.size === 1) {
       const rect = screenEl.getBoundingClientRect()
       const result = applyPan(e.clientX - prev.x, e.clientY - prev.y, ra0, dec0, rect.width, rect.height, fov)
-      ra0 = result.ra0; dec0 = result.dec0
+      ra0 = result.ra0
+      dec0 = result.dec0
       maybeReload()
     } else if (pointers.size === 2) {
       const ids = [...pointers.keys()]
-      const other = pointers.get(ids.find(id => id !== e.pointerId))
+      const other = pointers.get(ids.find((id) => id !== e.pointerId))
       const prevDist = Math.hypot(prev.x - other.x, prev.y - other.y)
       const currDist = Math.hypot(e.clientX - other.x, e.clientY - other.y)
       if (prevDist > 1) {
@@ -150,13 +165,17 @@
     pointers.delete(e.pointerId)
   }
 
-  function handlePointerCancel(e) { pointers.delete(e.pointerId) }
+  function handlePointerCancel(e) {
+    pointers.delete(e.pointerId)
+  }
 
   function handleTap(clientX, clientY) {
     if (!screenEl) return
     const rect = screenEl.getBoundingClientRect()
-    const tapX = clientX - rect.left, tapY = clientY - rect.top
-    const W = rect.width, H = rect.height
+    const tapX = clientX - rect.left,
+      tapY = clientY - rect.top
+    const W = rect.width,
+      H = rect.height
     const magLim = adaptiveMagLimit(fov)
     const dsoMagLim = 8 + 0.5 * (magLim - 5)
     const hits = []
@@ -181,23 +200,34 @@
     } else if (hits.length === 1) {
       selectedObject.set(hits[0].obj)
     } else {
-      flashIds = new Set(hits.map(h => h.obj.id))
+      flashIds = new Set(hits.map((h) => h.obj.id))
       if (flashTimer) clearTimeout(flashTimer)
-      flashTimer = setTimeout(() => { flashIds = new Set(); flashTimer = null }, 200)
+      flashTimer = setTimeout(() => {
+        flashIds = new Set()
+        flashTimer = null
+      }, 200)
     }
   }
 
+  $: if ($pendingFocus) {
+    ra0 = $pendingFocus.ra
+    dec0 = $pendingFocus.dec
+    pendingFocus.set(null)
+    maybeReload()
+  }
+
   function handleKey(e) {
+    if (get(searchViewActive)) return
     if (e.key === '+' || e.key === '=') {
       fov = Math.max(0.1, fov * (1 - FOV_STEP))
     } else if (e.key === '-') {
       fov = Math.min(180, fov * (1 + FOV_STEP))
     } else if (e.key === 'ArrowRight') {
-      const step = fov * PAN_STEP / Math.cos(dec0 * Math.PI / 180)
-      ra0 = ((ra0 + step) % 360 + 360) % 360
+      const step = (fov * PAN_STEP) / Math.cos((dec0 * Math.PI) / 180)
+      ra0 = (((ra0 + step) % 360) + 360) % 360
     } else if (e.key === 'ArrowLeft') {
-      const step = fov * PAN_STEP / Math.cos(dec0 * Math.PI / 180)
-      ra0 = ((ra0 - step) % 360 + 360) % 360
+      const step = (fov * PAN_STEP) / Math.cos((dec0 * Math.PI) / 180)
+      ra0 = (((ra0 - step) % 360) + 360) % 360
     } else if (e.key === 'ArrowUp') {
       dec0 = Math.min(90, dec0 + fov * PAN_STEP)
     } else if (e.key === 'ArrowDown') {
@@ -223,9 +253,9 @@
     window.addEventListener('wheel', handleWheel, { passive: false })
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        pos => init(pos.coords.latitude, pos.coords.longitude),
+        (pos) => init(pos.coords.latitude, pos.coords.longitude),
         () => init(lat, lon),
-        { timeout: 5000 }
+        { timeout: 5000 },
       )
     } else {
       init(lat, lon)
@@ -250,55 +280,108 @@
   {#if loading}
     <div class="hint">Locating…</div>
   {:else}
-    <SkyCanvas {ra0} {dec0} {fov} {objects} {lat} {lon} {time} showFovCircle={$showFovCircle} showConstellationLines={$showConstellationLines} showConstellationNames={$showConstellationNames} showConstellationBoundaries={$showConstellationBoundaries} showDsos={$showDsos} showHorizon={$showHorizon} {flashIds} />
+    <SkyCanvas
+      {ra0}
+      {dec0}
+      {fov}
+      {objects}
+      {lat}
+      {lon}
+      {time}
+      showFovCircle={$showFovCircle}
+      showConstellationLines={$showConstellationLines}
+      showConstellationNames={$showConstellationNames}
+      showConstellationBoundaries={$showConstellationBoundaries}
+      showDsos={$showDsos}
+      showHorizon={$showHorizon}
+      {flashIds}
+    />
   {/if}
 
   <TopBar
     {time}
-    on:menutoggle={() => { menuOpen = !menuOpen }}
-    on:timepick={() => { showPicker = true }}
+    {menuOpen}
+    on:menutoggle={() => {
+      searchViewActive.set(false)
+      menuOpen = !menuOpen
+    }}
+    on:searchtoggle={() => {
+      menuOpen = false
+      searchViewActive.update((v) => !v)
+    }}
+    on:timepick={() => {
+      showPicker = true
+    }}
   />
 
-  <MenuPanel open={menuOpen} on:close={() => { menuOpen = false }} on:about={() => { showAbout = true }} on:update={() => { showSync = true }} />
+  <MenuPanel
+    open={menuOpen}
+    on:close={() => {
+      menuOpen = false
+    }}
+    on:about={() => {
+      showAbout = true
+    }}
+    on:update={() => {
+      showSync = true
+    }}
+  />
 
   {#if showPicker}
     <DateTimePicker
       {time}
-      on:pick={(e) => { time = e.detail; showPicker = false }}
-      on:cancel={() => { showPicker = false }}
+      on:pick={(e) => {
+        time = e.detail
+        showPicker = false
+      }}
+      on:cancel={() => {
+        showPicker = false
+      }}
     />
   {/if}
 
   {#if showAbout}
-    <AboutPanel on:close={() => { showAbout = false }} />
+    <AboutPanel
+      on:close={() => {
+        showAbout = false
+      }}
+    />
   {/if}
 
   {#if showSync}
-    <DataSyncPanel on:close={() => { showSync = false }} />
+    <DataSyncPanel
+      on:close={() => {
+        showSync = false
+      }}
+    />
   {/if}
 
   {#if $finderViewActive}
     <FinderPanel mainRa0={ra0} mainDec0={dec0} {lat} {lon} {time} />
   {/if}
+
+  {#if $searchViewActive}
+    <SearchPanel />
+  {/if}
 </div>
 
 <style>
-.main-screen {
-  width: 100vw;
-  height: 100vh;
-  background: #000;
-  overflow: hidden;
-  position: relative;
-  touch-action: none;
-  user-select: none;
-}
+  .main-screen {
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    overflow: hidden;
+    position: relative;
+    touch-action: none;
+    user-select: none;
+  }
 
-.hint {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(255,255,255,0.4);
-  font-size: 0.9rem;
-}
+  .hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.9rem;
+  }
 </style>

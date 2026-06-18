@@ -48,7 +48,9 @@ def _collect_json(mag: int | None = None) -> dict:
     for p in sorted(DATA_OUT.glob("*.json")):
         name = p.name
         # Stars are now delivered via CSV; exclude all stars JSON files.
-        if name.startswith("stars.m") or name.startswith("stars_t1.") or name.startswith("stars_t2."):
+        if name.startswith("stars.m") or name.startswith("stars_t1.") or name.startswith(
+            "stars_t2."
+        ):
             continue
         if mag is not None:
             # For double_stars: prefer mag-specific file; skip generic when mag file exists

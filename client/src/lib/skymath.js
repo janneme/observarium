@@ -1,6 +1,8 @@
 const DEG = Math.PI / 180
 
-function toRad(deg) { return deg * DEG }
+function toRad(deg) {
+  return deg * DEG
+}
 
 // Gnomonic (tangent-plane) projection.
 // Returns normalised {x, y} in radians, or null when the point is on or behind
@@ -11,7 +13,7 @@ export function projectGnomonic(ra, dec, ra0, dec0) {
   const d0 = toRad(dec0)
   const cos_c = Math.sin(d0) * Math.sin(d) + Math.cos(d0) * Math.cos(d) * Math.cos(dAlpha)
   if (cos_c <= 0) return null
-  const x = Math.cos(d) * Math.sin(dAlpha) / cos_c
+  const x = (Math.cos(d) * Math.sin(dAlpha)) / cos_c
   const y = (Math.cos(d0) * Math.sin(d) - Math.sin(d0) * Math.cos(d) * Math.cos(dAlpha)) / cos_c
   return { x, y }
 }

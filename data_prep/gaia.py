@@ -69,7 +69,7 @@ def _adql_query(max_mag: float, min_dec: float, min_mag: float) -> str:
     does not carry tycho2_source_id; deduplication is done via min_mag.
     """
     return (
-        "SELECT source_id, ra, dec, phot_g_mean_mag, bp_rp "
+        "SELECT source_id, ra, dec, phot_g_mean_mag, bp_rp "  # noqa: S608
         "FROM gaiadr3.gaia_source "
         "WHERE phot_g_mean_mag IS NOT NULL "
         f"AND phot_g_mean_mag > {min_mag} "

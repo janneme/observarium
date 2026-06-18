@@ -27,6 +27,7 @@ BEARER_PARTS = 2
 
 
 def build_response(status_code: int, body: dict | list | None = None):
+    """Build a JSON API response dict with CORS headers."""
     headers = {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
@@ -125,8 +126,12 @@ def handle_manifest() -> dict:
     """Read manifest.json and augment with pre-signed download URLs."""
     backend = storage_backend.get_backend()
     manifest = json.loads(backend.read_bytes("manifest.json"))
-    manifest["stars_t1"]["url"] = backend.generate_presigned_get(manifest["stars_t1"]["filename"])
-    manifest["objects"]["url"] = backend.generate_presigned_get(manifest["objects"]["filename"])
+    manifest["stars_t1"]["url"] = backend.generate_presigned_get(
+        manifest["stars_t1"]["filename"]
+    )
+    manifest["objects"]["url"] = backend.generate_presigned_get(
+        manifest["objects"]["filename"]
+    )
     for chunk in manifest.get("t2_chunks", []):
         chunk["url"] = backend.generate_presigned_get(chunk["filename"])
     return manifest

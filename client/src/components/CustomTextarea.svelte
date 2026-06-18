@@ -18,7 +18,7 @@
 
   function setCursor(pos) {
     cursor = Math.max(0, Math.min(value.length, pos))
-    const { lineIndex, col } = getLineCol(cursor)
+    const { col } = getLineCol(cursor)
     desiredCol = col
   }
 
@@ -45,12 +45,19 @@
     return { lineIndex, col }
   }
 
-  function moveLeft() { if (cursor > 0) setCursor(cursor - 1) }
-  function moveRight() { if (cursor < value.length) setCursor(cursor + 1) }
+  function moveLeft() {
+    if (cursor > 0) setCursor(cursor - 1)
+  }
+  function moveRight() {
+    if (cursor < value.length) setCursor(cursor + 1)
+  }
   function moveUp() {
     const lines = value.split('\n')
     const { lineIndex, col } = getLineCol(cursor)
-    if (lineIndex === 0) { setCursor(0); return }
+    if (lineIndex === 0) {
+      setCursor(0)
+      return
+    }
     const targetLine = lines[lineIndex - 1]
     const targetCol = Math.min(desiredCol ?? col, targetLine.length)
     let pos = 0
@@ -61,7 +68,10 @@
   function moveDown() {
     const lines = value.split('\n')
     const { lineIndex, col } = getLineCol(cursor)
-    if (lineIndex >= lines.length - 1) { setCursor(value.length); return }
+    if (lineIndex >= lines.length - 1) {
+      setCursor(value.length)
+      return
+    }
     const targetLine = lines[lineIndex + 1]
     const targetCol = Math.min(desiredCol ?? col, targetLine.length)
     let pos = 0
@@ -84,7 +94,9 @@
     unregister(api)
   }
 
-  function enter() { insertChar('\n') }
+  function enter() {
+    insertChar('\n')
+  }
 
   const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter }
 
@@ -103,34 +115,55 @@
   aria-label="custom textarea"
 >
   {#if id}
-    <textarea id={id} tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;">{value}</textarea>
+    <textarea
+      {id}
+      tabindex="-1"
+      aria-hidden="true"
+      style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;"
+      >{value}</textarea
+    >
   {/if}
 
   {#if focused}
     {#if value.length}
-      <pre><span class="before">{value.slice(0,cursor)}</span><span class="caret" aria-hidden="true"></span><span class="after">{value.slice(cursor)}</span></pre>
+      <pre><span class="before">{value.slice(0, cursor)}</span><span class="caret" aria-hidden="true"></span><span
+          class="after">{value.slice(cursor)}</span
+        ></pre>
     {:else}
       <pre><span class="caret" aria-hidden="true"></span><span class="placeholder">{placeholder}</span></pre>
     {/if}
+  {:else if value.length}
+    <pre>{value}</pre>
   {:else}
-    {#if value.length}
-      <pre>{value}</pre>
-    {:else}
-      <pre class="placeholder">{placeholder}</pre>
-    {/if}
+    <pre class="placeholder">{placeholder}</pre>
   {/if}
 </div>
 
 <style>
-.custom-textarea {
-  min-height: 4rem;
-  padding: 0.5rem;
-  border: 1px solid rgba(127,127,127,0.08);
-  border-radius: 6px;
-  white-space: pre-wrap;
-  position:relative;
-}
-.placeholder { opacity: 0.5 }
-.caret { display:inline-block; width:2px; height:1em; background:var(--fg); animation: blink 0.8s steps(1) infinite; vertical-align:bottom; border-radius:1px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06) }
-@keyframes blink { 50% { opacity: 0 } }
+  .custom-textarea {
+    min-height: 4rem;
+    padding: 0.5rem;
+    border: 1px solid rgba(127, 127, 127, 0.08);
+    border-radius: 6px;
+    white-space: pre-wrap;
+    position: relative;
+  }
+  .placeholder {
+    opacity: 0.5;
+  }
+  .caret {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--fg);
+    animation: blink 0.8s steps(1) infinite;
+    vertical-align: bottom;
+    border-radius: 1px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
 </style>

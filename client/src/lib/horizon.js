@@ -3,7 +3,7 @@ import { Observer, AstroTime, Horizon as AstroHorizon, SiderealTime } from 'astr
 export function getLST(lat, lon, time) {
   const t = new AstroTime(time)
   const lst = SiderealTime(t) + lon / 15
-  return ((lst % 24) + 24) % 24  // local sidereal time in hours
+  return ((lst % 24) + 24) % 24 // local sidereal time in hours
 }
 
 // Returns altitude in degrees (negative = below horizon).
@@ -22,6 +22,6 @@ export function isAboveHorizon(ra_deg, dec_deg, lat, lon, time) {
 export function zenith(lat, lon, time) {
   const t = new AstroTime(time)
   const lst = SiderealTime(t) + lon / 15
-  const ra_deg = ((lst % 24) + 24) % 24 * 15
+  const ra_deg = (((lst % 24) + 24) % 24) * 15
   return { ra: ra_deg, dec: lat }
 }

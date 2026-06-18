@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { projectGnomonic, toPixel, projectToPixel, isOnScreen } from './skymath.js'
 
-const W = 800, H = 600, fov = 30, rot = 0
+const W = 800,
+  H = 600,
+  fov = 30,
+  rot = 0
 
 describe('projectGnomonic', () => {
   it('centre projects to (0, 0)', () => {
@@ -60,8 +63,8 @@ describe('projectToPixel', () => {
     // above the top edge (py slightly negative) — confirm it's close to 0.
     const pt = projectToPixel(45, 35, 45, 20, W, H, fov, rot)
     expect(pt).not.toBeNull()
-    const scale = H / (fov * Math.PI / 180)
-    const expected_py = H / 2 - Math.tan((fov / 2) * Math.PI / 180) * scale
+    const scale = H / ((fov * Math.PI) / 180)
+    const expected_py = H / 2 - Math.tan(((fov / 2) * Math.PI) / 180) * scale
     expect(pt.py).toBeCloseTo(expected_py, 3)
   })
 

@@ -5,10 +5,16 @@ function persistedWritable(key, defaultValue) {
   try {
     const raw = localStorage.getItem('observarium:' + key)
     if (raw !== null) initial = JSON.parse(raw)
-  } catch {}
+  } catch {
+    /* ignored */
+  }
   const store = writable(initial)
-  store.subscribe(v => {
-    try { localStorage.setItem('observarium:' + key, JSON.stringify(v)) } catch {}
+  store.subscribe((v) => {
+    try {
+      localStorage.setItem('observarium:' + key, JSON.stringify(v))
+    } catch {
+      /* ignored */
+    }
   })
   return store
 }
@@ -20,4 +26,6 @@ export const showConstellationBoundaries = persistedWritable('showConstellationB
 export const showDsos = persistedWritable('showDsos', true)
 export const showHorizon = persistedWritable('showHorizon', true)
 export const finderViewActive = writable(false)
+export const searchViewActive = writable(false)
+export const pendingFocus = writable(null) // {ra, dec} — consumed by MainScreen to re-centre
 export const pendingChanges = writable(0)

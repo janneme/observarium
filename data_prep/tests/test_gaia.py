@@ -31,7 +31,9 @@ _PALETTE = [
 
 def _make_csv_gz(rows: list[dict[str, str]]) -> bytes:
     """Build gzip-compressed CSV bytes from a list of row dicts."""
-    headers = list(rows[0].keys()) if rows else ["source_id", "ra", "dec", "phot_g_mean_mag", "bp_rp"]
+    headers = list(rows[0].keys()) if rows else [
+        "source_id", "ra", "dec", "phot_g_mean_mag", "bp_rp"
+    ]
     buf = io.StringIO()
     buf.write(",".join(headers) + "\n")
     for row in rows:

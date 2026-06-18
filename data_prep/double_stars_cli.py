@@ -88,7 +88,9 @@ def main(
         flat: list[dict] = []
         for lst in grouped_stars.values():
             flat.extend(lst)
-        n_dbl_stars, n_pairs, n_phys_pairs = matcher.attach(flat, max_mag=max_mag or 8.0, min_sep=min_sep)
+        n_dbl_stars, n_pairs, n_phys_pairs = matcher.attach(
+            flat, max_mag=max_mag or 8.0, min_sep=min_sep
+        )
         # Rebuild grouped structure preserving original constellation keys
         # The `stars.m{mag}.json` file is already grouped by constellation
         # keys; we flattened it earlier in the same order. Re-slice `flat`
@@ -106,7 +108,10 @@ def main(
             print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs")
         else:
             if debug:
-                print(f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, {n_pairs} pairs, {n_phys_pairs} physical")
+                print(
+                    f"Embedded dbl into {stars_file}: {n_dbl_stars} stars, "
+                    f"{n_pairs} pairs, {n_phys_pairs} physical"
+                )
 
         # Emit a stars-like summary so this command's output matches the
         # `--only stars` run. Recompute basic stats from the updated file.

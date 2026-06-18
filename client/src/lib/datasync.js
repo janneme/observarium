@@ -1,9 +1,17 @@
 import JSZip from 'jszip'
 import { getManifest, getImagesUrl, getObservations } from './api.js'
 import {
-  bulkPutObjects, bulkPutImages, bulkPutObservations,
-  setMeta, computeZone, storeTier1Blob, bulkPutZoneT2Blobs,
-  storeManifest, getCompletedChunks, markChunkComplete, clearCompletedChunks,
+  bulkPutObjects,
+  bulkPutImages,
+  bulkPutObservations,
+  setMeta,
+  computeZone,
+  storeTier1Blob,
+  bulkPutZoneT2Blobs,
+  storeManifest,
+  getCompletedChunks,
+  markChunkComplete,
+  clearCompletedChunks,
 } from './db.js'
 
 async function fetchWithProgress(url, onProgress) {
@@ -23,7 +31,10 @@ async function fetchWithProgress(url, onProgress) {
   }
   const merged = new Uint8Array(received)
   let offset = 0
-  for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length }
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.length
+  }
   return merged
 }
 
@@ -44,14 +55,28 @@ export function parseObjects(objectsJson) {
           const id = objectIdFromDso(dso)
           if (id) {
             const ra_deg = dso.pos[0] * 15
-            items.push({ constellation, ...dso, pos: [ra_deg, dso.pos[1]], id, type: 'dso', dsoType: dso.type, zone: computeZone(ra_deg, dso.pos[1]) })
+            items.push({
+              constellation,
+              ...dso,
+              pos: [ra_deg, dso.pos[1]],
+              id,
+              type: 'dso',
+              dsoType: dso.type,
+              zone: computeZone(ra_deg, dso.pos[1]),
+            })
           }
         }
       }
     } else if (key.startsWith('double_stars')) {
       for (const [wdsId, ds] of Object.entries(value)) {
         const ra_deg = ds.pos[0] * 15
-        items.push({ ...ds, pos: [ra_deg, ds.pos[1]], id: `double_WDS${wdsId}`, type: 'double_star', zone: computeZone(ra_deg, ds.pos[1]) })
+        items.push({
+          ...ds,
+          pos: [ra_deg, ds.pos[1]],
+          id: `double_WDS${wdsId}`,
+          type: 'double_star',
+          zone: computeZone(ra_deg, ds.pos[1]),
+        })
       }
     }
   }
@@ -118,7 +143,7 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
   // Objects
   const manifest = await getManifest()
   const completedChunks = await getCompletedChunks()
-  const pendingChunks = manifest.t2_chunks.filter(c => !completedChunks.has(c.filename))
+  const pendingChunks = manifest.t2_chunks.filter((c) => !completedChunks.has(c.filename))
   const t2Total = pendingChunks.reduce((s, c) => s + c.size, 0)
   const totalBytes = manifest.stars_t1.size + manifest.objects.size + t2Total
   let bytesLoaded = 0
@@ -133,11 +158,7 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
 
   for (const chunk of manifest.t2_chunks) {
     if (completedChunks.has(chunk.filename)) continue
-    await ingestChunk(
-      chunk.url,
-      chunk.filename,
-      (p) => objProg((bytesLoaded + chunk.size * p) / totalBytes),
-    )
+    await ingestChunk(chunk.url, chunk.filename, (p) => objProg((bytesLoaded + chunk.size * p) / totalBytes))
     bytesLoaded += chunk.size
     objProg(bytesLoaded / totalBytes)
   }
@@ -147,10 +168,10 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
 
   // Images
   const imagesUrl = await getImagesUrl()
-  const imagesData = await fetchWithProgress(imagesUrl, p => imgProg(p * 0.7))
+  const imagesData = await fetchWithProgress(imagesUrl, (p) => imgProg(p * 0.7))
   const imagesZip = await JSZip.loadAsync(imagesData, {
     onUpdate(metadata) {
-      if (metadata.percent != null) imgProg(0.7 + metadata.percent / 100 * 0.3)
+      if (metadata.percent != null) imgProg(0.7 + (metadata.percent / 100) * 0.3)
     },
   })
   const imageItems = []
@@ -159,7 +180,8 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
     const ext = filename.split('.').pop().toLowerCase()
     const catalogueId = filename.replace(/\.[^.]+$/, '')
     const blob = await file.async('blob')
-    const mimeType = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : 'application/octet-stream'
+    const mimeType =
+      ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'
     imageItems.push({ catalogueId, blob: new Blob([blob], { type: mimeType }), filename })
   }
   const imagesSize = imageItems.reduce((s, item) => s + item.blob.size, 0)

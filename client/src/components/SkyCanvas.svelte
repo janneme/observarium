@@ -5,6 +5,7 @@
   import { isAboveHorizon, getLST } from '../lib/horizon.js'
   import { theme } from '../stores/theme.js'
   import { getMeta } from '../lib/db.js'
+  import { selectedObject } from '../stores/selectedObject.js'
 
   export let ra0 = 0
   export let dec0 = 0
@@ -24,7 +25,8 @@
   export let finderMode = false
 
   let canvas
-  let W = 0, H = 0
+  let W = 0,
+    H = 0
   let rafId = null
   let dirty = true
   let observer
@@ -32,9 +34,36 @@
   let aboveMap = new Map()
   let constellations = null
 
-  const unsubTheme = theme.subscribe(v => { currentTheme = v; dirty = true })
+  const unsubTheme = theme.subscribe((v) => {
+    currentTheme = v
+    dirty = true
+  })
 
-  $: { ra0; dec0; fov; rotation; objects; lat; lon; time; showFovCircle; showConstellationLines; showConstellationNames; showConstellationBoundaries; showDsos; showHorizon; flashIds; finderMode; dirty = true }
+  let currentSelectedObj = null
+  const unsubSelected = selectedObject.subscribe((v) => {
+    currentSelectedObj = v
+    dirty = true
+  })
+
+  $: {
+    ra0
+    dec0
+    fov
+    rotation
+    objects
+    lat
+    lon
+    time
+    showFovCircle
+    showConstellationLines
+    showConstellationNames
+    showConstellationBoundaries
+    showDsos
+    showHorizon
+    flashIds
+    finderMode
+    dirty = true
+  }
 
   $: updateAboveMap(lat, lon, time, objects)
 
@@ -52,8 +81,8 @@
   // The interpolation window is always MAG_RANGE wide, sliding with magLim:
   // faintest rendered star → MIN_R_VMIN, stars brighter than (magLim - MAG_RANGE) → MAX_R_VMIN.
   const MAG_RANGE = 6
-  const MIN_R_VMIN = 0.08   // faintest visible star (at magLim), in vmin
-  const MAX_R_VMIN = 0.35   // brightest star (mag ≤ magLim − MAG_RANGE), in vmin
+  const MIN_R_VMIN = 0.08 // faintest visible star (at magLim), in vmin
+  const MAX_R_VMIN = 0.35 // brightest star (mag ≤ magLim − MAG_RANGE), in vmin
 
   function starRadius(mag) {
     const m = Array.isArray(mag) ? mag[0] : mag
@@ -64,24 +93,22 @@
   }
 
   // Log-linear interpolation: mag 5 at FOV_MAG5, mag 14 at FOV_MAG14.
-  const FOV_MAG5 = 120   // FOV (°) where rendering depth floor is mag 5
-  const FOV_MAG14 = 2    // FOV (°) where rendering depth ceiling is mag 14
+  const FOV_MAG5 = 120 // FOV (°) where rendering depth floor is mag 5
+  const FOV_MAG14 = 2 // FOV (°) where rendering depth ceiling is mag 14
 
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(14, Math.max(5,
-      5 + 9 * Math.log2(FOV_MAG5 / fovDeg) / Math.log2(FOV_MAG5 / FOV_MAG14)
-    ))
+    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
   }
 
   // DSO angular size in arcmin → canvas pixels. Returns raw value (no min clamp) for threshold check.
   function dsoRawPx(size) {
     const arcmin = Array.isArray(size) ? size[0] : (size ?? 5)
-    return arcmin * H / (60 * fov)
+    return (arcmin * H) / (60 * fov)
   }
 
   // Below this fraction of min(W,H), draw a fixed Hipparcos symbol instead of a scaled shape.
   const DSO_SYMBOL_THRESHOLD = 0.04
-  const SYM_R = 8   // fixed symbol radius in px
+  const SYM_R = 8 // fixed symbol radius in px
 
   function drawDsoSymbol(ctx, obj, pt, above) {
     const nightly = currentTheme === 'nightly'
@@ -99,30 +126,33 @@
       ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
       ctx.stroke()
       ctx.setLineDash([])
-
     } else if (type === 'globular cluster') {
       ctx.beginPath()
       ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
       ctx.stroke()
       ctx.beginPath()
-      ctx.moveTo(pt.px - r, pt.py); ctx.lineTo(pt.px + r, pt.py)
-      ctx.moveTo(pt.px, pt.py - r); ctx.lineTo(pt.px, pt.py + r)
+      ctx.moveTo(pt.px - r, pt.py)
+      ctx.lineTo(pt.px + r, pt.py)
+      ctx.moveTo(pt.px, pt.py - r)
+      ctx.lineTo(pt.px, pt.py + r)
       ctx.stroke()
-
     } else if (type === 'planetary nebula') {
       ctx.beginPath()
       ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
       ctx.stroke()
       const tick = 4
       ctx.beginPath()
-      ctx.moveTo(pt.px - r - tick, pt.py); ctx.lineTo(pt.px - r, pt.py)
-      ctx.moveTo(pt.px + r,        pt.py); ctx.lineTo(pt.px + r + tick, pt.py)
-      ctx.moveTo(pt.px, pt.py - r - tick); ctx.lineTo(pt.px, pt.py - r)
-      ctx.moveTo(pt.px, pt.py + r);        ctx.lineTo(pt.px, pt.py + r + tick)
+      ctx.moveTo(pt.px - r - tick, pt.py)
+      ctx.lineTo(pt.px - r, pt.py)
+      ctx.moveTo(pt.px + r, pt.py)
+      ctx.lineTo(pt.px + r + tick, pt.py)
+      ctx.moveTo(pt.px, pt.py - r - tick)
+      ctx.lineTo(pt.px, pt.py - r)
+      ctx.moveTo(pt.px, pt.py + r)
+      ctx.lineTo(pt.px, pt.py + r + tick)
       ctx.stroke()
-
     } else if (type === 'spiral galaxy' || type === 'elliptical galaxy' || type === 'galaxy') {
-      const ang_rad = ((obj.ang ?? 0) - 90) * Math.PI / 180
+      const ang_rad = (((obj.ang ?? 0) - 90) * Math.PI) / 180
       ctx.save()
       ctx.translate(pt.px, pt.py)
       ctx.rotate(ang_rad)
@@ -130,29 +160,27 @@
       ctx.ellipse(0, 0, r, Math.max(2, r * 0.4), 0, 0, Math.PI * 2)
       ctx.stroke()
       ctx.restore()
-
     } else if (type === 'dark nebula') {
       ctx.setLineDash([3, 3])
       ctx.strokeRect(pt.px - r, pt.py - r, r * 2, r * 2)
       ctx.setLineDash([])
-
     } else if (type === 'galaxy cluster' || type === 'cluster of galaxies') {
       ctx.beginPath()
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * 2 * Math.PI - Math.PI / 2
         if (i === 0) ctx.moveTo(pt.px + r * Math.cos(a), pt.py + r * Math.sin(a))
-        else         ctx.lineTo(pt.px + r * Math.cos(a), pt.py + r * Math.sin(a))
+        else ctx.lineTo(pt.px + r * Math.cos(a), pt.py + r * Math.sin(a))
       }
       ctx.closePath()
       ctx.stroke()
-
     } else if (type === 'quasar' || type === 'QSO' || type === 'BL Lac') {
       const d = r * 0.75
       ctx.beginPath()
-      ctx.moveTo(pt.px - d, pt.py - d); ctx.lineTo(pt.px + d, pt.py + d)
-      ctx.moveTo(pt.px + d, pt.py - d); ctx.lineTo(pt.px - d, pt.py + d)
+      ctx.moveTo(pt.px - d, pt.py - d)
+      ctx.lineTo(pt.px + d, pt.py + d)
+      ctx.moveTo(pt.px + d, pt.py - d)
+      ctx.lineTo(pt.px - d, pt.py + d)
       ctx.stroke()
-
     } else {
       // emission nebula, reflection nebula → open square
       ctx.strokeRect(pt.px - r, pt.py - r, r * 2, r * 2)
@@ -172,7 +200,7 @@
       fill = '#e00000'
     } else if (finderMode) {
       const m = Array.isArray(obj.mag) ? obj.mag[0] : (obj.mag ?? 99)
-      fill = (m <= 3 && obj.clr) ? _blendToWhite(obj.clr, 0.72) : '#ffffff'
+      fill = m <= 3 && obj.clr ? _blendToWhite(obj.clr, 0.72) : '#ffffff'
     } else {
       fill = obj.clr || '#ffffff'
     }
@@ -185,7 +213,10 @@
     const r = parseInt(hex.slice(1, 3), 16)
     const g = parseInt(hex.slice(3, 5), 16)
     const b = parseInt(hex.slice(5, 7), 16)
-    const h = v => Math.round(v + (255 - v) * t).toString(16).padStart(2, '0')
+    const h = (v) =>
+      Math.round(v + (255 - v) * t)
+        .toString(16)
+        .padStart(2, '0')
     return `#${h(r)}${h(g)}${h(b)}`
   }
 
@@ -193,7 +224,10 @@
     const r = parseInt(hex.slice(1, 3), 16)
     const g = parseInt(hex.slice(3, 5), 16)
     const b = parseInt(hex.slice(5, 7), 16)
-    const h = v => Math.round(v * factor).toString(16).padStart(2, '0')
+    const h = (v) =>
+      Math.round(v * factor)
+        .toString(16)
+        .padStart(2, '0')
     return `#${h(r)}${h(g)}${h(b)}`
   }
 
@@ -204,9 +238,9 @@
     ctx.globalAlpha = above ? 0.7 : 0.15
     ctx.beginPath()
     const gap = Math.max(1.5, r * 1.5)
-    const lw  = Math.max(0.9, r * 1.0)
+    const lw = Math.max(0.9, r * 1.0)
     ctx.arc(pt.px, pt.py, r + gap, 0, Math.PI * 2)
-    const starColor = nightly ? '#e00000' : (obj.clr || '#ffffff')
+    const starColor = nightly ? '#e00000' : obj.clr || '#ffffff'
     ctx.strokeStyle = _darkenHex(starColor, 0.45)
     ctx.lineWidth = lw
     ctx.stroke()
@@ -221,7 +255,7 @@
     const jut = Math.max(3, r * 1.2)
     ctx.globalAlpha = 0.65
     ctx.beginPath()
-    ctx.moveTo(pt.px + Math.SQRT1_2 * r,         pt.py - Math.SQRT1_2 * r)
+    ctx.moveTo(pt.px + Math.SQRT1_2 * r, pt.py - Math.SQRT1_2 * r)
     ctx.lineTo(pt.px + Math.SQRT1_2 * (r + jut), pt.py - Math.SQRT1_2 * (r + jut))
     ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
     ctx.lineWidth = 1.2
@@ -229,16 +263,11 @@
     ctx.globalAlpha = 1
   }
 
-  function drawDoubleStar(ctx, obj, pt, above) {
-    drawStar(ctx, obj, pt, above)
-    addDoubleJut(ctx, obj, pt, above)
-  }
-
   const FINDER_FOV = 7.5
 
   function drawFovCircle(ctx) {
-    const fovRad = fov * Math.PI / 180
-    const r = Math.tan(FINDER_FOV / 2 * Math.PI / 180) * H / fovRad
+    const fovRad = (fov * Math.PI) / 180
+    const r = (Math.tan(((FINDER_FOV / 2) * Math.PI) / 180) * H) / fovRad
     if (r > Math.min(W, H) / 2) return
     ctx.beginPath()
     ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2)
@@ -272,35 +301,36 @@
       ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
       ctx.stroke()
       ctx.setLineDash([])
-
     } else if (type === 'globular cluster') {
       ctx.beginPath()
       ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
       ctx.stroke()
       ctx.beginPath()
-      ctx.moveTo(pt.px - r, pt.py); ctx.lineTo(pt.px + r, pt.py)
-      ctx.moveTo(pt.px, pt.py - r); ctx.lineTo(pt.px, pt.py + r)
+      ctx.moveTo(pt.px - r, pt.py)
+      ctx.lineTo(pt.px + r, pt.py)
+      ctx.moveTo(pt.px, pt.py - r)
+      ctx.lineTo(pt.px, pt.py + r)
       ctx.stroke()
-
     } else if (type === 'planetary nebula') {
       ctx.beginPath()
       ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
       ctx.stroke()
       const tick = Math.max(2, r * 0.5)
       ctx.beginPath()
-      ctx.moveTo(pt.px - r - tick, pt.py); ctx.lineTo(pt.px - r, pt.py)
-      ctx.moveTo(pt.px + r, pt.py);        ctx.lineTo(pt.px + r + tick, pt.py)
-      ctx.moveTo(pt.px, pt.py - r - tick); ctx.lineTo(pt.px, pt.py - r)
-      ctx.moveTo(pt.px, pt.py + r);        ctx.lineTo(pt.px, pt.py + r + tick)
+      ctx.moveTo(pt.px - r - tick, pt.py)
+      ctx.lineTo(pt.px - r, pt.py)
+      ctx.moveTo(pt.px + r, pt.py)
+      ctx.lineTo(pt.px + r + tick, pt.py)
+      ctx.moveTo(pt.px, pt.py - r - tick)
+      ctx.lineTo(pt.px, pt.py - r)
+      ctx.moveTo(pt.px, pt.py + r)
+      ctx.lineTo(pt.px, pt.py + r + tick)
       ctx.stroke()
-
     } else if (type === 'spiral galaxy' || type === 'elliptical galaxy' || type === 'galaxy') {
       // PA=0 → North (up on canvas) = canvas rotation −90°
-      const ang_rad = ((obj.ang ?? 0) - 90) * Math.PI / 180
+      const ang_rad = (((obj.ang ?? 0) - 90) * Math.PI) / 180
       const major = r
-      const minor = Array.isArray(obj.size)
-        ? Math.max(2, (obj.size[1] / obj.size[0]) * major)
-        : major * 0.4
+      const minor = Array.isArray(obj.size) ? Math.max(2, (obj.size[1] / obj.size[0]) * major) : major * 0.4
       ctx.save()
       ctx.translate(pt.px, pt.py)
       ctx.rotate(ang_rad)
@@ -308,7 +338,6 @@
       ctx.ellipse(0, 0, major, minor, 0, 0, Math.PI * 2)
       ctx.stroke()
       ctx.restore()
-
     } else {
       // emission nebula, reflection nebula → dashed square
       ctx.beginPath()
@@ -324,13 +353,16 @@
   function _conCentroid(con) {
     if (!con.bounds || con.bounds.length === 0) return null
     const seen = new Set()
-    let sinSum = 0, cosSum = 0, decSum = 0, n = 0
+    let sinSum = 0,
+      cosSum = 0,
+      decSum = 0,
+      n = 0
     for (const seg of con.bounds) {
       for (const v of seg) {
         const key = v[0] + ',' + v[1]
         if (seen.has(key)) continue
         seen.add(key)
-        const ang = v[0] / 24 * 2 * Math.PI
+        const ang = (v[0] / 24) * 2 * Math.PI
         sinSum += Math.sin(ang)
         cosSum += Math.cos(ang)
         decSum += v[1]
@@ -338,7 +370,7 @@
       }
     }
     if (n === 0) return null
-    let ra_c = Math.atan2(sinSum, cosSum) / (2 * Math.PI) * 24
+    let ra_c = (Math.atan2(sinSum, cosSum) / (2 * Math.PI)) * 24
     if (ra_c < 0) ra_c += 24
     return [ra_c, decSum / n]
   }
@@ -355,8 +387,10 @@
     const STEPS = 8
     for (const con of Object.values(constellations)) {
       for (const seg of con.bounds) {
-        const ra1h = seg[0][0], dec1 = seg[0][1]
-        const ra2h = seg[1][0], dec2 = seg[1][1]
+        const ra1h = seg[0][0],
+          dec1 = seg[0][1]
+        const ra2h = seg[1][0],
+          dec2 = seg[1][1]
         // Shortest-path RA interpolation across the 0h/24h wrap
         let dRa = ra2h - ra1h
         if (dRa > 12) dRa -= 24
@@ -365,14 +399,22 @@
         let inPath = false
         for (let i = 0; i <= STEPS; i++) {
           const t = i / STEPS
-          const ra = (((ra1h + t * dRa) * 15) % 360 + 360) % 360
+          const ra = ((((ra1h + t * dRa) * 15) % 360) + 360) % 360
           const dec = dec1 + t * (dec2 - dec1)
           const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
           if (pt) {
-            if (!inPath) { ctx.beginPath(); ctx.moveTo(pt.px, pt.py); inPath = true }
-            else { ctx.lineTo(pt.px, pt.py) }
+            if (!inPath) {
+              ctx.beginPath()
+              ctx.moveTo(pt.px, pt.py)
+              inPath = true
+            } else {
+              ctx.lineTo(pt.px, pt.py)
+            }
           } else {
-            if (inPath) { ctx.stroke(); inPath = false }
+            if (inPath) {
+              ctx.stroke()
+              inPath = false
+            }
           }
         }
         if (inPath) ctx.stroke()
@@ -427,8 +469,8 @@
   // Horizon is a great circle → projects to a straight line in gnomonic.
   // Sample 72 azimuth points, sort by px, extrapolate to canvas edges, fill below.
   function drawHorizonOverlay(ctx) {
-    const lst_rad = getLST(lat, lon, time) * Math.PI / 12
-    const lat_rad = lat * Math.PI / 180
+    const lst_rad = (getLST(lat, lon, time) * Math.PI) / 12
+    const lat_rad = (lat * Math.PI) / 180
     const pts = []
 
     for (let i = 0; i < 72; i++) {
@@ -436,10 +478,10 @@
       // (az, alt=0) → equatorial: dec = arcsin(cos(φ)·cos(az))
       // HA from direction cosines: atan2(−sin(az), −sin(φ)·cos(az))
       const dec_rad = Math.asin(Math.cos(lat_rad) * Math.cos(az_rad))
-      const ha_rad  = Math.atan2(-Math.sin(az_rad), -Math.sin(lat_rad) * Math.cos(az_rad))
-      const ra_rad  = lst_rad - ha_rad
-      const ra_deg  = ((ra_rad * 180 / Math.PI) % 360 + 360) % 360
-      const dec_deg = dec_rad * 180 / Math.PI
+      const ha_rad = Math.atan2(-Math.sin(az_rad), -Math.sin(lat_rad) * Math.cos(az_rad))
+      const ra_rad = lst_rad - ha_rad
+      const ra_deg = ((((ra_rad * 180) / Math.PI) % 360) + 360) % 360
+      const dec_deg = (dec_rad * 180) / Math.PI
       const pt = projectToPixel(ra_deg, dec_deg, ra0, dec0, W, H, fov, rotation)
       if (pt) pts.push(pt)
     }
@@ -447,12 +489,13 @@
     if (pts.length < 2) return
     pts.sort((a, b) => a.px - b.px)
 
-    const p0 = pts[0], pN = pts[pts.length - 1]
+    const p0 = pts[0],
+      pN = pts[pts.length - 1]
     const dx = pN.px - p0.px
     if (Math.abs(dx) < 1) return
 
-    const slope   = (pN.py - p0.py) / dx
-    const pyLeft  = p0.py - p0.px * slope
+    const slope = (pN.py - p0.py) / dx
+    const pyLeft = p0.py - p0.px * slope
     const pyRight = pN.py + (W - pN.px) * slope
 
     // Ground fill
@@ -476,6 +519,28 @@
     ctx.setLineDash([])
   }
 
+  function drawSelectedMarker(ctx) {
+    if (!currentSelectedObj?.pos) return
+    const [ra, dec] = currentSelectedObj.pos
+    const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
+    if (!pt || !isOnScreen(pt.px, pt.py, W, H, 30)) return
+    const gap = 9,
+      len = 10
+    ctx.strokeStyle = currentTheme === 'nightly' ? 'rgba(255,110,110,0.9)' : 'rgba(255,255,255,0.9)'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(pt.px, pt.py - gap)
+    ctx.lineTo(pt.px, pt.py - gap - len)
+    ctx.moveTo(pt.px, pt.py + gap)
+    ctx.lineTo(pt.px, pt.py + gap + len)
+    ctx.moveTo(pt.px - gap, pt.py)
+    ctx.lineTo(pt.px - gap - len, pt.py)
+    ctx.moveTo(pt.px + gap, pt.py)
+    ctx.lineTo(pt.px + gap + len, pt.py)
+    ctx.stroke()
+  }
+
   function draw() {
     if (!canvas || W === 0 || H === 0) return
     const ctx = canvas.getContext('2d')
@@ -496,12 +561,14 @@
     // converging to 1 mag below at large-aperture FOV.
     const dsoMagLim = 8 + 0.5 * (magLim - 5)
 
-    const dbStars = objects.filter(o => o.type === 'star' || o.type === 'double_star')
-    const noMagStars = dbStars.filter(o => o.mag == null).length
-    const magPassStars = dbStars.filter(o => (o.mag ?? 99) <= magLim).length
+    const dbStars = objects.filter((o) => o.type === 'star' || o.type === 'double_star')
+    const noMagStars = dbStars.filter((o) => o.mag == null).length
+    const magPassStars = dbStars.filter((o) => (o.mag ?? 99) <= magLim).length
 
     const survey = {}
-    function tally(label) { survey[label] = (survey[label] ?? 0) + 1 }
+    function tally(label) {
+      survey[label] = (survey[label] ?? 0) + 1
+    }
 
     // Pass 1: DSOs (rendered first so stars paint on top)
     if (showDsos) {
@@ -528,7 +595,7 @@
         if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
         const above = aboveMap.get(obj.id) ?? false
         const isDouble = obj.type === 'double_star'
-        const isVariable = Array.isArray(obj.mag) && (obj.mag[1] - obj.mag[0]) >= 1
+        const isVariable = Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1
         drawStar(ctx, obj, pt, above)
         if (isVariable) addVariableRing(ctx, obj, pt, above)
         if (isDouble) addDoubleJut(ctx, obj, pt, above)
@@ -549,9 +616,13 @@
         }
       }
     }
+    if (!finderMode) drawSelectedMarker(ctx)
     if (showFovCircle) drawFovCircle(ctx)
 
-    console.log(`[SkyCanvas] fov=${fov}° starMagLim=${magLim.toFixed(1)} dsoMagLim=${dsoMagLim.toFixed(1)} | db:${dbStars.length} noMag:${noMagStars} magPass:${magPassStars} onScreen:`, survey)
+    console.log(
+      `[SkyCanvas] fov=${fov}° starMagLim=${magLim.toFixed(1)} dsoMagLim=${dsoMagLim.toFixed(1)} | db:${dbStars.length} noMag:${noMagStars} magPass:${magPassStars} onScreen:`,
+      survey,
+    )
     dirty = false
   }
 
@@ -561,11 +632,14 @@
   }
 
   onMount(() => {
-    getMeta('constellations').then(data => {
-      if (data) { constellations = data; dirty = true }
+    getMeta('constellations').then((data) => {
+      if (data) {
+        constellations = data
+        dirty = true
+      }
     })
 
-    observer = new ResizeObserver(entries => {
+    observer = new ResizeObserver((entries) => {
       for (const e of entries) {
         W = e.contentRect.width
         H = e.contentRect.height
@@ -586,6 +660,7 @@
     if (rafId !== null) cancelAnimationFrame(rafId)
     if (observer) observer.disconnect()
     unsubTheme()
+    unsubSelected()
   })
 </script>
 

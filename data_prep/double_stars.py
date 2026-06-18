@@ -109,7 +109,10 @@ class DoubleStarMatcher:
         max_mag: float,
         min_sep: float,
     ) -> tuple[int, int, int]:
-        """Attach double-star metadata under `dbl`; return (stars_with_dbl, pair_count, phys_count)."""
+        """Attach double-star metadata under `dbl`.
+
+        Returns (stars_with_dbl, pair_count, phys_count).
+        """
         tsv_path = self._downloader.fetch(WDS_VIZIER_URL, WDS_FILENAME)
         systems = self._load_systems(tsv_path, max_mag=max_mag, min_sep=min_sep)
 
