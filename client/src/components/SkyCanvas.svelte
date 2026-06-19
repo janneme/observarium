@@ -21,7 +21,7 @@
   export let showConstellationBoundaries = false
   export let showDsos = true
   export let showHorizon = true
-  export let flashIds = new Set()
+  export let magLimitOverride = null
   export let finderMode = false
 
   let canvas
@@ -60,7 +60,7 @@
     showConstellationBoundaries
     showDsos
     showHorizon
-    flashIds
+    magLimitOverride
     finderMode
     dirty = true
   }
@@ -86,7 +86,7 @@
 
   function starRadius(mag) {
     const m = Array.isArray(mag) ? mag[0] : mag
-    const magLim = adaptiveMagLimit(fov)
+    const magLim = magLimitOverride ?? adaptiveMagLimit(fov)
     const t = Math.max(0, Math.min(1, (magLim - m) / MAG_RANGE))
     const vmin = Math.min(W, H) / 100
     return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin
@@ -555,7 +555,7 @@
     if (showConstellationNames) drawConstellationNames(ctx)
 
     const renderedPx = new Map()
-    const magLim = adaptiveMagLimit(fov)
+    const magLim = magLimitOverride ?? adaptiveMagLimit(fov)
     // DSO limit: anchored at starMag=5→dsoMag=8, starMag=13→dsoMag=12 (linear in mag space).
     // DSOs are extended objects; their visual limit lags stars by 3 mags at naked-eye FOV,
     // converging to 1 mag below at large-aperture FOV.
@@ -604,18 +604,6 @@
       }
     }
 
-    if (flashIds.size > 0) {
-      ctx.strokeStyle = currentTheme === 'nightly' ? '#ff0000' : '#ffff00'
-      ctx.lineWidth = 2
-      ctx.setLineDash([])
-      for (const [id, p] of renderedPx) {
-        if (flashIds.has(id)) {
-          ctx.beginPath()
-          ctx.arc(p.px, p.py, 15, 0, Math.PI * 2)
-          ctx.stroke()
-        }
-      }
-    }
     if (!finderMode) drawSelectedMarker(ctx)
     if (showFovCircle) drawFovCircle(ctx)
 

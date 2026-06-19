@@ -71,7 +71,12 @@
     el.blur()
   }
 
-  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter }
+  function shiftEnter() {
+    dispatch('shiftEnter')
+    el.blur()
+  }
+
+  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter, shiftEnter }
 
   onDestroy(() => unregister(api))
 

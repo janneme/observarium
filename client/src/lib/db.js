@@ -434,3 +434,51 @@ export async function getSearchIndex() {
   const stored = await db.getAll('objects')
   return [..._tier1Cache, ...stored]
 }
+
+export async function getTodayObservation() {
+  const db = await getDB()
+  const today = new Date().toISOString().slice(0, 10)
+  return db.get('observations', today)
+}
+
+export async function toggleObjectObserved(objectId) {
+  const db = await getDB()
+  const today = new Date().toISOString().slice(0, 10)
+  const existing = (await db.get('observations', today)) || { date: today, objects: [] }
+  const idx = existing.objects.findIndex((o) => o.id === objectId)
+  if (idx === -1) {
+    existing.objects.push({ id: objectId })
+  } else {
+    existing.objects.splice(idx, 1)
+  }
+  await db.put('observations', existing)
+  return existing.objects.some((o) => o.id === objectId)
+}
+
+export async function getObjectImage(objectId) {
+  const db = await getDB()
+  return db.get('images', objectId)
+}
+
+export async function getDoubleStarNear(ra_deg, dec_deg, radiusDeg = 0.5) {
+  const db = await getDB()
+  const zones = _zonesForArea(ra_deg - radiusDeg, ra_deg + radiusDeg, dec_deg - radiusDeg, dec_deg + radiusDeg)
+  const tx = db.transaction('objects', 'readonly')
+  const idx = tx.store.index('by_zone')
+  let best = null
+  let bestDist = Infinity
+  for (const zone of zones) {
+    const objs = await idx.getAll(IDBKeyRange.only(zone))
+    for (const obj of objs) {
+      if (obj.type !== 'double_star' || !obj.pos) continue
+      const dra = Math.abs(obj.pos[0] - ra_deg)
+      const ddec = Math.abs(obj.pos[1] - dec_deg)
+      const dist = Math.sqrt(dra * dra + ddec * ddec)
+      if (dist < radiusDeg && dist < bestDist) {
+        bestDist = dist
+        best = obj
+      }
+    }
+  }
+  return best
+}

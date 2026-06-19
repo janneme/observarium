@@ -110,8 +110,8 @@
       class="row2"
       role="button"
       tabindex="0"
-      on:click={() => selectedObject.set(null)}
-      on:keydown={(e) => e.key === 'Enter' && selectedObject.set(null)}
+      on:click={() => dispatch('objectdetails')}
+      on:keydown={(e) => e.key === 'Enter' && dispatch('objectdetails')}
     >
       <span class="obj-icon">{objIcon($selectedObject)}</span>
       <span class="obj-name">{$selectedObject.name || $selectedObject.id}</span>

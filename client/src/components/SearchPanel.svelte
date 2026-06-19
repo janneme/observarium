@@ -3,7 +3,7 @@
   import CustomInput from './CustomInput.svelte'
   import OnScreenKeyboard from './OnScreenKeyboard.svelte'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { searchViewActive, pendingFocus } from '../stores/ui.js'
+  import { searchViewActive, objectDetailsActive, pendingFocus } from '../stores/ui.js'
   import { getSearchIndex } from '../lib/db.js'
 
   let query = ''
@@ -117,8 +117,8 @@
   }
 
   function details(item) {
-    // Stub — Object Details screen not yet implemented
-    console.log('[Search] details:', item.obj.id)
+    selectedObject.set(item.obj)
+    objectDetailsActive.set(true)
   }
 
   function findingPaths(item) {
@@ -135,6 +135,7 @@
         bind:value={query}
         placeholder="Search objects…"
         on:enter={() => results[0] && accept(results[0])}
+        on:shiftEnter={() => results[0] && details(results[0])}
       />
     </div>
     {#if query}

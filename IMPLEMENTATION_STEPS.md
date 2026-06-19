@@ -930,11 +930,43 @@ Technical notes:
   European visibility range (README §5.2 boundary rule).
 - **Pinch-zoom:** compute distance ratio between two pointers across frames;
   multiply FOV by inverse ratio. Clamp to `[NORMAL_VIEW_MIN_FOV, NORMAL_VIEW_MAX_FOV]`.
-- **Tap selection:** on `pointerup` with no movement (< 5 px), find the nearest
-  rendered object within a tap-radius (≈ 20 px device pixels). If exactly one
-  object is within radius → select it; if multiple → flash a ring on each
-  ambiguous candidate for 200 ms (README §B1). Store selected object in a
-  global Svelte store.
+- **Tap selection:** on `pointerup` with no movement (`TAP_THRESHOLD = 5` px),
+  find all rendered objects within `TAP_RADIUS = 20` device pixels of the tap
+  point.
+  - **Zero hits:** deselect (set `selectedObject` store to `null`).
+  - **One hit:** toggle selection — if the tapped object is already selected,
+    deselect it; otherwise select it. `ObjectDetails` is never opened
+    automatically from a sky tap.
+  - **Multiple hits:** open the **loupe overlay** (`LoupePanel`) centred on the
+    centroid of the hit objects. FOV is derived from the minimum pairwise
+    angular separation so all candidates are visible. See Loupe notes below.
+  - Selected object is stored in the `selectedObject` writable store
+    (`stores/selectedObject.js`). `ObjectDetails` visibility is independent,
+    controlled by the `objectDetailsActive` store (`stores/ui.js`).
+
+- **Loupe overlay (`client/src/components/LoupePanel.svelte`):** full-screen
+  fixed overlay (`inset: 0; z-index: 100`) shown when a sky tap is ambiguous.
+  - Renders a square `SkyCanvas` with rounded corners; `magLimitOverride` prop
+    bypasses the adaptive limit so faint objects stay visible at the loupe FOV.
+  - Close button `✕` (top-right of the square) dispatches `close` with no
+    state change — returns to sky view, nothing selected or deselected.
+  - Tap anywhere in the square: picks the closest object unconditionally,
+    dispatches `select` with `{ obj: closest }`.
+  - `MainScreen` `on:select` handler: closes loupe, then toggles selection —
+    deselect if `e.detail.obj` is already selected, otherwise select it.
+    `ObjectDetails` is not opened automatically.
+
+- **Object Details flow (separate from tap selection):**
+  - TopBar row 2 is visible when `$selectedObject && !menuOpen &&
+    !$searchViewActive`. It shows icon + name + constellation for the selected
+    object. Clicking/tapping it dispatches `objectdetails`, which opens the
+    About panel via `objectDetailsActive.set(true)`.
+  - `ObjectDetails` back button and `Escape` key both call `close()`, which
+    sets `objectDetailsActive.set(false)`. The `selectedObject` is **not**
+    cleared — the user returns to the sky view with row 2 still visible.
+  - The two states (`selectedObject` and `objectDetailsActive`) are fully
+    independent: selection changes only via sky/loupe taps; About visibility
+    changes only via TopBar open and back/Escape close.
 - **FOV circle:** when enabled (Menu toggle, README §C4), draw a dashed circle
   on the canvas representing `FINDER_FOV` degrees diameter, centred on the
   current view centre. The circle is suppressed when its radius would exceed

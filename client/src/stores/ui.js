@@ -27,5 +27,6 @@ export const showDsos = persistedWritable('showDsos', true)
 export const showHorizon = persistedWritable('showHorizon', true)
 export const finderViewActive = writable(false)
 export const searchViewActive = writable(false)
+export const objectDetailsActive = writable(false)
 export const pendingFocus = writable(null) // {ra, dec} — consumed by MainScreen to re-centre
 export const pendingChanges = writable(0)

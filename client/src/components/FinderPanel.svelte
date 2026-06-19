@@ -16,8 +16,6 @@
 
   const FINDER_FOV = 7.5
   const EUROPE_MIN_DEC = -35
-  const EMPTY_SET = new Set()
-
   let wrapEl
   let finderRa0 = mainRa0
   let finderDec0 = mainDec0
@@ -274,7 +272,6 @@
         showConstellationBoundaries={false}
         showDsos={true}
         showHorizon={true}
-        flashIds={EMPTY_SET}
       />
     </div>
   </div>

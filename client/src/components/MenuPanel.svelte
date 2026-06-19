@@ -80,7 +80,7 @@
             >
           {/if}
         </div>
-        <span class="item-lbl">Const.<br />Lines</span>
+        <span class="item-lbl">Const.<br />Lines (c)</span>
       </button>
 
       <!-- 3: Toggle constellation names -->
@@ -120,7 +120,7 @@
             >
           {/if}
         </div>
-        <span class="item-lbl">Const.<br />Names</span>
+        <span class="item-lbl">Const.<br />Names (C)</span>
       </button>
 
       <!-- 4: Toggle constellation boundaries -->
@@ -148,7 +148,7 @@
             >
           {/if}
         </div>
-        <span class="item-lbl">Const.<br />Bounds</span>
+        <span class="item-lbl">Const.<br />Bounds (b)</span>
       </button>
 
       <!-- 4: Toggle DSO -->
@@ -177,7 +177,7 @@
             >
           {/if}
         </div>
-        <span class="item-lbl">DSO</span>
+        <span class="item-lbl">DSO (d)</span>
       </button>
 
       <!-- 5: Toggle horizon -->
@@ -206,7 +206,7 @@
             >
           {/if}
         </div>
-        <span class="item-lbl">Horizon</span>
+        <span class="item-lbl">Horizon (h)</span>
       </button>
 
       <!-- 6: Toggle normal / finder view -->
@@ -239,7 +239,7 @@
             >
           {/if}
         </div>
-        <span class="item-lbl">Finder<br />View</span>
+        <span class="item-lbl">Finder<br />View (f)</span>
       </button>
 
       <!-- 7: Toggle FOV circle -->
@@ -288,7 +288,7 @@
             <line x1="8" y1="16" x2="13" y2="16" />
           </svg>
         </div>
-        <span class="item-lbl">Observations</span>
+        <span class="item-lbl">Observations (o)</span>
       </button>
 
       <!-- 10: Telescopes -->
@@ -302,7 +302,7 @@
             <line x1="9" y1="15" x2="11" y2="22" />
           </svg>
         </div>
-        <span class="item-lbl">Telescopes</span>
+        <span class="item-lbl">Telescopes (t)</span>
       </button>
 
       <!-- 11: Finder scope quiz -->
@@ -399,7 +399,7 @@
             <path d="M3.51 15a9 9 0 1 0 .49-4.07" />
           </svg>
         </div>
-        <span class="item-lbl">Update<br />Data</span>
+        <span class="item-lbl">Update<br />Data (u)</span>
       </button>
 
       <!-- 17: Synchronize observation data -->
@@ -421,7 +421,7 @@
             <span class="badge">{$pendingChanges}</span>
           {/if}
         </div>
-        <span class="item-lbl">Sync</span>
+        <span class="item-lbl">Sync (s)</span>
       </button>
 
       <!-- 18: About -->
@@ -440,7 +440,7 @@
             <line x1="12" y1="8" x2="12.01" y2="8" />
           </svg>
         </div>
-        <span class="item-lbl">About</span>
+        <span class="item-lbl">About (a)</span>
       </button>
     </div>
   </div>

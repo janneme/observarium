@@ -77,7 +77,8 @@ export function handleKeyDown(e) {
     cur.backspace()
     label = 'BACKSPACE'
   } else if (e.key === 'Enter') {
-    if (typeof cur.enter === 'function') cur.enter()
+    if (e.shiftKey && typeof cur.shiftEnter === 'function') cur.shiftEnter()
+    else if (typeof cur.enter === 'function') cur.enter()
     else cur.insertChar('\n')
     label = 'ENTER'
   } else if (e.key === 'ArrowLeft') {

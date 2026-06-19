@@ -7,7 +7,9 @@
   import AboutPanel from '../components/AboutPanel.svelte'
   import DataSyncPanel from '../components/DataSyncPanel.svelte'
   import FinderPanel from '../components/FinderPanel.svelte'
+  import LoupePanel from '../components/LoupePanel.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
+  import ObjectDetails from '../screens/ObjectDetails.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
@@ -21,6 +23,7 @@
     showHorizon,
     finderViewActive,
     searchViewActive,
+    objectDetailsActive,
     pendingFocus,
   } from '../stores/ui.js'
   import { get } from 'svelte/store'
@@ -50,8 +53,11 @@
   const TAP_RADIUS = 20
 
   let screenEl
-  let flashIds = new Set()
-  let flashTimer = null
+  let showLoupe = false
+  let loupeRa0 = 0
+  let loupeDec0 = 0
+  let loupeFov = 1
+  let loupeMagLim = 10
   const pointers = new Map()
 
   let menuOpen = false
@@ -102,6 +108,14 @@
     ) {
       loadObjects()
     }
+  }
+
+  function angSepDeg([ra1, dec1], [ra2, dec2]) {
+    const r = Math.PI / 180
+    return Math.acos(Math.max(-1, Math.min(1,
+      Math.sin(dec1*r)*Math.sin(dec2*r) +
+      Math.cos(dec1*r)*Math.cos(dec2*r)*Math.cos((ra2-ra1)*r)
+    ))) / r
   }
 
   function adaptiveMagLimit(fovDeg) {
@@ -178,7 +192,7 @@
       H = rect.height
     const magLim = adaptiveMagLimit(fov)
     const dsoMagLim = 8 + 0.5 * (magLim - 5)
-    const hits = []
+    let hits = []
     for (const obj of objects) {
       if (!obj.pos) continue
       if (obj.type === 'star' || obj.type === 'double_star') {
@@ -195,17 +209,32 @@
       const dist = Math.hypot(pt.px - tapX, pt.py - tapY)
       if (dist <= TAP_RADIUS) hits.push({ obj, dist })
     }
+    if (hits.some((h) => h.obj.type === 'star' && h.obj.dbl)) {
+      hits = hits.filter((h) => h.obj.type !== 'double_star')
+    }
     if (hits.length === 0) {
       selectedObject.set(null)
     } else if (hits.length === 1) {
-      selectedObject.set(hits[0].obj)
+      if (get(selectedObject)?.id === hits[0].obj.id) {
+        selectedObject.set(null)
+        objectDetailsActive.set(false)
+      } else {
+        selectedObject.set(hits[0].obj)
+      }
     } else {
-      flashIds = new Set(hits.map((h) => h.obj.id))
-      if (flashTimer) clearTimeout(flashTimer)
-      flashTimer = setTimeout(() => {
-        flashIds = new Set()
-        flashTimer = null
-      }, 200)
+      const centRa  = hits.reduce((s, h) => s + h.obj.pos[0], 0) / hits.length
+      const centDec = hits.reduce((s, h) => s + h.obj.pos[1], 0) / hits.length
+      let minSep = Infinity
+      for (let i = 0; i < hits.length; i++)
+        for (let j = i + 1; j < hits.length; j++) {
+          const s = angSepDeg(hits[i].obj.pos, hits[j].obj.pos)
+          if (s < minSep) minSep = s
+        }
+      loupeFov    = Math.max(0.05, Math.min(10, minSep * window.innerWidth / (3 * TAP_RADIUS)))
+      loupeRa0    = centRa
+      loupeDec0   = centDec
+      loupeMagLim = fovToMagLimit(fov)
+      showLoupe   = true
     }
   }
 
@@ -217,7 +246,50 @@
   }
 
   function handleKey(e) {
+    if (e.key === 'Escape') {
+      if (get(objectDetailsActive)) {
+        objectDetailsActive.set(false)
+        e.preventDefault()
+        return
+      }
+    }
+
     if (get(searchViewActive)) return
+
+    if (e.key === 'm') {
+      searchViewActive.set(false)
+      objectDetailsActive.set(false)
+      menuOpen = !menuOpen
+      e.preventDefault()
+      return
+    }
+
+    // s = sync when menu open, search when menu closed
+    if (e.key === 's') {
+      if (menuOpen) {
+        menuOpen = false
+        showSync = true
+      } else {
+        objectDetailsActive.set(false)
+        searchViewActive.update((v) => !v)
+      }
+      e.preventDefault()
+      return
+    }
+
+    if (e.key === 'c') { showConstellationLines.update((v) => !v); e.preventDefault(); return }
+    if (e.key === 'C') { showConstellationNames.update((v) => !v); e.preventDefault(); return }
+    if (e.key === 'b') { showConstellationBoundaries.update((v) => !v); e.preventDefault(); return }
+    if (e.key === 'd') { showDsos.update((v) => !v); e.preventDefault(); return }
+    if (e.key === 'h') { showHorizon.update((v) => !v); e.preventDefault(); return }
+    if (e.key === 'f') { finderViewActive.update((v) => !v); e.preventDefault(); return }
+    if (e.key === 'o') { menuOpen = false; e.preventDefault(); return }
+    if (e.key === 't') { menuOpen = false; e.preventDefault(); return }
+    if (e.key === 'u') { menuOpen = false; showSync = true; e.preventDefault(); return }
+    if (e.key === 'a') { menuOpen = false; showAbout = true; e.preventDefault(); return }
+
+    if (menuOpen) return
+
     if (e.key === '+' || e.key === '=') {
       fov = Math.max(0.1, fov * (1 - FOV_STEP))
     } else if (e.key === '-') {
@@ -265,7 +337,6 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKey)
     window.removeEventListener('wheel', handleWheel)
-    if (flashTimer) clearTimeout(flashTimer)
   })
 </script>
 
@@ -294,7 +365,6 @@
       showConstellationBoundaries={$showConstellationBoundaries}
       showDsos={$showDsos}
       showHorizon={$showHorizon}
-      {flashIds}
     />
   {/if}
 
@@ -303,14 +373,19 @@
     {menuOpen}
     on:menutoggle={() => {
       searchViewActive.set(false)
+      objectDetailsActive.set(false)
       menuOpen = !menuOpen
     }}
     on:searchtoggle={() => {
       menuOpen = false
+      objectDetailsActive.set(false)
       searchViewActive.update((v) => !v)
     }}
     on:timepick={() => {
       showPicker = true
+    }}
+    on:objectdetails={() => {
+      objectDetailsActive.set(true)
     }}
   />
 
@@ -353,6 +428,7 @@
       on:close={() => {
         showSync = false
       }}
+      on:synced={loadObjects}
     />
   {/if}
 
@@ -362,6 +438,30 @@
 
   {#if $searchViewActive}
     <SearchPanel />
+  {/if}
+
+  {#if $objectDetailsActive}
+    <ObjectDetails {lat} {lon} {time} />
+  {/if}
+
+  {#if showLoupe}
+    <LoupePanel
+      ra0={loupeRa0}
+      dec0={loupeDec0}
+      fov={loupeFov}
+      {objects}
+      {lat} {lon} {time}
+      magLimit={loupeMagLim}
+      on:select={(e) => {
+        showLoupe = false
+        if (get(selectedObject)?.id === e.detail.obj.id) {
+          selectedObject.set(null)
+        } else {
+          selectedObject.set(e.detail.obj)
+        }
+      }}
+      on:close={() => { showLoupe = false }}
+    />
   {/if}
 </div>
 

@@ -310,12 +310,16 @@ The following input operations are supported:
 - Zooming by two fingers gesture. The zoom range is
   limited by NORMAL_VIEW_MIN_FOV (2 degrees by default) and NORMAL_VIEW_MAX_FOV
   (60 degrees by default).
-- Tapping on an object to select/deselect it. The operation is accepted only
-  if there are no nearby objects (with respect to the current zoom level) and therefore
-  the target object is well identified and there is low risk of confusion with
-  another object. If multiple nearby objects cause ambiguity, all ambiguous candidates
-  are briefly highlighted with a ring animation so the user understands they need to
-  zoom in further before selecting.
+- Tapping on an object to select or deselect it. If exactly one object is
+  within the tap radius, it is toggled: already selected → deselected,
+  otherwise → selected. If multiple nearby objects are ambiguous, a loupe
+  overlay appears showing a magnified square view centred on the tap area; the
+  user taps once inside the loupe to pick the intended object (closest to the
+  tap point is selected), or dismisses it with the close button. Tapping empty
+  sky always deselects.
+- Tapping the selected object's name in the top bar (row 2) opens the Object
+  Details (About) panel. Closing About with the back button or Escape returns
+  to the sky view with the object still selected.
 - When the FOV circle toggle is on (see Menu), a dashed circle is drawn on the Main
   Screen representing the footprint of the Finder FOV (FINDER_FOV degrees). This helps
   the user build spatial intuition between the two views.

@@ -55,6 +55,7 @@
       imagesSize = result.imagesSize
       observationsSize = result.observationsSize
       phase = 'done'
+      dispatch('synced')
     } catch (err) {
       console.error('[DataSyncPanel] sync failed:', err)
       phase = 'error'

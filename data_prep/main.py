@@ -249,7 +249,7 @@ def _run_stars(args: argparse.Namespace, star_kwargs: dict[str, float]) -> None:
         **star_kwargs,
     ).run(
         var_index=var_index,
-        attach_double=False,
+        attach_double=True,
         show_summary=show_summary,
         extreme_stars_num=args.extreme_stars_num,
     )
