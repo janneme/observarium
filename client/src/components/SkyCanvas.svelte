@@ -81,8 +81,8 @@
   // The interpolation window is always MAG_RANGE wide, sliding with magLim:
   // faintest rendered star → MIN_R_VMIN, stars brighter than (magLim - MAG_RANGE) → MAX_R_VMIN.
   const MAG_RANGE = 6
-  const MIN_R_VMIN = 0.08 // faintest visible star (at magLim), in vmin
-  const MAX_R_VMIN = 0.35 // brightest star (mag ≤ magLim − MAG_RANGE), in vmin
+  const MIN_R_VMIN = 0.12 // faintest visible star (at magLim), in vmin
+  const MAX_R_VMIN = 0.5 // brightest star (mag ≤ magLim − MAG_RANGE), in vmin
 
   function starRadius(mag) {
     const m = Array.isArray(mag) ? mag[0] : mag

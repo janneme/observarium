@@ -326,6 +326,11 @@ class DoubleStarMatcher:
                 if system is None:
                     system = self._init_system_from_row(wds_id, row, ra, dec)
                     grouped[wds_id] = system
+                else:
+                    # Upgrade spect to a combined ('+') type if a later row has one
+                    row_spect = (row.get("SpType", "") or "").strip()
+                    if row_spect and "+" in row_spect and "+" not in system.get("spect", ""):
+                        system["spect"] = row_spect
 
                 pair = self._build_pair_from_row(row, mag1, mag2, sep1, sep2)
                 system["pairs"].append(pair)

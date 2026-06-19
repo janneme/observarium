@@ -100,7 +100,7 @@ WDS_VIZIER_URL: str = (
     "https://vizier.cds.unistra.fr/viz-bin/asu-tsv?"
     "-source=B/wds/wds"
     "&-out.max=200000"
-    "&-out=WDS,Disc,Comp,Date,sep1,sep2,mag1,mag2,Notes,RAJ2000,DEJ2000"
+    "&-out=WDS,Disc,Comp,Date,sep1,sep2,mag1,mag2,SpType,Notes,RAJ2000,DEJ2000"
 )
 WDS_FILENAME: str = "wds.tsv"
 

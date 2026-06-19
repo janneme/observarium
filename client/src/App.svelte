@@ -5,7 +5,7 @@
   import MainScreen from './screens/MainScreen.svelte'
   import { hasData } from './lib/db.js'
   import './stores/theme.js'
-  import { handleKeyDown } from './stores/keyboard.js'
+  import { handleKeyDown, handleKeyUp } from './stores/keyboard.js'
 
   const routes = {
     '/': WelcomeScreen,
@@ -22,5 +22,5 @@
   })
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
+<svelte:window on:keydown={handleKeyDown} on:keyup={handleKeyUp} />
 <Router {routes} />

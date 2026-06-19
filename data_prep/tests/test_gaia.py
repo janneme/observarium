@@ -241,7 +241,7 @@ def test_adql_accepted_by_gaia_tap():
     import urllib.request
 
     base_query = _adql_query(13.0, -35.0, 12.9)
-    limited = base_query + " LIMIT 5"
+    limited = base_query.replace("SELECT ", "SELECT TOP 5 ", 1)
     body = urllib.parse.urlencode(
         {
             "REQUEST": "doQuery",

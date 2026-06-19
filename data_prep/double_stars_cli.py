@@ -66,6 +66,12 @@ def main(
     grouped = {s["wds"]: s for s in systems}
     with out.open("w", encoding="utf-8") as fh:
         json.dump(grouped, fh, ensure_ascii=False, indent=2)
+    # Also write a mag-tagged copy when max_mag is specified so data_upload.py
+    # can pick the right file for the current MAG setting.
+    if max_mag is not None:
+        out_mag = output_dir / f"double_stars.m{max_mag:g}.json"
+        with out_mag.open("w", encoding="utf-8") as fh:
+            json.dump(grouped, fh, ensure_ascii=False, indent=2)
     # Only emit the explicit 'Wrote ...' message when debug is enabled.
     if debug:
         if max_mag is None:

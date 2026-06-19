@@ -27,6 +27,7 @@
     pendingFocus,
   } from '../stores/ui.js'
   import { get } from 'svelte/store'
+  import { toggleTheme } from '../stores/theme.js'
 
   let lat = 48.2 // default: Vienna
   let lon = 16.37
@@ -112,10 +113,18 @@
 
   function angSepDeg([ra1, dec1], [ra2, dec2]) {
     const r = Math.PI / 180
-    return Math.acos(Math.max(-1, Math.min(1,
-      Math.sin(dec1*r)*Math.sin(dec2*r) +
-      Math.cos(dec1*r)*Math.cos(dec2*r)*Math.cos((ra2-ra1)*r)
-    ))) / r
+    return (
+      Math.acos(
+        Math.max(
+          -1,
+          Math.min(
+            1,
+            Math.sin(dec1 * r) * Math.sin(dec2 * r) +
+              Math.cos(dec1 * r) * Math.cos(dec2 * r) * Math.cos((ra2 - ra1) * r),
+          ),
+        ),
+      ) / r
+    )
   }
 
   function adaptiveMagLimit(fovDeg) {
@@ -222,7 +231,7 @@
         selectedObject.set(hits[0].obj)
       }
     } else {
-      const centRa  = hits.reduce((s, h) => s + h.obj.pos[0], 0) / hits.length
+      const centRa = hits.reduce((s, h) => s + h.obj.pos[0], 0) / hits.length
       const centDec = hits.reduce((s, h) => s + h.obj.pos[1], 0) / hits.length
       let minSep = Infinity
       for (let i = 0; i < hits.length; i++)
@@ -230,11 +239,11 @@
           const s = angSepDeg(hits[i].obj.pos, hits[j].obj.pos)
           if (s < minSep) minSep = s
         }
-      loupeFov    = Math.max(0.05, Math.min(10, minSep * window.innerWidth / (3 * TAP_RADIUS)))
-      loupeRa0    = centRa
-      loupeDec0   = centDec
+      loupeFov = Math.max(0.05, Math.min(10, (minSep * window.innerWidth) / (3 * TAP_RADIUS)))
+      loupeRa0 = centRa
+      loupeDec0 = centDec
       loupeMagLim = fovToMagLimit(fov)
-      showLoupe   = true
+      showLoupe = true
     }
   }
 
@@ -255,6 +264,12 @@
     }
 
     if (get(searchViewActive)) return
+
+    if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
+      objectDetailsActive.set(true)
+      e.preventDefault()
+      return
+    }
 
     if (e.key === 'm') {
       searchViewActive.set(false)
@@ -277,16 +292,63 @@
       return
     }
 
-    if (e.key === 'c') { showConstellationLines.update((v) => !v); e.preventDefault(); return }
-    if (e.key === 'C') { showConstellationNames.update((v) => !v); e.preventDefault(); return }
-    if (e.key === 'b') { showConstellationBoundaries.update((v) => !v); e.preventDefault(); return }
-    if (e.key === 'd') { showDsos.update((v) => !v); e.preventDefault(); return }
-    if (e.key === 'h') { showHorizon.update((v) => !v); e.preventDefault(); return }
-    if (e.key === 'f') { finderViewActive.update((v) => !v); e.preventDefault(); return }
-    if (e.key === 'o') { menuOpen = false; e.preventDefault(); return }
-    if (e.key === 't') { menuOpen = false; e.preventDefault(); return }
-    if (e.key === 'u') { menuOpen = false; showSync = true; e.preventDefault(); return }
-    if (e.key === 'a') { menuOpen = false; showAbout = true; e.preventDefault(); return }
+    if (e.key === 'c') {
+      showConstellationLines.update((v) => !v)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'C') {
+      showConstellationNames.update((v) => !v)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'b') {
+      showConstellationBoundaries.update((v) => !v)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'd') {
+      showDsos.update((v) => !v)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'h') {
+      showHorizon.update((v) => !v)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'n') {
+      toggleTheme()
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'f') {
+      finderViewActive.update((v) => !v)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'o') {
+      menuOpen = false
+      e.preventDefault()
+      return
+    }
+    if (e.key === 't') {
+      menuOpen = false
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'u') {
+      menuOpen = false
+      showSync = true
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'a') {
+      menuOpen = false
+      showAbout = true
+      e.preventDefault()
+      return
+    }
 
     if (menuOpen) return
 
@@ -450,7 +512,9 @@
       dec0={loupeDec0}
       fov={loupeFov}
       {objects}
-      {lat} {lon} {time}
+      {lat}
+      {lon}
+      {time}
       magLimit={loupeMagLim}
       on:select={(e) => {
         showLoupe = false
@@ -460,7 +524,9 @@
           selectedObject.set(e.detail.obj)
         }
       }}
-      on:close={() => { showLoupe = false }}
+      on:close={() => {
+        showLoupe = false
+      }}
     />
   {/if}
 </div>

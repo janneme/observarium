@@ -67,12 +67,7 @@
 
 <div class="loupe-overlay" on:pointerdown|stopPropagation>
   <div class="square-container">
-    <div
-      class="canvas-wrap"
-      bind:this={wrapEl}
-      on:pointerdown={handlePointerDown}
-      on:pointerup={handlePointerUp}
-    >
+    <div class="canvas-wrap" bind:this={wrapEl} on:pointerdown={handlePointerDown} on:pointerup={handlePointerUp}>
       <SkyCanvas
         {ra0}
         {dec0}

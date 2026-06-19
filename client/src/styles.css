@@ -1,6 +1,6 @@
 :root {
-  --bg: #ffffff;
-  --fg: #111111;
+  --bg: #000000;
+  --fg: #e8e8e8;
   --accent: #cc0000;
   --key-border: rgba(0, 0, 0, 0.12);
   --surface-bg: rgba(0, 0, 0, 0.7);

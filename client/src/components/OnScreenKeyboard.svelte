@@ -8,6 +8,8 @@
     moveDown,
     enter,
     pressedKey,
+    hwShift,
+    hwCapsLock,
   } from '../stores/keyboard.js'
   import { onMount, onDestroy, tick } from 'svelte'
 
@@ -140,8 +142,11 @@
     if (layout === 'en' && (shift || capsLock) && k.length === 1) out = k.toUpperCase()
 
     insertChar(out)
-    // one-time shift behavior: clear after a normal key press
-    if (shift && k.length === 1) shift = false
+    // one-time shift: clear after a normal key press; small delay lets :active CSS show before re-render
+    if (shift && k.length === 1)
+      setTimeout(() => {
+        shift = false
+      }, 80)
   }
   function back() {
     backspace()
@@ -166,13 +171,16 @@
     shift = !shift
   }
 
+  $: effectiveShift = shift || $hwShift
+  $: effectiveCaps = capsLock || $hwCapsLock
+
   // `rows` should exclude the top (digits/diacritics) row which is rendered separately
   $: rows =
     layout === 'en'
-      ? shift || capsLock
+      ? effectiveShift || effectiveCaps
         ? en.shifted.slice(1)
         : en.unshifted.slice(1)
-      : shift || capsLock
+      : effectiveShift || effectiveCaps
         ? cz.shifted.slice(1)
         : cz.unshifted.slice(1)
 
@@ -240,40 +248,40 @@
     else window.removeEventListener('resize', computeKeyWidths)
   })
 
-  // Recompute widths when layout/shift/capsLock change
-  $: if (mounted) computeKeyWidths()
+  // Recompute widths when layout/shift/capsLock change (rows acts as proxy for all three)
+  $: if (rows && mounted) computeKeyWidths()
 </script>
 
 <div
   bind:this={kbEl}
   class="kb"
   class:caps={capsLock}
+  class:shift
   aria-hidden="false"
   role="application"
   aria-label="On-screen keyboard"
 >
   <div class="row digits">
     {#if layout === 'en'}
-      {#each shift || capsLock ? en.shifted[0] : en.unshifted[0] as d}
+      {#each effectiveShift || effectiveCaps ? en.shifted[0] : en.unshifted[0] as d}
         <button
           class="key flex"
           data-key={d}
           type="button"
           class:dead-active={deadKeySymbol === d}
           class:hw-active={$pressedKey === d}
-          on:mousedown|preventDefault
-          on:click={() => press(d)}>{displayKey(d)}</button
+          on:pointerdown|preventDefault={() => press(d)}>{displayKey(d)}</button
         >
       {/each}
     {:else}
-      {#each shift ? cz.shifted[0] : cz.unshifted[0] as d}
+      {#each effectiveShift || effectiveCaps ? cz.shifted[0] : cz.unshifted[0] as d}
         <button
           class="key flex"
           data-key={d}
           type="button"
           class:dead-active={deadKeySymbol === d}
           class:hw-active={$pressedKey === d}
-          on:click={() => press(d)}>{displayKey(d)}</button
+          on:pointerdown|preventDefault={() => press(d)}>{displayKey(d)}</button
         >
       {/each}
     {/if}
@@ -283,8 +291,7 @@
       type="button"
       class:dead-active={deadKeySymbol === 'BACKSPACE'}
       class:hw-active={$pressedKey === 'BACKSPACE'}
-      on:mousedown|preventDefault
-      on:click={back}>{displayKey('BACKSPACE')}</button
+      on:pointerdown|preventDefault={back}>{displayKey('BACKSPACE')}</button
     >
   </div>
 
@@ -297,8 +304,8 @@
           type="button"
           class:dead-active={deadKeySymbol === k}
           class:hw-active={$pressedKey === k}
-          on:mousedown|preventDefault
-          on:click={() => press(k)}>{displayKey(k)}</button
+          class:key-toggled={(k === 'SHIFT' && effectiveShift) || (k === 'CAPS' && effectiveCaps)}
+          on:pointerdown|preventDefault={() => press(k)}>{displayKey(k)}</button
         >
       {/each}
     </div>
@@ -310,8 +317,7 @@
       data-key="LANG"
       type="button"
       class:dead-active={deadKeySymbol === 'LANG'}
-      on:mousedown|preventDefault
-      on:click={toggleLayout}
+      on:pointerdown|preventDefault={toggleLayout}
       aria-label="Language">{layout.toUpperCase()}</button
     >
     <button
@@ -320,8 +326,7 @@
       type="button"
       class:dead-active={deadKeySymbol === 'LEFT'}
       class:hw-active={$pressedKey === 'LEFT'}
-      on:mousedown|preventDefault
-      on:click={left}>{displayKey('LEFT')}</button
+      on:pointerdown|preventDefault={left}>{displayKey('LEFT')}</button
     >
     <button
       class="key small"
@@ -329,8 +334,7 @@
       type="button"
       class:dead-active={deadKeySymbol === 'UP'}
       class:hw-active={$pressedKey === 'UP'}
-      on:mousedown|preventDefault
-      on:click={up}>{displayKey('UP')}</button
+      on:pointerdown|preventDefault={up}>{displayKey('UP')}</button
     >
     <button
       class="key space"
@@ -338,8 +342,7 @@
       type="button"
       class:dead-active={deadKeySymbol === 'SPACE'}
       class:hw-active={$pressedKey === 'SPACE'}
-      on:mousedown|preventDefault
-      on:click={() => press(' ')}
+      on:pointerdown|preventDefault={() => press(' ')}
       aria-label="Space"
     ></button>
     <button
@@ -348,8 +351,7 @@
       type="button"
       class:dead-active={deadKeySymbol === 'DOWN'}
       class:hw-active={$pressedKey === 'DOWN'}
-      on:mousedown|preventDefault
-      on:click={down}>{displayKey('DOWN')}</button
+      on:pointerdown|preventDefault={down}>{displayKey('DOWN')}</button
     >
     <button
       class="key small"
@@ -357,8 +359,7 @@
       type="button"
       class:dead-active={deadKeySymbol === 'RIGHT'}
       class:hw-active={$pressedKey === 'RIGHT'}
-      on:mousedown|preventDefault
-      on:click={right}>{displayKey('RIGHT')}</button
+      on:pointerdown|preventDefault={right}>{displayKey('RIGHT')}</button
     >
   </div>
 </div>
@@ -434,19 +435,16 @@
     flex: 3 1 0;
     min-width: 0;
   }
-  /* persistent CAPS invert state only for the CAPS key */
-  .kb.caps button[data-key='CAPS'] {
+  /* persistent highlight for SHIFT (when active) and CAPS (when locked) */
+  .key.key-toggled {
     background: var(--fg);
     color: var(--bg);
     border-color: var(--bg);
   }
-  .kb.caps button[data-key='CAPS']:active {
+  .key.key-toggled:active {
     background: var(--bg);
     color: var(--fg);
     border-color: var(--fg);
-  }
-  .kb button[data-key='CAPS'] {
-    box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0);
   }
   .key.dead-active {
     background: var(--fg);

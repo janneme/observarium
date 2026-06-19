@@ -33,9 +33,7 @@
   $: obj = $selectedObject
 
   function raHours(o) {
-    if (!o?.pos) return 0
-    // stars: pos[0] in hours; DSOs and double stars: pos[0] in degrees
-    return o.type === 'star' ? o.pos[0] : o.pos[0] / 15
+    return (o?.pos?.[0] ?? 0) / 15
   }
 
   function decDeg(o) {
@@ -79,22 +77,22 @@
 
   function catNumbers(o) {
     const parts = []
+    if (o.bay) parts.push(o.constellation ? `${o.bay} ${o.constellation}` : o.bay)
+    if (o.flam != null) parts.push(o.constellation ? `${o.flam} ${o.constellation}` : String(o.flam))
+    if (o.hd != null) parts.push(`HD ${o.hd}`)
+    if (o.hip != null) parts.push(`HIP ${o.hip}`)
     if (o.m != null) parts.push(`M ${o.m}`)
     if (o.ngc != null) parts.push(`NGC ${o.ngc}`)
     if (o.ic != null) parts.push(`IC ${o.ic}`)
     if (o.caldwell != null) parts.push(`C ${o.caldwell}`)
-    if (o.hip != null) parts.push(`HIP ${o.hip}`)
-    if (o.hd != null) parts.push(`HD ${o.hd}`)
     if (o.wds != null) parts.push(`WDS ${o.wds}`)
-    if (o.bay) parts.push(o.bay)
-    if (o.flam != null) parts.push(String(o.flam))
-    return parts.join('  ·  ') || null
+    return parts.length ? parts : null
   }
 
-  function dblPairs(o) {
+  function dblPairs(o, ds = null) {
     if (o.type === 'double_star') return o.pairs || []
     if (Array.isArray(o.dbl)) return o.dbl.flatMap((entry) => entry.pairs || [])
-    if (o.dbl && linkedDs) return linkedDs.pairs || []
+    if (o.dbl && ds) return ds.pairs || []
     return []
   }
 
@@ -102,8 +100,8 @@
     return o.type === 'double_star' || (o.type === 'star' && !!o.dbl)
   }
 
-  function dblMainPair(o) {
-    const pairs = dblPairs(o)
+  function dblMainPair(o, ds = null) {
+    const pairs = dblPairs(o, ds)
     return pairs.find((p) => p.comp === 'AB') || pairs[0] || null
   }
 
@@ -113,18 +111,18 @@
     return `${sep}″`
   }
 
-  function typeLabel(o) {
+  function typeLabel(o, ds = null) {
     if (o.dsoType) return o.dsoType
     if (isDouble(o)) {
-      const hasPhys = dblPairs(o).some((p) => p.phys)
+      const hasPhys = dblPairs(o, ds).some((p) => p.phys)
       return hasPhys ? 'Physical double star' : 'Double star'
     }
     return o.type
   }
 
-  function formatMagRow(o) {
+  function formatMagRow(o, ds = null) {
     if (!isDouble(o)) return formatMag(o.mag)
-    const pair = dblMainPair(o)
+    const pair = dblMainPair(o, ds)
     if (pair?.mag && Array.isArray(pair.mag)) {
       const [m1, m2] = pair.mag
       const compStr = `${m1} / ${m2}`
@@ -133,10 +131,16 @@
     return formatMag(o.mag)
   }
 
-  function formatSpect(o) {
-    if (!o.spect) return null
-    if (isDouble(o) && o.spect.includes('+')) return o.spect.split('+').join(' / ')
-    return o.spect
+  function formatSpect(o, ds = null) {
+    const effectiveSpect = isDouble(o) && ds?.spect?.includes('+') ? ds.spect : o.spect
+    if (!effectiveSpect) return null
+    if (isDouble(o) && effectiveSpect.includes('+')) return effectiveSpect.split('+').join(' / ')
+    return effectiveSpect
+  }
+
+  function spectralColor(s) {
+    const m = { O: '#92b5ff', B: '#b2c5ff', A: '#cad8ff', F: '#f8f7ff', G: '#fff4e8', K: '#ffd2a1', M: '#ff8f6b' }
+    return m[s?.trim()[0]?.toUpperCase()] ?? null
   }
 
   function moonPath(phaseDeg) {
@@ -271,7 +275,8 @@
       class:observed={isObservedToday}
       on:click={toggleObserved}
       title={isObservedToday ? 'Mark as not observed' : 'Mark as observed tonight'}
-    >{isObservedToday ? '★' : '☆'}</button>
+      >{isObservedToday ? '★' : '☆'}</button
+    >
   </div>
 
   {#if obj}
@@ -287,15 +292,33 @@
           <div class="row"><span class="label">Name</span><span class="value">{obj.name}</span></div>
         {/if}
         {#if catNumbers(obj)}
-          <div class="row"><span class="label">Catalogue</span><span class="value cat">{catNumbers(obj)}</span></div>
+          <div class="row cat-row">
+            <span class="label">Catalogue</span>
+            <span class="cat-value">
+              {#each catNumbers(obj) as item}
+                <span class="cat-item">{item}</span>
+              {/each}
+            </span>
+          </div>
         {/if}
         {#if obj.type}
-          <div class="row"><span class="label">Type</span><span class="value">{typeLabel(obj)}</span></div>
+          <div class="row"><span class="label">Type</span><span class="value">{typeLabel(obj, linkedDs)}</span></div>
         {/if}
         {#if isDouble(obj)}
-          {@const sep = dblMainPair(obj)?.sep}
-          {#if sep != null}
-            <div class="row"><span class="label">Separation</span><span class="value">{formatSep(sep)}</span></div>
+          {@const sepPairs = dblPairs(obj, linkedDs).filter((p) => p.sep != null)}
+          {#if sepPairs.length === 1}
+            <div class="row">
+              <span class="label">Separation</span><span class="value">{formatSep(sepPairs[0].sep)}</span>
+            </div>
+          {:else if sepPairs.length > 1}
+            <div class="row sep-row">
+              <span class="label">Separation</span>
+              <span class="value sep-value">
+                {#each sepPairs as p}
+                  <span class="sep-item"><span class="sep-comp">{p.comp}</span>{formatSep(p.sep)}</span>
+                {/each}
+              </span>
+            </div>
           {/if}
         {/if}
         {#if obj.pos}
@@ -306,7 +329,11 @@
           <div class="row"><span class="label">Constellation</span><span class="value">{obj.constellation}</span></div>
         {/if}
         {#if obj.mag != null || isDouble(obj)}
-          <div class="row"><span class="label">Magnitude</span><span class="value">{isDouble(obj) ? formatMagRow(obj) : formatMag(obj.mag)}</span></div>
+          <div class="row">
+            <span class="label">Magnitude</span><span class="value"
+              >{isDouble(obj) ? formatMagRow(obj, linkedDs) : formatMag(obj.mag)}</span
+            >
+          </div>
         {/if}
         {#if obj.size != null}
           <div class="row"><span class="label">Size</span><span class="value">{formatSize(obj.size)}</span></div>
@@ -317,42 +344,29 @@
         {#if obj.dist != null}
           <div class="row"><span class="label">Distance</span><span class="value">{obj.dist} ly</span></div>
         {/if}
-        {#if formatSpect(obj)}
-          <div class="row"><span class="label">Spectral type</span><span class="value">{formatSpect(obj)}</span></div>
+        {#if formatSpect(obj, linkedDs)}
+          {@const spParts = formatSpect(obj, linkedDs).split(' / ')}
+          <div class="row">
+            <span class="label">Spectral type</span>
+            <span class="value">
+              {#each spParts as part, i}
+                {#if i > 0}<span class="spect-sep"> / </span>{/if}
+                <span style="color: {spectralColor(part) ?? 'inherit'}">{part}</span>
+              {/each}
+            </span>
+          </div>
         {/if}
         {#if obj.cstar_mag != null}
           <div class="row"><span class="label">Central star</span><span class="value">mag {obj.cstar_mag}</span></div>
         {/if}
       </section>
 
-      {#if isDouble(obj) && dblPairs(obj).length > 0}
-        {@const disc = obj.type === 'double_star' ? obj.disc : linkedDs?.disc}
-        <section class="info-section">
-          <div class="section-title">Double star</div>
-          {#if disc}
-            <div class="row"><span class="label">Discoverer</span><span class="value">{disc}</span></div>
-          {/if}
-          {#each dblPairs(obj) as pair}
-            <div class="dbl-pair">
-              <span class="pair-comp">{pair.comp}</span>
-              {#if pair.mag != null}
-                <span class="pair-mag">{Array.isArray(pair.mag) ? `${pair.mag[0]} / ${pair.mag[1]}` : pair.mag}</span>
-              {/if}
-              {#if pair.sep != null}
-                <span class="pair-sep">{formatSep(pair.sep)}</span>
-              {/if}
-              {#if pair.period != null}
-                <span class="pair-period">{pair.period} yr</span>
-              {/if}
-            </div>
-          {/each}
-        </section>
-      {/if}
-
       <section class="info-section">
         <div class="section-title">Visibility today</div>
         <div class="row"><span class="label">Rise</span><span class="value mono">{formatTime(riseTime)}</span></div>
-        <div class="row"><span class="label">Transit</span><span class="value mono">{formatTime(transitTime)}</span></div>
+        <div class="row">
+          <span class="label">Transit</span><span class="value mono">{formatTime(transitTime)}</span>
+        </div>
         <div class="row"><span class="label">Set</span><span class="value mono">{formatTime(setTime)}</span></div>
       </section>
 
@@ -374,7 +388,9 @@
       {#if planetPhaseFraction !== null}
         <section class="info-section">
           <div class="section-title">Phase</div>
-          <div class="row"><span class="label">Illumination</span><span class="value">{Math.round(planetPhaseFraction * 100)}%</span></div>
+          <div class="row">
+            <span class="label">Illumination</span><span class="value">{Math.round(planetPhaseFraction * 100)}%</span>
+          </div>
         </section>
       {/if}
 
@@ -532,12 +548,24 @@
     font-size: 0.85rem;
   }
 
-  .value.cat {
+  .cat-row {
+    align-items: flex-start;
+  }
+
+  .cat-value {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.15rem;
+  }
+
+  .cat-item {
     font-size: 0.8rem;
     text-align: right;
   }
 
-  .moon-section {}
+  .moon-section {
+  }
 
   .moon-row {
     display: flex;
@@ -559,38 +587,36 @@
     fill: #e8e8e8;
   }
 
-  .dbl-pair {
+  .sep-row {
+    align-items: flex-start;
+  }
+
+  .sep-value {
     display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    padding: 0.2rem 0;
+    flex-direction: column;
+    gap: 0.1rem;
+    text-align: right;
+  }
+
+  .sep-item {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    font-family: monospace;
     font-size: 0.85rem;
   }
 
-  .pair-comp {
+  .sep-comp {
+    opacity: 0.6;
     font-weight: 600;
-    flex-shrink: 0;
-    min-width: 2rem;
-    opacity: 0.9;
   }
 
-  .pair-mag {
-    flex: 1;
+  .spect-sep {
+    opacity: 0.5;
   }
 
-  .pair-sep {
-    opacity: 0.85;
-    font-family: monospace;
-    font-size: 0.8rem;
+  .note-section {
   }
-
-  .pair-period {
-    opacity: 0.55;
-    font-size: 0.8rem;
-    flex-shrink: 0;
-  }
-
-  .note-section {}
 
   .note-text {
     font-size: 0.85rem;

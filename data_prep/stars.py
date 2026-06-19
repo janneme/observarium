@@ -810,7 +810,7 @@ class StarPipeline:
         def _col_idx(s: dict[str, Any]) -> int:
             return _COLOUR_TO_IDX.get(s.get("clr", ""), len(COLOR_PALETTE) - 1)
 
-        t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm"
+        t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn"
         t1_fixed_cols = 10   # columns before the optional trailing group
         t2_header = "z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd"
 
@@ -832,7 +832,7 @@ class StarPipeline:
                     str(_col_idx(s)),
                     str(s["hip"]) if s.get("hip") else "",
                     str(s["hd"]) if s.get("hd") else "",
-                    (s.get("spect") or "")[:2],
+                    (s.get("spect") or "").replace(",", "")[:2],
                     f"{s['dist']:.1f}" if s.get("dist") is not None else "",
                     f"{s['pm_ra']:.2f}" if s.get("pm_ra") is not None else "",
                     f"{s['pm_dec']:.2f}" if s.get("pm_dec") is not None else "",
@@ -841,8 +841,9 @@ class StarPipeline:
                     s.get("bay") or "",
                     "1" if s.get("dbl") else "",
                     s.get("name") or "",
-                    s.get("note") or "",
-                    s.get("smr") or "",
+                    (s.get("note") or "").replace(",", ""),
+                    (s.get("smr") or "").replace(",", ""),
+                    s.get("const") or "",
                 ]
                 # Strip trailing empty optional columns to save space.
                 while len(row) > t1_fixed_cols and row[-1] == "":
@@ -863,7 +864,7 @@ class StarPipeline:
                     str(_col_idx(s)),
                     str(s["hip"]) if s.get("hip") else "",
                     str(s["hd"]) if s.get("hd") else "",
-                    (s.get("spect") or "")[:2],
+                    (s.get("spect") or "").replace(",", "")[:2],
                     f"{s['dist']:.1f}" if s.get("dist") is not None else "",
                     f"{s['pm_ra']:.2f}" if s.get("pm_ra") is not None else "",
                     f"{s['pm_dec']:.2f}" if s.get("pm_dec") is not None else "",

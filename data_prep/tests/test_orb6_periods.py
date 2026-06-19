@@ -39,7 +39,7 @@ def test_attach_merges_period(tmp_path: Path) -> None:
 
     # Star positioned at (0h, 0deg) should match the WDS system
     stars = [{"pos": [0.0, 0.0], "hip": 1, "mag": 1.0}]
-    n_stars, n_pairs = matcher.attach(stars, max_mag=5.0, min_sep=2.0)
+    n_stars, n_pairs, _ = matcher.attach(stars, max_mag=5.0, min_sep=2.0)
     assert n_stars == 1
     assert n_pairs == 1
     assert "dbl" in stars[0]

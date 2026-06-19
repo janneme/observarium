@@ -46,14 +46,25 @@ def test_handle_presign_key(monkeypatch):
 
 def test_handle_data_hash(monkeypatch):
     class DummyBackend:
-        def get_hash(self, key):
-            if key == "objects.zip":
-                return "etag1"
-            return None
+        def read_bytes(self, key):
+            if key == "manifest.hash":
+                return b"abc123\n"
+            raise FileNotFoundError(key)
 
     monkeypatch.setattr(handler, "DATA_BUCKET", "test-bucket")
     monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
 
     out = handler.handle_data_hash()
-    assert out["objects"] == "etag1"
-    assert out["images"] is None
+    assert out["hash"] == "abc123"
+
+
+def test_handle_data_hash_missing(monkeypatch):
+    class DummyBackend:
+        def read_bytes(self, key):
+            raise FileNotFoundError(key)
+
+    monkeypatch.setattr(handler, "DATA_BUCKET", "test-bucket")
+    monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
+
+    out = handler.handle_data_hash()
+    assert out["hash"] is None

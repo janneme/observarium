@@ -9,6 +9,14 @@ function flashKey(label) {
   _pressedKeyTimer = setTimeout(() => pressedKey.set(null), 150)
 }
 
+// Hardware modifier key state — used by OnScreenKeyboard to mirror HW Shift/CapsLock
+export const hwShift = writable(false)
+export const hwCapsLock = writable(false)
+
+export function handleKeyUp(e) {
+  if (e.key === 'Shift') hwShift.set(false)
+}
+
 // The current focused input target. It should be an object implementing
 // insertChar(ch) and backspace() methods.
 const _current = writable(null)
@@ -68,6 +76,20 @@ export function clearTarget() {
 }
 
 export function handleKeyDown(e) {
+  // Track hardware Shift immediately (before checking for a focused input)
+  if (e.key === 'Shift') {
+    hwShift.set(true)
+    flashKey('SHIFT')
+    return
+  }
+  if (e.key === 'CapsLock') {
+    hwCapsLock.update((v) => !v)
+    flashKey('CAPS')
+    return
+  }
+  // Keep CapsLock in sync with the browser's actual state on every other key
+  if (e.getModifierState) hwCapsLock.set(e.getModifierState('CapsLock'))
+
   const cur = get(_current)
   if (!cur) return
 
@@ -102,6 +124,7 @@ export function handleKeyDown(e) {
 
   if (handled) {
     e.preventDefault()
+    e.stopImmediatePropagation()
     if (label) flashKey(label)
   }
 }
