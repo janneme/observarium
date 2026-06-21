@@ -1134,7 +1134,7 @@ Technical notes:
 
 ---
 
-### Step 25: Object Details screen
+### Step 25: Object Details screen ✅
 
 **README refs:** §5.16, §2.1 fields 1–11  
 **Deliverable:** Object Details screen with all fields, Observed button state,
