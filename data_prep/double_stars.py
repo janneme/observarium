@@ -64,14 +64,19 @@ def _sep_range(sep1: float | None, sep2: float | None) -> float | list[float] | 
 
 
 def _is_physical(notes: str) -> bool | None:
-    """Map WDS notes to physical/optical where hinted; otherwise None."""
+    """Map WDS notes to physical/optical where hinted; otherwise None.
+
+    WDS Notes column characters (relevant subset):
+      P = physical pair (common proper motion / parallax confirmed)
+      O = orbital solution exists — also proves a physical pair
+    There is no explicit "optical" code; apparent pairs are identified
+    by classify_apparent_pairs() using parallax distances instead.
+    """
     note = notes.strip().upper()
     if not note:
         return None
-    if "P" in note:
+    if "P" in note or "O" in note:
         return True
-    if "O" in note:
-        return False
     return None
 
 
@@ -87,6 +92,18 @@ def _angular_distance_deg(ra1_h: float, dec1_d: float, ra2_h: float, dec2_d: flo
     )
     cos_d = max(-1.0, min(1.0, cos_d))
     return math.degrees(math.acos(cos_d))
+
+
+_PC_TO_AU: float = 206_265.0  # 1 parsec in AU
+
+
+def _angular_sep_arcsec(pos1: list[float], pos2: list[float]) -> float:
+    """Angular separation in arcseconds between two [ra_h, dec_d] positions."""
+    ra1, de1 = pos1
+    ra2, de2 = pos2
+    dra = (ra2 - ra1) * 15.0 * math.cos(math.radians((de1 + de2) / 2.0))
+    dde = de2 - de1
+    return math.hypot(dra, dde) * 3600.0
 
 
 class DoubleStarMatcher:
@@ -416,6 +433,53 @@ class DoubleStarMatcher:
                     continue
                 mapping[wds] = p
         return mapping
+
+    def classify_apparent_pairs(
+        self,
+        stars: list[dict[str, Any]],
+        threshold_pc: float = 1.0,
+    ) -> int:
+        """Mark unclassified pairs as apparent using parallax distances.
+
+        Returns count of pairs newly marked as apparent.
+        """
+        bins = self._build_spatial_bins([s for s in stars if s.get("dist") is not None])
+        threshold_au = threshold_pc * _PC_TO_AU
+        _MATCH_TOL = 3.0  # arcsec
+        count = 0
+        for s1 in stars:
+            if not s1.get("dbl"):
+                continue
+            if s1.get("dist") is None:
+                continue
+            candidates = self._get_bin_candidates(s1["pos"][0], s1["pos"][1], bins)
+            for entry in s1["dbl"]:
+                for pair in entry["pairs"]:
+                    if "phys" in pair or "vis" in pair:
+                        continue
+                    sep_field = pair.get("sep")
+                    if sep_field is None:
+                        continue
+                    target_sep = sep_field[-1] if isinstance(sep_field, list) else sep_field
+                    for s2 in candidates:
+                        if s2 is s1:
+                            continue
+                        sep = _angular_sep_arcsec(s1["pos"], s2["pos"])
+                        if abs(sep - target_sep) > _MATCH_TOL:
+                            continue
+                        d1 = s1.get("dist")
+                        d2 = s2.get("dist")
+                        if d1 is None or d2 is None:
+                            break
+                        theta_rad = sep / 3600.0 * math.pi / 180.0
+                        proj_au = theta_rad * min(d1, d2) * _PC_TO_AU
+                        depth_au = abs(d1 - d2) * _PC_TO_AU
+                        sep3d_au = math.hypot(proj_au, depth_au)
+                        if sep3d_au > threshold_au:
+                            pair["vis"] = pair["comp"]
+                            count += 1
+                        break
+        return count
 
     @staticmethod
     def _match_system_star(

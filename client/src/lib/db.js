@@ -1,4 +1,5 @@
 import { openDB as idbOpenDB } from 'idb'
+import { SEARCH_ALIASES } from './customObjects.js'
 
 const DB_NAME = 'observarium'
 const DB_VERSION = 3
@@ -133,11 +134,13 @@ function _parseT1Csv(csv) {
     if (c[9]) star.pm_dec = parseFloat(c[9])
     if (c[10]) star.flam = parseInt(c[10], 10)
     if (c[11]) star.bay = c[11]
-    if (c[12]) star.dbl = true
+    if (c[12]) star.dbl = c[12]
     if (c[13]) star.name = c[13]
     if (c[14]) star.note = c[14]
     if (c[15]) star.smr = c[15]
     if (c[16]) star.constellation = c[16]
+    if (c[17]) star.varType = c[17]
+    if (c[18]) star.varPeriod = parseFloat(c[18])
     stars.push(star)
   }
   return stars
@@ -433,7 +436,11 @@ export async function getSearchIndex() {
   await _ensureTier1Loaded()
   const db = await getDB()
   const stored = await db.getAll('objects')
-  return [..._tier1Cache, ...stored]
+  const all = [..._tier1Cache, ...stored]
+  return all.map((obj) => {
+    const aliases = SEARCH_ALIASES[obj.id]
+    return aliases ? { ...obj, aliases } : obj
+  })
 }
 
 export async function getTodayObservation() {
@@ -458,7 +465,18 @@ export async function toggleObjectObserved(objectId) {
 
 export async function getObjectImage(objectId) {
   const db = await getDB()
-  return db.get('images', objectId)
+  let catalogueId = objectId
+  if (objectId?.startsWith('dso_')) {
+    const raw = objectId.slice(4) // strip 'dso_' prefix
+    if (raw.startsWith('M')) {
+      // M-catalogue object IDs zero-pad to 3 digits (dso_M057 → M57)
+      catalogueId = 'M' + parseInt(raw.slice(1), 10)
+    } else {
+      // NGC, IC, Caldwell etc. — filename matches the suffix directly
+      catalogueId = raw
+    }
+  }
+  return db.get('images', catalogueId)
 }
 
 export async function getDoubleStarNear(ra_deg, dec_deg, radiusDeg = 0.5) {

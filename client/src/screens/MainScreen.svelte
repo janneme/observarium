@@ -47,7 +47,7 @@
   let loadMagLimit = 0
   let fetching = false
 
-  const NORMAL_VIEW_MIN_FOV = 2
+  const NORMAL_VIEW_MIN_FOV = 0.5
   const NORMAL_VIEW_MAX_FOV = 120
   const EUROPE_MIN_DEC = -35
   const TAP_THRESHOLD = 5

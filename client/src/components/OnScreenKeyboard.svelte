@@ -470,4 +470,39 @@
       padding: 0.18rem 0.28rem;
     }
   }
+
+  :global([data-theme='nightly']) .key {
+    color: #cc0000;
+    border-color: rgba(200, 0, 0, 0.5);
+    background: rgba(80, 0, 0, 0.55);
+  }
+  :global([data-theme='nightly']) .key:hover {
+    border-color: #cc0000;
+  }
+  :global([data-theme='nightly']) .key:active,
+  :global([data-theme='nightly']) .key.hw-active {
+    background: #880000;
+    color: #000;
+    border-color: #000;
+  }
+  :global([data-theme='nightly']) .key.key-toggled {
+    background: #880000;
+    color: #000;
+    border-color: #000;
+  }
+  :global([data-theme='nightly']) .key.key-toggled:active {
+    background: rgba(80, 0, 0, 0.55);
+    color: #cc0000;
+    border-color: rgba(200, 0, 0, 0.5);
+  }
+  :global([data-theme='nightly']) .key.dead-active {
+    background: #880000;
+    color: #000;
+    border-color: #000;
+  }
+  :global([data-theme='nightly']) .key.dead-active:active {
+    background: rgba(80, 0, 0, 0.55);
+    color: #cc0000;
+    border-color: rgba(200, 0, 0, 0.5);
+  }
 </style>

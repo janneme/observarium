@@ -57,6 +57,14 @@
   function battFillW(level) {
     return Math.max(0, Math.round((13 * level) / 100))
   }
+
+  function objLabel(obj) {
+    if (!obj) return ''
+    if (obj.name) return obj.name
+    if (obj.bay && obj.constellation) return `${obj.bay} ${obj.constellation}`
+    if (obj.flam && obj.constellation) return `${obj.flam} ${obj.constellation}`
+    return (obj.id || '').replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2')
+  }
 </script>
 
 <div class="top-bar" on:pointerdown|stopPropagation>
@@ -114,7 +122,7 @@
       on:keydown={(e) => e.key === 'Enter' && dispatch('objectdetails')}
     >
       <span class="obj-icon">{objIcon($selectedObject)}</span>
-      <span class="obj-name">{$selectedObject.name || $selectedObject.id}</span>
+      <span class="obj-name">{objLabel($selectedObject)}</span>
       {#if $selectedObject.constellation}
         <span class="obj-const">{$selectedObject.constellation}</span>
       {/if}

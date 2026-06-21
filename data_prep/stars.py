@@ -14,13 +14,13 @@ from config import (
     ATHYG_FULL_MAG_THRESHOLD,
     ATHYG_FULL_URLS,
     ATHYG_URL,
+    BRIGHT_VARIABLE_THRESHOLD,
     EUROPE_MIN_DEC,
     EXTREME_STARS_NUM,
     GAIA_DEFAULT_MAX_MAG,
     GAIA_FILENAME_TEMPLATE,
     GAIA_MAG_THRESHOLD,
     MAX_STAR_MAGNITUDE,
-    VARIABLE_THRESHOLD,
 )
 from double_stars import DoubleStarMatcher
 from downloader import Downloader
@@ -232,10 +232,21 @@ def _int_or_none(value: str) -> int | None:
         return None
 
 
+def variable_threshold(mag: float, bright_threshold: float = BRIGHT_VARIABLE_THRESHOLD) -> float:
+    """Return the magnitude-dependent variability amplitude threshold.
+
+    T(m) = bright_threshold * (1 + 2 * (m / 10)³)
+
+    Very flat at the bright end, accelerating toward faint magnitudes.
+    Reaches 3 × bright_threshold at m = 10.
+    """
+    return bright_threshold * (1 + 2 * (mag / 10) ** 3)
+
+
 def _is_variable(
     var_min: float | None,
     var_max: float | None,
-    threshold: float = VARIABLE_THRESHOLD,
+    threshold: float,
 ) -> bool:
     """Return True when the magnitude range meets or exceeds *threshold*."""
     if var_min is None or var_max is None:
@@ -248,7 +259,9 @@ def _build_star(
     max_mag: float = MAX_STAR_MAGNITUDE,
     min_dec: float = EUROPE_MIN_DEC,
     var_range: tuple[float, float] | None = None,
-    var_threshold: float = VARIABLE_THRESHOLD,
+    var_threshold: float = BRIGHT_VARIABLE_THRESHOLD,
+    var_type: str | None = None,
+    period: float | None = None,
 ) -> dict[str, Any] | None:
     """Convert a raw CSV row to a star dict; return None to skip.
 
@@ -271,10 +284,11 @@ def _build_star(
         return None
 
     spect = row.get("spect", "")
+    eff_threshold = variable_threshold(mag, var_threshold)
     mag_value: float | list[float] = (
         [var_range[0], var_range[1]]
         if var_range is not None
-        and _is_variable(var_range[0], var_range[1], var_threshold)
+        and _is_variable(var_range[0], var_range[1], eff_threshold)
         else mag
     )
     star: dict[str, Any] = {
@@ -282,6 +296,11 @@ def _build_star(
         "mag": mag_value,
         "clr": spectral_colour(spect),
     }
+    if isinstance(mag_value, list):
+        if var_type:
+            star["var_type"] = var_type
+        if period is not None:
+            star["var_period"] = period
     for key, value in (
         ("hip", _int_or_none(row.get("hip", ""))),
         ("hd", _int_or_none(row.get("hd", ""))),
@@ -313,7 +332,7 @@ class StarPipeline:
         output_dir: Path,
         cache_dir: Path | None = None,
         max_mag: float = MAX_STAR_MAGNITUDE,
-        var_threshold: float = VARIABLE_THRESHOLD,
+        var_threshold: float = BRIGHT_VARIABLE_THRESHOLD,
         min_double_star_sep: float = 2.0,
         debug: bool = False,
     ) -> None:
@@ -331,7 +350,7 @@ class StarPipeline:
 
     def run(
         self,
-        var_index: dict[int, tuple[float, float]] | None = None,
+        var_index: dict[int, tuple] | None = None,
         attach_double: bool = False,
         show_summary: bool = True,
         extreme_stars_num: int | None = None,
@@ -392,10 +411,12 @@ class StarPipeline:
                 max_mag=self._max_mag,
                 min_sep=self._min_double_star_sep,
             )
+            n_apparent_pairs = self._double_matcher.classify_apparent_pairs(stars)
         else:
             n_dbl_stars = 0
             n_dbl_pairs = 0
             n_phys_pairs = 0
+            n_apparent_pairs = 0
         self._write_csv(stars)
         return self._write(
             stars,
@@ -404,6 +425,7 @@ class StarPipeline:
             n_dbl_stars,
             n_dbl_pairs,
             n_phys_pairs,
+            n_apparent_pairs,
             show_variables=(bool(var_index) and (show_summary or self._debug)),
             show_double=(attach_double and (show_summary or self._debug)),
             show_summary=show_summary,
@@ -528,7 +550,7 @@ class StarPipeline:
     @staticmethod
     def _collect_variable_amplitudes(
         stars: list[dict[str, Any]],
-        var_index: dict[int, tuple[float, float]],
+        var_index: dict[int, tuple],
     ) -> list[tuple[dict[str, Any], float]]:
         result: list[tuple[dict[str, Any], float]] = []
         for s in stars:
@@ -544,12 +566,12 @@ class StarPipeline:
     def _annotate_most_variable(
         self,
         stars: list[dict[str, Any]],
-        var_index: dict[int, tuple[float, float]] | None,
+        var_index: dict[int, tuple] | None,
         top_n: int,
     ) -> int:
         """Mark the top *top_n* stars by variability amplitude from *var_index*.
 
-        *var_index* is a HIP -> (min_mag, max_mag) mapping.
+        *var_index* is a HIP -> (min_mag, max_mag, var_type, period) mapping.
         """
         if not var_index:
             return 0
@@ -667,17 +689,22 @@ class StarPipeline:
     def _process_row(
         self,
         row: dict[str, str],
-        var_index: dict[int, tuple[float, float]],
+        var_index: dict[int, tuple],
         notes: dict[int, str],
     ) -> tuple[dict[str, Any] | None, int, int]:
         """Process one CSV row; return (star_or_None, n_curated_delta, n_auto_delta)."""
         hip = _int_or_none(row.get("hip", ""))
-        var_range = var_index.get(hip) if hip else None
+        var_data = var_index.get(hip) if hip else None
+        var_range = (var_data[0], var_data[1]) if var_data else None
+        var_type = var_data[2] if var_data and len(var_data) > 2 else None
+        period = var_data[3] if var_data and len(var_data) > 3 else None
         star = _build_star(
             row,
             max_mag=self._max_mag,
             var_range=var_range,
             var_threshold=self._var_threshold,
+            var_type=var_type,
+            period=period,
         )
         if star is None:
             return None, 0, 0
@@ -694,7 +721,7 @@ class StarPipeline:
         self,
         csv_path: Path,
         fieldnames: list[str] | None,
-        var_index: dict[int, tuple[float, float]],
+        var_index: dict[int, tuple],
         notes: dict[int, str],
     ) -> tuple[list[dict[str, Any]], int, int, list[str]]:
         """Read one catalogue file; return (stars, n_curated, n_auto, fieldnames)."""
@@ -785,6 +812,18 @@ class StarPipeline:
             s.pop("_lsun", None)
             s.pop("_lsun_phrase", None)
 
+    @staticmethod
+    def _dbl_csv_nature(s: dict[str, Any]) -> str:
+        if not s.get("dbl"):
+            return ""
+        for entry in s.get("dbl", []):
+            for pair in entry.get("pairs", []):
+                if "vis" in pair:
+                    return "a"
+                if "phys" in pair:
+                    return "p"
+        return "1"
+
     def _write_csv(
         self,
         stars: list[dict[str, Any]],
@@ -810,7 +849,7 @@ class StarPipeline:
         def _col_idx(s: dict[str, Any]) -> int:
             return _COLOUR_TO_IDX.get(s.get("clr", ""), len(COLOR_PALETTE) - 1)
 
-        t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn"
+        t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn,vt,vp"
         t1_fixed_cols = 10   # columns before the optional trailing group
         t2_header = "z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd"
 
@@ -839,11 +878,13 @@ class StarPipeline:
                     # optional trailing
                     str(s["flam"]) if s.get("flam") else "",
                     s.get("bay") or "",
-                    "1" if s.get("dbl") else "",
+                    self._dbl_csv_nature(s),
                     s.get("name") or "",
                     (s.get("note") or "").replace(",", ""),
                     (s.get("smr") or "").replace(",", ""),
                     s.get("const") or "",
+                    s.get("var_type") or "",
+                    f"{s['var_period']:.6g}" if s.get("var_period") is not None else "",
                 ]
                 # Strip trailing empty optional columns to save space.
                 while len(row) > t1_fixed_cols and row[-1] == "":
@@ -884,6 +925,7 @@ class StarPipeline:
         n_dbl_stars: int,
         n_dbl_pairs: int,
         n_phys_pairs: int,
+        n_apparent_pairs: int = 0,
         show_variables: bool = False,
         show_double: bool = False,
         show_summary: bool = True,
@@ -940,13 +982,15 @@ class StarPipeline:
             )
             if show_variables:
                 print(
-                    f"Variable stars : {n_variable} encoded with amplitude \u2265 "
-                    f"{self._var_threshold}"
+                    f"Variable stars : {n_variable} encoded"
+                    f" (bright threshold {self._var_threshold},"
+                    f" cubic magnitude scaling)"
                 )
             if show_double:
                 print(
                     f"Double stars   : {n_dbl_stars} stars with {n_dbl_pairs} pairs "
-                    f"({n_phys_pairs} physical, sep >= {self._min_double_star_sep} arcsec)"
+                    f"({n_phys_pairs} physical, {n_apparent_pairs} apparent, "
+                    f"sep >= {self._min_double_star_sep} arcsec)"
                 )
             print(f"Star notes     : {notes_summary}")
             print(f"Output         : {out} ({size_mb:.2f} MB)")

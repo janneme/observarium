@@ -22,7 +22,7 @@ _VIZIER_TAP_URL = "https://tapvizier.cds.unistra.fr/TAPVizieR/tap"
 
 # VizieR TAP: GCVS bright variables with documented amplitude.
 _GCVS_ADQL = """\
-SELECT TOP 100000 "VarName", "magMax", "Min1"
+SELECT TOP 100000 "VarName", "VarType", "Period", "magMax", "Min1"
 FROM   "B/gcvs/gcvs_cat"
 WHERE  "magMax" <= {max_mag}
   AND  "Min1"   IS NOT NULL
@@ -38,7 +38,7 @@ WHERE i_gcvs.id IN ({placeholders})
   AND i_hip.id LIKE 'HIP %'
 """
 
-_CSV_FIELDS = ("hip", "min_mag", "max_mag")
+_CSV_FIELDS = ("hip", "min_mag", "max_mag", "var_type", "period")
 
 
 def _norm_varname(raw: str) -> str:
@@ -117,7 +117,19 @@ class VariableStarPipeline:
                 min1 = float(row["Min1"])
             except (ValueError, TypeError):
                 continue
-            rows.append({"var_name": var_name, "mag_max": mag_max, "min1": min1})
+            vt_raw = str(row["VarType"]).strip()
+            var_type: str | None = vt_raw.rstrip(":") if vt_raw not in ("", "--") else None
+            try:
+                period: float | None = float(row["Period"])
+            except (ValueError, TypeError):
+                period = None
+            rows.append({
+                "var_name": var_name,
+                "mag_max": mag_max,
+                "min1": min1,
+                "var_type": var_type,
+                "period": period,
+            })
         return rows
 
     def _fetch_hip_xmatch(
@@ -134,7 +146,7 @@ class VariableStarPipeline:
         self,
         gcvs_rows: list[dict[str, Any]],
         xmatch: dict[str, str],
-    ) -> list[tuple[int, float, float]]:
+    ) -> list[tuple]:
         """Join GCVS amplitude data with HIP crossmatch; return sorted rows.
 
         Entries where ``Min1 < magMax`` are silently dropped: GCVS stores the
@@ -142,7 +154,7 @@ class VariableStarPipeline:
         some variable types (DSCTC, ACV, BCEP, …). A genuine faint-end
         magnitude is always numerically larger (dimmer) than ``magMax``.
         """
-        results: list[tuple[int, float, float]] = []
+        results: list[tuple] = []
         skipped_amplitude = 0
         for row in gcvs_rows:
             if row["min1"] < row["mag_max"]:
@@ -156,7 +168,10 @@ class VariableStarPipeline:
                 hip = int(hip_str[4:])
             except ValueError:
                 continue
-            results.append((hip, row["mag_max"], row["min1"]))
+            var_type = row.get("var_type") or ""
+            period = row.get("period")
+            period_str = f"{period:.6g}" if period is not None else ""
+            results.append((hip, row["mag_max"], row["min1"], var_type, period_str))
         if skipped_amplitude and self._debug:
             print(
                 f"GCVS           : {skipped_amplitude} entries skipped"
@@ -164,8 +179,8 @@ class VariableStarPipeline:
             )
         return sorted(results)
 
-    def load_index(self) -> dict[int, tuple[float, float]]:
-        """Read cached CSV and return a HIP \u2192 (min_mag, max_mag) dict.
+    def load_index(self) -> dict[int, tuple]:
+        """Read cached CSV and return a HIP \u2192 (min_mag, max_mag, var_type, period) dict.
 
         Returns an empty dict (with a warning) if the CSV is absent.
         Run ``--only variable_stars`` first to populate it.
@@ -177,10 +192,18 @@ class VariableStarPipeline:
                 "Run --only variable_stars to fetch variable-star data."
             )
             return {}
-        index: dict[int, tuple[float, float]] = {}
+        index: dict[int, tuple] = {}
         with path.open(encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
-                index[int(row["hip"])] = (float(row["min_mag"]), float(row["max_mag"]))
+                var_type: str | None = row.get("var_type") or None
+                period_str = row.get("period") or None
+                period: float | None = float(period_str) if period_str else None
+                index[int(row["hip"])] = (
+                    float(row["min_mag"]),
+                    float(row["max_mag"]),
+                    var_type,
+                    period,
+                )
         if self._debug:
             print(f"Variable stars : {len(index):,} loaded from {path.name}")
         return index

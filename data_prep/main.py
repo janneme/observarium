@@ -75,7 +75,10 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="FLOAT",
         dest="var_threshold",
-        help="Min magnitude range to encode as variable [min,max] (default: config 1.0).",
+        help=(
+            "Bright-end amplitude threshold for the magnitude-dependent"
+            " variable filter (default: config 0.7)."
+        ),
     )
     parser.add_argument(
         "--var-max-mag",
@@ -205,7 +208,7 @@ def main() -> None:
         runner()
 
 
-def _prepare_var_index(args: argparse.Namespace) -> dict[int, tuple[float, float]]:
+def _prepare_var_index(args: argparse.Namespace) -> dict[int, tuple]:
     """Prepare and return the variable-star index for star enrichment."""
     var_pipeline = VariableStarPipeline(
         _SOURCES_DIR, args.var_max_mag, cache_dir=_CACHE_DIR, debug=args.debug

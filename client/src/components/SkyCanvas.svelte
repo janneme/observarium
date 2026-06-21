@@ -249,16 +249,16 @@
 
   // Double star: short jutting line at 45° from the disk edge (Hipparcos convention)
   function addDoubleJut(ctx, obj, pt, above) {
-    if (!above) return
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
-    const jut = Math.max(3, r * 1.2)
-    ctx.globalAlpha = 0.65
-    ctx.beginPath()
-    ctx.moveTo(pt.px + Math.SQRT1_2 * r, pt.py - Math.SQRT1_2 * r)
-    ctx.lineTo(pt.px + Math.SQRT1_2 * (r + jut), pt.py - Math.SQRT1_2 * (r + jut))
+    const gap = 2
+    const jut = Math.max(6, r * 1.5)
+    ctx.globalAlpha = above ? 0.7 : 0.15
     ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
-    ctx.lineWidth = 1.2
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.moveTo(pt.px + Math.SQRT1_2 * (r + gap), pt.py - Math.SQRT1_2 * (r + gap))
+    ctx.lineTo(pt.px + Math.SQRT1_2 * (r + gap + jut), pt.py - Math.SQRT1_2 * (r + gap + jut))
     ctx.stroke()
     ctx.globalAlpha = 1
   }
@@ -594,7 +594,7 @@
         const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
         if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
         const above = aboveMap.get(obj.id) ?? false
-        const isDouble = obj.type === 'double_star'
+        const isDouble = obj.type === 'double_star' || !!obj.dbl
         const isVariable = Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1
         drawStar(ctx, obj, pt, above)
         if (isVariable) addVariableRing(ctx, obj, pt, above)

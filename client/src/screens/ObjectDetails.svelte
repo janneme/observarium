@@ -13,6 +13,7 @@
   import { selectedObject } from '../stores/selectedObject.js'
   import { objectDetailsActive } from '../stores/ui.js'
   import { getTodayObservation, toggleObjectObserved, getObjectImage, getDoubleStarNear } from '../lib/db.js'
+  import { applyDsPatch } from '../lib/customObjects.js'
 
   export let lat = 48.2
   export let lon = 16.37
@@ -111,13 +112,56 @@
     return `${sep}″`
   }
 
-  function typeLabel(o, ds = null) {
-    if (o.dsoType) return o.dsoType
+  const VAR_TYPE_LABELS = {
+    DCEP: 'Cepheid',
+    DCEPS: 'Cepheid (short-period)',
+    CEP: 'Cepheid',
+    CW: 'W Virginis variable',
+    CWA: 'W Virginis variable',
+    CWB: 'W Virginis variable',
+    M: 'Mira variable',
+    SR: 'Semi-regular variable',
+    SRA: 'Semi-regular variable',
+    SRB: 'Semi-regular variable',
+    SRC: 'Semi-regular variable',
+    SRD: 'Semi-regular variable',
+    L: 'Irregular variable',
+    LB: 'Irregular variable',
+    LC: 'Irregular variable',
+    RR: 'RR Lyrae variable',
+    RRAB: 'RR Lyrae variable',
+    RRC: 'RR Lyrae variable',
+    EA: 'Eclipsing binary (Algol type)',
+    EB: 'Eclipsing binary (β Lyræ type)',
+    EW: 'Eclipsing binary (W UMa type)',
+    BCEP: 'β Cephei variable',
+    DSCT: 'δ Scuti variable',
+    GDOR: 'γ Doradus variable',
+    RCB: 'R Coronae Borealis variable',
+    UV: 'Flare star',
+  }
+
+  function varTypeLabel(o) {
+    if (!Array.isArray(o.mag) || !o.varType) return null
+    const label = VAR_TYPE_LABELS[o.varType]
+    return label ? `Variable star (${label})` : 'Variable star'
+  }
+
+  function typeLabels(o, ds = null) {
+    if (o.dsoType) return [o.dsoType]
+    const labels = []
     if (isDouble(o)) {
-      const hasPhys = dblPairs(o, ds).some((p) => p.phys)
-      return hasPhys ? 'Physical double star' : 'Double star'
+      const pairs = dblPairs(o, ds)
+      const physComps = pairs.filter((p) => !!p.phys).map((p) => p.comp)
+      if (physComps.length > 0) labels.push(`Double star (physical ${physComps.join(', ')})`)
+      else if (o.dbl === 'p') labels.push('Double star (physical)')
+      else if (o.dbl === 'a' || pairs.some((p) => p.vis)) labels.push('Double star (apparent)')
+      else labels.push('Double star')
     }
-    return o.type
+    const vl = varTypeLabel(o)
+    if (vl) labels.push(vl)
+    if (labels.length === 0) labels.push(o.type)
+    return labels
   }
 
   function formatMagRow(o, ds = null) {
@@ -246,6 +290,18 @@
     objectDetailsActive.set(false)
   }
 
+  function objLabel(obj) {
+    if (!obj) return '—'
+    if (obj.name) return obj.name
+    if (obj.bay && obj.constellation) return `${obj.bay} ${obj.constellation}`
+    if (obj.flam && obj.constellation) return `${obj.flam} ${obj.constellation}`
+    if (obj.m != null) return `M ${obj.m}`
+    if (obj.ngc != null) return `NGC ${obj.ngc}`
+    if (obj.ic != null) return `IC ${obj.ic}`
+    if (obj.caldwell != null) return `C ${obj.caldwell}`
+    return (obj.id || '').replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2') || '—'
+  }
+
   onMount(() => {
     if (obj) loadData(obj)
   })
@@ -259,7 +315,7 @@
   $: if (obj?.type === 'star' && obj.dbl) {
     linkedDs = null
     getDoubleStarNear(obj.pos[0], obj.pos[1]).then((ds) => {
-      linkedDs = ds
+      linkedDs = applyDsPatch(ds)
     })
   } else {
     linkedDs = null
@@ -268,8 +324,8 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" on:click={close}>← Back</button>
-    <span class="header-title">{obj?.name || obj?.id || '—'}</span>
+    <button class="back-btn" on:click={close}>←</button>
+    <span class="header-title">{objLabel(obj)}</span>
     <button
       class="observed-btn"
       class:observed={isObservedToday}
@@ -278,6 +334,20 @@
       >{isObservedToday ? '★' : '☆'}</button
     >
   </div>
+
+  <svg style="display:none" aria-hidden="true">
+    <defs>
+      <filter id="nightly-red-scale" color-interpolation-filters="sRGB">
+        <feColorMatrix
+          type="matrix"
+          values="0.2126 0.7152 0.0722 0 0
+                  0      0      0      0 0
+                  0      0      0      0 0
+                  0      0      0      1 0"
+        />
+      </filter>
+    </defs>
+  </svg>
 
   {#if obj}
     <div class="content">
@@ -302,7 +372,18 @@
           </div>
         {/if}
         {#if obj.type}
-          <div class="row"><span class="label">Type</span><span class="value">{typeLabel(obj, linkedDs)}</span></div>
+          {@const tLabels = typeLabels(obj, linkedDs)}
+          <div class="row cat-row">
+            <span class="label">Type</span>
+            <span class="cat-value">
+              {#each tLabels as label}
+                <span class="cat-item">{label}</span>
+              {/each}
+            </span>
+          </div>
+        {/if}
+        {#if obj.varPeriod}
+          <div class="row"><span class="label">Period</span><span class="value">{obj.varPeriod} days</span></div>
         {/if}
         {#if isDouble(obj)}
           {@const sepPairs = dblPairs(obj, linkedDs).filter((p) => p.sep != null)}
@@ -351,13 +432,13 @@
             <span class="value">
               {#each spParts as part, i}
                 {#if i > 0}<span class="spect-sep"> / </span>{/if}
-                <span style="color: {spectralColor(part) ?? 'inherit'}">{part}</span>
+                <span class="spect-color" style="color: {spectralColor(part) ?? 'inherit'}">{part}</span>
               {/each}
             </span>
           </div>
         {/if}
         {#if obj.cstar_mag != null}
-          <div class="row"><span class="label">Central star</span><span class="value">mag {obj.cstar_mag}</span></div>
+          <div class="row"><span class="label">Central star mag</span><span class="value">{obj.cstar_mag}</span></div>
         {/if}
       </section>
 
@@ -418,7 +499,7 @@
     bottom: 0;
     z-index: 11;
     background: #000;
-    color: #e8e8e8;
+    color: var(--fg);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -437,7 +518,7 @@
   .back-btn {
     background: none;
     border: none;
-    color: #e8e8e8;
+    color: var(--fg);
     font-size: 0.9rem;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
@@ -461,7 +542,7 @@
   .observed-btn {
     background: none;
     border: 1px solid rgba(232, 232, 232, 0.35);
-    color: #e8e8e8;
+    color: var(--fg);
     font-size: 1.25rem;
     width: 2.25rem;
     height: 2.25rem;
@@ -495,15 +576,15 @@
     margin-bottom: 1rem;
     border-radius: 6px;
     overflow: hidden;
-    max-height: 220px;
     background: #000;
   }
 
   .object-image {
-    width: 100%;
-    height: 220px;
-    object-fit: cover;
+    width: auto;
+    max-width: 100%;
+    height: auto;
     display: block;
+    margin: 0 auto;
   }
 
   .info-section {
@@ -629,5 +710,35 @@
     font-weight: 600;
     opacity: 1;
     margin-bottom: 0.4rem;
+  }
+
+  /* Nightly theme */
+  :global([data-theme='nightly']) .header {
+    border-bottom-color: rgba(200, 0, 0, 0.2);
+  }
+  :global([data-theme='nightly']) .back-btn:hover {
+    background: rgba(200, 0, 0, 0.08);
+  }
+  :global([data-theme='nightly']) .observed-btn {
+    border-color: rgba(200, 0, 0, 0.4);
+  }
+  :global([data-theme='nightly']) .observed-btn:hover {
+    background: rgba(200, 0, 0, 0.1);
+  }
+  :global([data-theme='nightly']) .info-section {
+    border-bottom-color: rgba(200, 0, 0, 0.15);
+  }
+  :global([data-theme='nightly']) .moon-dark {
+    fill: #110000;
+    stroke: rgba(200, 0, 0, 0.3);
+  }
+  :global([data-theme='nightly']) .moon-lit {
+    fill: #cc0000;
+  }
+  :global([data-theme='nightly']) .object-image {
+    filter: url(#nightly-red-scale);
+  }
+  :global([data-theme='nightly']) .spect-color {
+    color: inherit !important;
   }
 </style>

@@ -12,8 +12,12 @@ MAX_STAR_MAGNITUDE: float = 8.0
 #: −35° covers the southernmost European latitudes with margin.
 EUROPE_MIN_DEC: float = -35.0
 
-#: Magnitude range (inclusive) above which a variable star uses [min,max] mag encoding.
-VARIABLE_THRESHOLD: float = 1.0
+#: Amplitude threshold at the bright end of a magnitude-dependent variable-star filter.
+#: For a star of apparent magnitude m the effective threshold is:
+#:   T(m) = BRIGHT_VARIABLE_THRESHOLD * (1 + 2 * (m / 10) ** 3)
+#: This is very flat at low magnitudes and accelerates at faint magnitudes, reaching
+#: 3 × BRIGHT_VARIABLE_THRESHOLD at m = 10.
+BRIGHT_VARIABLE_THRESHOLD: float = 0.7
 
 #: Default brightest-magnitude cutoff for the SIMBAD variable-star query.
 #: Stars that never reach this brightness at peak are excluded from the index.

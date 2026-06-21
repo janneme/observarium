@@ -135,6 +135,9 @@
   .custom-input:focus {
     box-shadow: 0 0 0 2px rgba(59, 99, 255, 0.06);
   }
+  :global([data-theme='nightly']) .custom-input:focus {
+    box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.25);
+  }
   .placeholder {
     opacity: 0.5;
   }

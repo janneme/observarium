@@ -4,6 +4,7 @@
   import OnScreenKeyboard from './OnScreenKeyboard.svelte'
   import { selectedObject } from '../stores/selectedObject.js'
   import { searchViewActive, objectDetailsActive, pendingFocus } from '../stores/ui.js'
+  import { doSearch } from '../lib/search.js'
   import { getSearchIndex } from '../lib/db.js'
 
   let query = ''
@@ -32,83 +33,7 @@
     searchViewActive.set(false)
   }
 
-  function normQuery(s) {
-    return s.trim().toLowerCase().replace(/\s+/g, '')
-  }
-
-  // Build searchable catalogue tokens for an object.
-  // Bare numeric tokens are included for Messier/NGC/IC/Caldwell so that
-  // searching "31" finds M31, "224" finds NGC 224, etc.
-  // HIP/HD are prefix-only to avoid noise from thousands of bare numbers.
-  function catEntries(obj) {
-    const cats = []
-    if (obj.m != null) {
-      const n = String(obj.m)
-      cats.push({ label: `M${obj.m}`, tokens: [`m${n}`, n] })
-    }
-    if (obj.ngc != null) {
-      const n = String(obj.ngc)
-      cats.push({ label: `NGC ${obj.ngc}`, tokens: [`ngc${n}`, n] })
-    }
-    if (obj.ic != null) {
-      const n = String(obj.ic)
-      cats.push({ label: `IC ${obj.ic}`, tokens: [`ic${n}`, n] })
-    }
-    if (obj.caldwell != null) {
-      const n = String(obj.caldwell)
-      cats.push({ label: `C ${obj.caldwell}`, tokens: [`c${n}`, `caldwell${n}`] })
-    }
-    if (obj.hip != null) {
-      cats.push({ label: `HIP ${obj.hip}`, tokens: [`hip${String(obj.hip)}`] })
-    }
-    if (obj.hd != null) {
-      cats.push({ label: `HD ${obj.hd}`, tokens: [`hd${String(obj.hd)}`] })
-    }
-    return cats
-  }
-
-  function doSearch(q) {
-    if (!index) return []
-    const nq = normQuery(q)
-    if (!nq) return []
-
-    const out = []
-    const seen = new Set()
-
-    function add(obj, display) {
-      if (seen.has(obj.id)) return
-      seen.add(obj.id)
-      out.push({ obj, display, con: obj.constellation || null })
-    }
-
-    // Pass 0: prefix match on proper name (highest rank)
-    for (const obj of index) {
-      if (!obj.name) continue
-      if (obj.name.toLowerCase().startsWith(nq)) add(obj, obj.name)
-    }
-
-    // Pass 1: prefix match on any catalogue number token
-    for (const obj of index) {
-      if (seen.has(obj.id)) continue
-      const cats = catEntries(obj)
-      for (const cat of cats) {
-        if (cat.tokens.some((t) => t.startsWith(nq))) {
-          add(obj, cat.label)
-          break
-        }
-      }
-    }
-
-    // Pass 2: substring match on proper name (lowest rank)
-    for (const obj of index) {
-      if (seen.has(obj.id) || !obj.name) continue
-      if (obj.name.toLowerCase().includes(nq)) add(obj, obj.name)
-    }
-
-    return out.slice(0, 20)
-  }
-
-  $: results = doSearch(query)
+  $: results = doSearch(query, index)
 
   function accept(item) {
     selectedObject.set(item.obj)
@@ -118,6 +43,7 @@
 
   function details(item) {
     selectedObject.set(item.obj)
+    searchViewActive.set(false)
     objectDetailsActive.set(true)
   }
 
@@ -147,7 +73,7 @@
         aria-label="Clear">✕</button
       >
     {/if}
-    <button class="bar-btn cancel-btn" on:click={close}>Cancel</button>
+    <button class="bar-btn cancel-btn" on:click={close} aria-label="Close search">←</button>
   </div>
 
   <div class="kb-area">
@@ -164,9 +90,11 @@
     {:else}
       {#each results as item (item.obj.id)}
         <div class="result-row">
-          <span class="result-label">
-            {item.display}{item.con ? ` (${item.con})` : ''}
-          </span>
+          <span class="result-label"
+            >{#each item.spans as span}{#if span.hl}<span class="hl">{span.text}</span
+                >{:else}{span.text}{/if}{/each}{#if item.showCon && item.obj.constellation}{' '}({item.obj
+                .constellation}){/if}</span
+          >
           <div class="result-actions">
             <button class="act-btn" on:click={() => accept(item)} title="Accept" aria-label="Accept">✓</button>
             <button class="act-btn" on:click={() => details(item)} title="Details" aria-label="Details">ℹ</button>
@@ -213,6 +141,9 @@
     font-size: 1rem;
     color: #e0e0e0;
   }
+  :global([data-theme='nightly']) .input-wrap {
+    color: #cc0000;
+  }
 
   .bar-btn {
     flex-shrink: 0;
@@ -232,6 +163,9 @@
   }
   .cancel-btn {
     color: #7aafff;
+    font-size: 1.2rem;
+    padding: 0.25rem 0.45rem;
+    line-height: 1;
   }
 
   .results {
@@ -266,6 +200,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .hl {
+    color: #fff;
+    font-weight: 600;
   }
 
   .result-actions {
@@ -305,27 +244,40 @@
   /* Nightly theme */
   :global([data-theme='nightly']) .search-overlay {
     background: #110000;
-    color: #ffb0b0;
-    --fg: #ffb0b0;
+    color: #cc0000;
+    --fg: #cc0000;
     --bg: #110000;
-    --key-bg: rgba(180, 0, 0, 0.15);
+    --key-bg: rgba(80, 0, 0, 0.55);
   }
   :global([data-theme='nightly']) .search-bar {
     border-bottom-color: rgba(180, 0, 0, 0.2);
   }
   :global([data-theme='nightly']) .bar-btn {
-    color: rgba(255, 160, 160, 0.7);
+    color: rgba(200, 0, 0, 0.7);
+  }
+  :global([data-theme='nightly']) .bar-btn:hover {
+    background: rgba(180, 0, 0, 0.15);
   }
   :global([data-theme='nightly']) .cancel-btn {
-    color: #ff9090;
+    color: #cc0000;
+  }
+  :global([data-theme='nightly']) .hint {
+    color: rgba(200, 0, 0, 0.5);
   }
   :global([data-theme='nightly']) .result-row {
     border-bottom-color: rgba(180, 0, 0, 0.15);
   }
+  :global([data-theme='nightly']) .result-row:active {
+    background: rgba(180, 0, 0, 0.1);
+  }
   :global([data-theme='nightly']) .act-btn {
-    color: rgba(255, 160, 160, 0.6);
+    color: rgba(200, 0, 0, 0.6);
   }
   :global([data-theme='nightly']) .act-btn:hover {
-    color: #ffb0b0;
+    color: #cc0000;
+    background: rgba(180, 0, 0, 0.15);
+  }
+  :global([data-theme='nightly']) .hl {
+    color: #ee0000;
   }
 </style>

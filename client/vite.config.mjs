@@ -6,6 +6,6 @@ export default defineConfig({
   root: '.',
   test: {
     environment: 'node',
-    include: ['src/**/*.test.js'],
+    include: ['test/**/*.test.js'],
   },
 })

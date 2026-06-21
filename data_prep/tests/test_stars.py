@@ -13,6 +13,7 @@ from stars import (
     _parse_lum_class,
     _parse_spec_class,
     spectral_colour,
+    variable_threshold,
 )
 
 # ---------------------------------------------------------------------------
@@ -65,35 +66,61 @@ class TestSpectralColour:
 
 class TestIsVariable:
     def test_large_range_is_variable(self):
-        assert _is_variable(5.0, 8.5) is True
+        assert _is_variable(5.0, 8.5, threshold=1.0) is True
 
     def test_small_range_is_not_variable(self):
-        assert _is_variable(6.0, 6.5) is False
+        assert _is_variable(6.0, 6.5, threshold=1.0) is False
 
     def test_exactly_threshold_is_variable(self):
-        # range == 1.0 (default threshold), >= is inclusive
-        assert _is_variable(4.0, 5.0) is True
+        # range == threshold, >= is inclusive
+        assert _is_variable(4.0, 5.0, threshold=1.0) is True
 
     def test_below_threshold_is_not_variable(self):
         # range 0.9 < 1.0 threshold
-        assert _is_variable(4.0, 4.9) is False
+        assert _is_variable(4.0, 4.9, threshold=1.0) is False
 
     def test_just_above_threshold_is_variable(self):
-        assert _is_variable(4.0, 5.001) is True
+        assert _is_variable(4.0, 5.001, threshold=1.0) is True
 
     def test_none_min_is_not_variable(self):
-        assert _is_variable(None, 8.0) is False
+        assert _is_variable(None, 8.0, threshold=1.0) is False
 
     def test_none_max_is_not_variable(self):
-        assert _is_variable(4.0, None) is False
+        assert _is_variable(4.0, None, threshold=1.0) is False
 
     def test_both_none_is_not_variable(self):
-        assert _is_variable(None, None) is False
+        assert _is_variable(None, None, threshold=1.0) is False
 
     def test_custom_threshold(self):
         assert _is_variable(1.0, 2.0, threshold=0.5) is True
         assert _is_variable(1.0, 1.4, threshold=0.5) is False
         assert _is_variable(1.0, 1.5, threshold=0.5) is True  # exactly at threshold
+
+
+# ---------------------------------------------------------------------------
+# variable_threshold
+# ---------------------------------------------------------------------------
+
+
+class TestVariableThreshold:
+    def test_at_mag_zero_equals_bright_threshold(self):
+        assert variable_threshold(0.0, bright_threshold=0.7) == pytest.approx(0.7)
+
+    def test_at_mag_ten_equals_three_times_bright_threshold(self):
+        assert variable_threshold(10.0, bright_threshold=0.7) == pytest.approx(2.1)
+
+    def test_formula_is_cubic(self):
+        # T(m) = T0 * (1 + 2*(m/10)^3); at m=5: T0*(1+2*0.125) = 1.25*T0
+        assert variable_threshold(5.0, bright_threshold=1.0) == pytest.approx(1.25)
+
+    def test_brighter_than_five_is_nearly_flat(self):
+        # At m=3: T0*(1+2*0.027) = 1.054*T0 — within 6% of T0
+        t3 = variable_threshold(3.0, bright_threshold=1.0)
+        assert t3 == pytest.approx(1.054, rel=1e-3)
+
+    def test_default_bright_threshold(self):
+        # Default BRIGHT_VARIABLE_THRESHOLD=0.7; at m=0 should equal 0.7
+        assert variable_threshold(0.0) == pytest.approx(0.7)
 
 
 # ---------------------------------------------------------------------------

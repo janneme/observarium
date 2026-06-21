@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { projectGnomonic, toPixel, projectToPixel, isOnScreen } from './skymath.js'
+import { projectGnomonic, toPixel, projectToPixel, isOnScreen } from '../../src/lib/skymath.js'
 
 const W = 800,
   H = 600,

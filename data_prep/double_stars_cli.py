@@ -12,7 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-from config import VARIABLE_THRESHOLD, WDS_FILENAME, WDS_VIZIER_URL
+from config import BRIGHT_VARIABLE_THRESHOLD, WDS_FILENAME, WDS_VIZIER_URL
 from double_stars import DoubleStarMatcher
 
 # pylint: disable=too-many-locals,protected-access,too-many-branches,too-many-statements
@@ -189,7 +189,7 @@ def main(
             )
             print(
                 f"Variable stars : {n_variable} encoded with amplitude >= "
-                f"{VARIABLE_THRESHOLD}"
+                f"{BRIGHT_VARIABLE_THRESHOLD}"
             )
             print(
                 f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
@@ -212,7 +212,10 @@ def main(
             )
             notes_summary = " + ".join(note_parts) if note_parts else "none"
             print(f"Stars included : {total_stars:,} across {n_const:,} constellations")
-            print(f"Variable stars : {n_variable} encoded with amplitude >= {VARIABLE_THRESHOLD}")
+            print(
+                f"Variable stars : {n_variable} encoded with amplitude"
+                f" >= {BRIGHT_VARIABLE_THRESHOLD}"
+            )
             print(
                 f"Double stars   : {n_dbl_stars} stars with {n_pairs} pairs "
                 f"({n_phys_pairs} physical, sep >= {min_sep} arcsec)"
