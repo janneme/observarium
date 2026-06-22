@@ -7,6 +7,7 @@
     showDsos,
     showHorizon,
     showFovCircle,
+    showSolarSystem,
     finderViewActive,
     pendingChanges,
   } from '../stores/ui.js'
@@ -209,7 +210,38 @@
         <span class="item-lbl">Horizon (h)</span>
       </button>
 
-      <!-- 6: Toggle normal / finder view -->
+      <!-- 6: Toggle solar system -->
+      <button
+        class="grid-item"
+        class:off={!$showSolarSystem}
+        on:click={() => showSolarSystem.update((v) => !v)}
+        aria-label="Toggle solar system"
+      >
+        <div class="icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+            <ellipse cx="12" cy="12" rx="9" ry="4" />
+            <circle cx="21" cy="12" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="3" cy="12" r="1" fill="currentColor" stroke="none" />
+          </svg>
+          {#if !$showSolarSystem}
+            <svg class="strike" viewBox="0 0 24 24"
+              ><line
+                x1="3"
+                y1="3"
+                x2="21"
+                y2="21"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              /></svg
+            >
+          {/if}
+        </div>
+        <span class="item-lbl">Solar<br />System (s)</span>
+      </button>
+
+      <!-- 7: Toggle normal / finder view -->
       <button
         class="grid-item"
         class:off={!$finderViewActive}
@@ -239,7 +271,7 @@
             >
           {/if}
         </div>
-        <span class="item-lbl">Finder<br />View (f)</span>
+        <span class="item-lbl">Finder<br />View (F)</span>
       </button>
 
       <!-- 7: Toggle FOV circle -->

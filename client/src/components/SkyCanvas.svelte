@@ -4,8 +4,19 @@
   import { projectToPixel, isOnScreen } from '../lib/skymath.js'
   import { isAboveHorizon, getLST } from '../lib/horizon.js'
   import { theme } from '../stores/theme.js'
-  import { getMeta } from '../lib/db.js'
+  import { getMeta, getObjectImage } from '../lib/db.js'
   import { selectedObject } from '../stores/selectedObject.js'
+  import { solarSystemPositions } from '../stores/ui.js'
+  import {
+    Equator,
+    Body,
+    Illumination,
+    HelioVector,
+    GeoVector,
+    JupiterMoons,
+    AstroTime,
+    Observer,
+  } from 'astronomy-engine'
 
   export let ra0 = 0
   export let dec0 = 0
@@ -23,6 +34,7 @@
   export let showHorizon = true
   export let magLimitOverride = null
   export let finderMode = false
+  export let showSolarSystem = true
 
   let canvas
   let W = 0,
@@ -33,6 +45,9 @@
   let currentTheme = get(theme)
   let aboveMap = new Map()
   let constellations = null
+  let solarSystem = null
+  let solarSystemBodies = []
+  let planetImages = new Map()
 
   const unsubTheme = theme.subscribe((v) => {
     currentTheme = v
@@ -60,12 +75,14 @@
     showConstellationBoundaries
     showDsos
     showHorizon
+    showSolarSystem
     magLimitOverride
     finderMode
     dirty = true
   }
 
   $: updateAboveMap(lat, lon, time, objects)
+  $: if (solarSystem) computeSolarSystemPositions(time, lat, lon)
 
   function updateAboveMap(latV, lonV, timeV, objs) {
     const map = new Map()
@@ -98,6 +115,398 @@
 
   function adaptiveMagLimit(fovDeg) {
     return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
+  }
+
+  // ── Solar system ──────────────────────────────────────────────────────────────
+
+  const PLANET_DEFS = [
+    { name: 'Mercury', key: 'Mercury', symbol: '☿', color: '#A0A0A0', bodyClass: 'planet', imageId: 'mercury' },
+    { name: 'Venus', key: 'Venus', symbol: '♀', color: '#FFC649', bodyClass: 'planet', imageId: 'venus' },
+    { name: 'Mars', key: 'Mars', symbol: '♂', color: '#E27B58', bodyClass: 'planet', imageId: 'mars' },
+    { name: 'Jupiter', key: 'Jupiter', symbol: '♃', color: '#C88B3A', bodyClass: 'planet', imageId: 'jupiter' },
+    { name: 'Saturn', key: 'Saturn', symbol: '♄', color: '#FAD5A5', bodyClass: 'planet', imageId: 'saturn' },
+    { name: 'Uranus', key: 'Uranus', symbol: '♅', color: '#4FD0E7', bodyClass: 'planet', imageId: 'uranus' },
+    { name: 'Neptune', key: 'Neptune', symbol: '♆', color: '#4166F5', bodyClass: 'planet', imageId: 'neptune' },
+    { name: 'Pluto', key: 'Pluto', symbol: '♇', color: '#A88F7B', bodyClass: 'dwarf_planet', imageId: 'pluto' },
+  ]
+
+  const PLANET_RADII_KM = {
+    Sun: 696000,
+    Moon: 1737,
+    Mercury: 2440,
+    Venus: 6052,
+    Mars: 3397,
+    Jupiter: 71492,
+    Saturn: 60268,
+    Uranus: 25559,
+    Neptune: 24766,
+    Pluto: 1188,
+  }
+  const AU_KM = 149597870.7
+  const DWARF_PLANETS = new Set(['pluto', 'ceres', 'eris', 'haumea', 'makemake'])
+
+  function _slugifyName(name) {
+    return String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+  }
+
+  const _OBL_COS = Math.cos((23.439291111 * Math.PI) / 180)
+  const _OBL_SIN = Math.sin((23.439291111 * Math.PI) / 180)
+
+  function _mpcVal(c) {
+    if (c >= '1' && c <= '9') return parseInt(c)
+    return c.charCodeAt(0) - 55 // 'A'→10, 'B'→11, …
+  }
+
+  function _mpcEpochToJD(packed) {
+    const base = { I: 1800, J: 1900, K: 2000 }
+    const year = (base[packed[0]] ?? 2000) + parseInt(packed.slice(1, 3))
+    const month = _mpcVal(packed[3])
+    const day = _mpcVal(packed[4])
+    const a = Math.floor((14 - month) / 12)
+    const y = year + 4800 - a
+    const m = month + 12 * a - 3
+    return (
+      day +
+      Math.floor((153 * m + 2) / 5) +
+      365 * y +
+      Math.floor(y / 4) -
+      Math.floor(y / 100) +
+      Math.floor(y / 400) -
+      32045
+    )
+  }
+
+  function _keplerE(M_rad, e) {
+    let E = M_rad
+    for (let i = 0; i < 50; i++) {
+      const dE = (M_rad - E + e * Math.sin(E)) / (1 - e * Math.cos(E))
+      E += dE
+      if (Math.abs(dE) < 1e-10) break
+    }
+    return E
+  }
+
+  function _minorPlanetPos(elem, astroT) {
+    const D = Math.PI / 180
+    const jd = astroT.tt + 2451545.0
+    const jdEpoch = _mpcEpochToJD(elem.epoch)
+    const n = 0.9856076686 / Math.pow(elem.a, 1.5) // deg/day
+    const M = (((elem.M + n * (jd - jdEpoch)) % 360) + 360) % 360
+    const E = _keplerE(M * D, elem.e)
+    const cosE = Math.cos(E),
+      sinE = Math.sin(E)
+    const nu = Math.atan2(Math.sqrt(1 - elem.e * elem.e) * sinE, cosE - elem.e)
+    const r = elem.a * (1 - elem.e * cosE)
+    const cO = Math.cos(elem.Omega * D),
+      sO = Math.sin(elem.Omega * D)
+    const co = Math.cos(elem.omega * D),
+      so = Math.sin(elem.omega * D)
+    const cI = Math.cos(elem.i * D),
+      sI = Math.sin(elem.i * D)
+    const cN = Math.cos(nu),
+      sN = Math.sin(nu)
+    // Heliocentric ecliptic
+    const xE = r * ((cO * co - sO * so * cI) * cN + (-cO * so - sO * co * cI) * sN)
+    const yE = r * ((sO * co + cO * so * cI) * cN + (-sO * so + cO * co * cI) * sN)
+    const zE = r * (so * sI * cN + co * sI * sN)
+    // Ecliptic → equatorial J2000
+    const xQ = xE
+    const yQ = _OBL_COS * yE - _OBL_SIN * zE
+    const zQ = _OBL_SIN * yE + _OBL_COS * zE
+    // Subtract Earth's heliocentric position
+    const earth = HelioVector(Body.Earth, astroT)
+    const gx = xQ - earth.x,
+      gy = yQ - earth.y,
+      gz = zQ - earth.z
+    const gd = Math.sqrt(gx * gx + gy * gy + gz * gz)
+    const ra = ((((Math.atan2(gy, gx) * 180) / Math.PI) % 360) + 360) % 360
+    const dec = (Math.asin(Math.max(-1, Math.min(1, gz / gd))) * 180) / Math.PI
+    const mag = elem.H + 5 * Math.log10(r * gd)
+    return { ra, dec, mag }
+  }
+
+  function computeSolarSystemPositions(timeV, latV, lonV) {
+    if (!solarSystem) return
+    const bodies = []
+    const t = new AstroTime(timeV)
+    const obs = new Observer(latV, lonV, 0)
+
+    let earthHV = null
+    try {
+      earthHV = HelioVector(Body.Earth, t)
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      const eq = Equator(Body.Sun, t, obs, false, true)
+      const ra = eq.ra * 15,
+        dec = eq.dec
+      const sunDistAU = earthHV ? Math.sqrt(earthHV.x ** 2 + earthHV.y ** 2 + earthHV.z ** 2) : 1
+      bodies.push({
+        name: 'Sun',
+        symbol: '☉',
+        color: '#FFDD00',
+        type: 'sun',
+        bodyClass: 'star',
+        imageId: 'sun',
+        ra,
+        dec,
+        mag: -26.7,
+        distAU: sunDistAU,
+        above: isAboveHorizon(ra, dec, latV, lonV, timeV),
+      })
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      const eq = Equator(Body.Moon, t, obs, false, true)
+      const ra = eq.ra * 15,
+        dec = eq.dec
+      const illum = Illumination(Body.Moon, t)
+      const moonGV = GeoVector(Body.Moon, t, false)
+      const moonDistAU = Math.sqrt(moonGV.x ** 2 + moonGV.y ** 2 + moonGV.z ** 2)
+      const sunRa = bodies[0]?.ra ?? 0
+      const dRA = ((((sunRa - ra + 180) % 360) + 360) % 360) - 180
+      bodies.push({
+        name: 'Moon',
+        symbol: '☽',
+        color: '#DDDDCC',
+        type: 'moon',
+        bodyClass: 'moon',
+        imageId: 'moon',
+        ra,
+        dec,
+        mag: illum.mag,
+        distAU: moonDistAU,
+        phaseFraction: illum.phase_fraction,
+        litOnRight: dRA > 0,
+        above: isAboveHorizon(ra, dec, latV, lonV, timeV),
+      })
+    } catch {
+      /* ignore */
+    }
+
+    for (const p of PLANET_DEFS) {
+      try {
+        const b = Body[p.key]
+        const eq = Equator(b, t, obs, false, true)
+        const ra = eq.ra * 15,
+          dec = eq.dec
+        const illum = Illumination(b, t)
+        let distAU = null
+        if (earthHV) {
+          const bodyHV = HelioVector(b, t)
+          distAU = Math.sqrt((bodyHV.x - earthHV.x) ** 2 + (bodyHV.y - earthHV.y) ** 2 + (bodyHV.z - earthHV.z) ** 2)
+        }
+        const isInner = p.name === 'Mercury' || p.name === 'Venus'
+        let phaseFraction = null,
+          litOnRight = null
+        if (isInner) {
+          phaseFraction = illum.phase_fraction
+          const sunRa = bodies[0]?.ra ?? 0
+          const dRA = ((((sunRa - ra + 180) % 360) + 360) % 360) - 180
+          litOnRight = dRA > 0
+        }
+        bodies.push({
+          ...p,
+          type: 'planet',
+          ra,
+          dec,
+          mag: illum.mag,
+          distAU,
+          bodyClass: p.bodyClass || 'planet',
+          imageId: p.imageId || _slugifyName(p.name),
+          above: isAboveHorizon(ra, dec, latV, lonV, timeV),
+          ...(phaseFraction != null ? { phaseFraction, litOnRight } : {}),
+        })
+      } catch {
+        /* ignore */
+      }
+    }
+
+    try {
+      const jupGV = GeoVector(Body.Jupiter, t, true)
+      const moonData = JupiterMoons(t)
+      const GALILEAN = [
+        { key: 'io', name: 'Io', color: '#F0C040', mag: 5.0 },
+        { key: 'europa', name: 'Europa', color: '#D8C8A8', mag: 5.3 },
+        { key: 'ganymede', name: 'Ganymede', color: '#B8986A', mag: 4.6 },
+        { key: 'callisto', name: 'Callisto', color: '#787868', mag: 5.6 },
+      ]
+      for (const md of GALILEAN) {
+        const mv = moonData[md.key]
+        const gx = jupGV.x + mv.x,
+          gy = jupGV.y + mv.y,
+          gz = jupGV.z + mv.z
+        const gd = Math.sqrt(gx * gx + gy * gy + gz * gz)
+        const ra = ((((Math.atan2(gy, gx) * 180) / Math.PI) % 360) + 360) % 360
+        const dec = (Math.asin(Math.max(-1, Math.min(1, gz / gd))) * 180) / Math.PI
+        bodies.push({
+          name: md.name,
+          color: md.color,
+          symbol: '',
+          type: 'jupiter_moon',
+          bodyClass: 'moon',
+          ra,
+          dec,
+          mag: md.mag,
+          distAU: gd,
+          above: isAboveHorizon(ra, dec, latV, lonV, timeV),
+        })
+      }
+    } catch {
+      /* ignore */
+    }
+
+    for (const mp of solarSystem.minor_planets ?? []) {
+      try {
+        const slug = _slugifyName(mp.name)
+        if (slug === 'pluto') continue
+        const pos = _minorPlanetPos(mp, t)
+        bodies.push({
+          name: mp.name,
+          symbol: '',
+          color: '#888888',
+          type: 'minor_planet',
+          bodyClass: DWARF_PLANETS.has(slug) ? 'dwarf_planet' : 'asteroid',
+          imageId: `asteroid_${slug}`,
+          ra: pos.ra,
+          dec: pos.dec,
+          mag: pos.mag,
+          above: isAboveHorizon(pos.ra, pos.dec, latV, lonV, timeV),
+        })
+      } catch {
+        /* ignore */
+      }
+    }
+
+    solarSystemBodies = bodies
+    solarSystemPositions.set(bodies)
+    dirty = true
+  }
+
+  function _drawPhaseOverlay(ctx, cx, cy, r, phaseFraction, litOnRight) {
+    if (phaseFraction >= 0.999) return
+    ctx.fillStyle = 'rgba(0,0,0,0.85)'
+    ctx.beginPath()
+    if (phaseFraction <= 0.001) {
+      ctx.arc(cx, cy, r, 0, 2 * Math.PI)
+    } else {
+      const c = 2 * phaseFraction - 1
+      if (litOnRight) {
+        ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, true)
+        if (c >= 0) ctx.ellipse(cx, cy, r * c, r, 0, Math.PI / 2, -Math.PI / 2, true)
+        else ctx.ellipse(cx, cy, -r * c, r, 0, Math.PI / 2, -Math.PI / 2, false)
+      } else {
+        ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, false)
+        if (c >= 0) ctx.ellipse(cx, cy, r * c, r, 0, Math.PI / 2, -Math.PI / 2, false)
+        else ctx.ellipse(cx, cy, -r * c, r, 0, Math.PI / 2, -Math.PI / 2, true)
+      }
+    }
+    ctx.fill()
+  }
+
+  function drawSolarSystem(ctx) {
+    if (!solarSystemBodies.length) return
+    const nightly = currentTheme === 'nightly'
+    const magLim = magLimitOverride ?? adaptiveMagLimit(fov)
+
+    for (const body of solarSystemBodies) {
+      if (body.type !== 'sun' && body.type !== 'moon' && body.mag > magLim) continue
+      const pt = projectToPixel(body.ra, body.dec, ra0, dec0, W, H, fov, rotation)
+      if (!pt || !isOnScreen(pt.px, pt.py, W, H, 20)) continue
+
+      ctx.globalAlpha = body.above ? 0.95 : 0.25
+
+      if (body.type === 'jupiter_moon') {
+        if (fov > 2) {
+          ctx.globalAlpha = 1
+          continue
+        }
+        ctx.beginPath()
+        ctx.arc(pt.px, pt.py, 2, 0, Math.PI * 2)
+        ctx.fillStyle = nightly ? '#cc6633' : body.color
+        ctx.fill()
+        if (fov <= 0.5 && !finderMode) {
+          ctx.fillStyle = nightly ? 'rgba(204,68,0,0.85)' : 'rgba(255,255,200,0.85)'
+          ctx.font = '9px system-ui, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'top'
+          ctx.fillText(body.name, pt.px, pt.py + 4)
+        }
+        ctx.globalAlpha = 1
+        continue
+      }
+
+      const physR = PLANET_RADII_KM[body.name]
+      const imgR = physR && body.distAU ? (physR / (body.distAU * AU_KM) / ((fov * Math.PI) / 180)) * H : 0
+      const img = planetImages.get(body.name.toLowerCase())
+      const useImage = img && imgR >= 3
+
+      let dotR
+      if (body.type === 'sun') dotR = 10
+      else if (body.type === 'moon') dotR = 7
+      else if (body.type === 'planet') dotR = 5
+      else dotR = 3
+
+      const labelR = useImage ? imgR : dotR
+
+      if (useImage) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(pt.px, pt.py, imgR, 0, 2 * Math.PI)
+        ctx.clip()
+        ctx.drawImage(img, pt.px - imgR, pt.py - imgR, imgR * 2, imgR * 2)
+        if (body.phaseFraction != null) {
+          _drawPhaseOverlay(ctx, pt.px, pt.py, imgR, body.phaseFraction, body.litOnRight ?? false)
+        }
+        ctx.restore()
+      } else {
+        const color =
+          body.type === 'sun'
+            ? nightly
+              ? '#bb3300'
+              : '#ffdd00'
+            : body.type === 'moon'
+              ? nightly
+                ? '#aa3300'
+                : '#ccccbb'
+              : body.type === 'planet'
+                ? nightly
+                  ? '#cc2200'
+                  : body.color
+                : nightly
+                  ? '#882200'
+                  : '#aaaaaa'
+        ctx.beginPath()
+        ctx.arc(pt.px, pt.py, dotR, 0, Math.PI * 2)
+        ctx.fillStyle = color
+        ctx.fill()
+      }
+
+      if (!finderMode) {
+        if (body.symbol) {
+          ctx.fillStyle = nightly ? '#ff5500' : '#ffffff'
+          ctx.font = 'bold 13px system-ui, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'bottom'
+          ctx.fillText(body.symbol, pt.px, pt.py - labelR - 1)
+        }
+
+        ctx.fillStyle = nightly ? 'rgba(204,68,0,0.85)' : 'rgba(255,255,200,0.85)'
+        ctx.font = '10px system-ui, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'top'
+        ctx.fillText(body.name, pt.px, pt.py + labelR + 2)
+      }
+
+      ctx.globalAlpha = 1
+    }
   }
 
   // DSO angular size in arcmin → canvas pixels. Returns raw value (no min clamp) for threshold check.
@@ -252,7 +661,11 @@
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
     const gap = 2
-    const jut = Math.max(6, r * 1.5)
+    const baseJut = Math.max(6, r * 1.5)
+    // Keep the current look around 3° FOV; shorten progressively when zoomed out,
+    // but stay clearly line-like around moderate FOV values such as 30°.
+    const fovScale = Math.min(1, Math.pow(3 / Math.max(fov, 3), 0.25))
+    const jut = Math.max(4.2, baseJut * fovScale)
     ctx.globalAlpha = above ? 0.7 : 0.15
     ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
     ctx.lineWidth = 1.4
@@ -524,6 +937,14 @@
     const [ra, dec] = currentSelectedObj.pos
     const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
     if (!pt || !isOnScreen(pt.px, pt.py, W, H, 30)) return
+    if (currentSelectedObj.type === 'solar_system_body') {
+      const body = solarSystemBodies.find((b) => b.name.toLowerCase() === currentSelectedObj.name?.toLowerCase())
+      if (body) {
+        const physR = PLANET_RADII_KM[body.name]
+        const imgR = physR && body.distAU ? (physR / (body.distAU * AU_KM) / ((fov * Math.PI) / 180)) * H : 0
+        if (planetImages.has(body.name.toLowerCase()) && imgR >= 3) return
+      }
+    }
     const gap = 9,
       len = 10
     ctx.strokeStyle = currentTheme === 'nightly' ? 'rgba(255,110,110,0.9)' : 'rgba(255,255,255,0.9)'
@@ -604,6 +1025,9 @@
       }
     }
 
+    // Pass 3: solar system bodies (on top of stars)
+    if (showSolarSystem) drawSolarSystem(ctx)
+
     if (!finderMode) drawSelectedMarker(ctx)
     if (showFovCircle) drawFovCircle(ctx)
 
@@ -626,6 +1050,32 @@
         dirty = true
       }
     })
+    getMeta('solar_system').then((data) => {
+      if (data) {
+        solarSystem = data
+      }
+    })
+
+    const PLANET_NAMES = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto']
+    Promise.all(
+      PLANET_NAMES.map(async (name) => {
+        try {
+          const rec = await getObjectImage(`planet_${name}`)
+          if (rec?.blob) {
+            const url = URL.createObjectURL(rec.blob)
+            const img = new Image()
+            img.onload = () => {
+              planetImages.set(name, img)
+              URL.revokeObjectURL(url)
+              dirty = true
+            }
+            img.src = url
+          }
+        } catch {
+          /* no image stored yet */
+        }
+      }),
+    )
 
     observer = new ResizeObserver((entries) => {
       for (const e of entries) {

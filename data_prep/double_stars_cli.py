@@ -11,6 +11,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from config import BRIGHT_VARIABLE_THRESHOLD, WDS_FILENAME, WDS_VIZIER_URL
 from double_stars import DoubleStarMatcher
@@ -56,11 +57,24 @@ def main(
                 "then re-run this command to embed double-star metadata.")
             sys.exit(2)
 
-    # Always produce the standalone double_stars.json for inspection/debugging
+    # Always produce the standalone double_stars.json for inspection/debugging.
     # Ensure WDS TSV is present in the cache (download if necessary) and
     # parse it to build systems.
     tsv_path = matcher._downloader.fetch(WDS_VIZIER_URL, WDS_FILENAME)
     systems = matcher._load_systems(tsv_path, max_mag=(max_mag or 8.0), min_sep=min_sep)
+
+    # If stars output exists for this magnitude, enrich systems with inferred
+    # component spectra before writing standalone double-star JSON.
+    if file_mag is not None:
+        stars_file = output_dir / f"stars.m{file_mag:g}.json"
+        if stars_file.exists():
+            with stars_file.open("r", encoding="utf-8") as fh:
+                grouped_stars = json.load(fh)
+            stars_flat: list[dict[str, Any]] = []
+            for lst in grouped_stars.values():
+                stars_flat.extend(lst)
+            matcher.attach(stars_flat, max_mag=max_mag or 8.0, min_sep=min_sep)
+            _merge_enriched_spectra_from_stars(systems, stars_flat)
     out = output_dir / "double_stars.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     grouped = {s["wds"]: s for s in systems}
@@ -222,6 +236,50 @@ def main(
             )
             print(f"Star notes     : {notes_summary}")
             print(f"Output         : {stars_file} ({size_mb:.2f} MB)")
+
+
+def _merge_enriched_spectra_from_stars(
+    systems: list[dict[str, Any]],
+    stars: list[dict[str, Any]],
+) -> None:
+    """Copy richer dbl.spect strings from enriched stars back into systems."""
+    by_wds = {s.get("wds"): s for s in systems if s.get("wds")}
+    for star in stars:
+        dbl_entries = star.get("dbl")
+        if not isinstance(dbl_entries, list):
+            continue
+        for entry in dbl_entries:
+            if not isinstance(entry, dict):
+                continue
+            wds = entry.get("wds")
+            spect = entry.get("spect")
+            if not wds or not isinstance(spect, str) or not spect.strip():
+                continue
+            target = by_wds.get(wds)
+            if target is None:
+                continue
+            current = str(target.get("spect") or "")
+            if _prefer_spect_for_export(spect, current):
+                target["spect"] = spect
+
+
+def _prefer_spect_for_export(candidate: str, current: str) -> bool:
+    """Prefer composite and longer spectral strings for standalone export."""
+    c = _normalize_export_spect(candidate)
+    k = _normalize_export_spect(current)
+    if not k:
+        return True
+    c_comp = " / " in c
+    k_comp = " / " in k
+    if c_comp and not k_comp:
+        return True
+    if c_comp == k_comp and len(c) > len(k):
+        return True
+    return False
+
+
+def _normalize_export_spect(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"\s*/\s*", " / ", value.replace("+", "/"))).strip()
 
 
 if __name__ == "__main__":

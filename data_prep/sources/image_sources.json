@@ -2283,5 +2283,120 @@
     "catalogue_id": "IC5070",
     "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Pelican_Nebula.jpg/3840px-Pelican_Nebula.jpg",
     "verified": 1
+  },
+  {
+    "catalogue_id": "planet_sun",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b4/The_Sun_by_the_Atmospheric_Imaging_Assembly_of_NASA%27s_Solar_Dynamics_Observatory_-_20100819.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_moon",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e1/FullMoon2010.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_mercury",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/79/Mercury_render_with_Blender_01.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_venus",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/Venus_globe.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_mars",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/02/OSIRIS_Mars_true_color.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_jupiter",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2b/Jupiter_and_its_shrunken_Great_Red_Spot.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_saturn",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Saturn_during_Equinox.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_uranus",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Uranus2.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_neptune",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/56/Neptune_Full.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_pluto",
+    "url": "https://assets.science.nasa.gov/dynamicimage/assets/science/psd/solar/2023/09/p/l/pluto_natural_color_20150714_detail.jpg?w=1200&h=1200&fit=clip&crop=faces%2Cfocalpoint",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/51/Vesta_in_natural_color.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_vesta",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/51/Vesta_in_natural_color.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_ceres",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Ceres_global_hires.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_pallas",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d4/Potw1749a_Pallas_crop.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_juno",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/3_Juno_VLT_%282021%29.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_eunomia",
+    "url": "https://static.wikia.nocookie.net/terraforming/images/5/5e/15_Eunomia.jpg/revision/latest?cb=20131227191541",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_hebe",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/de/000006-asteroid_shape_model_%286%29_Hebe.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_iris",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2d/Iris_asteroid_eso.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_amphitrite",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Potw1749a_Amphitrite_crop.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_metis",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6c/000009-asteroid_shape_model_%289%29_Metis.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_melpomene",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/000018-asteroid_shape_model_%2818%29_Melpomene.png?_=20200604103438",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_harmonia",
+    "url": "https://static.wikia.nocookie.net/thesolarsystem6361/images/e/e9/40_Harmonia.png/revision/latest?cb=20240317141216",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "planet_asteroid_flora",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e0/000008-asteroid_shape_model_%288%29_Flora.png",
+    "verified": 1
   }
 ]

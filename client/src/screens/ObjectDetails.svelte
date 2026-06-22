@@ -11,7 +11,7 @@
     DefineStar,
   } from 'astronomy-engine'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { objectDetailsActive } from '../stores/ui.js'
+  import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
   import { getTodayObservation, toggleObjectObserved, getObjectImage, getDoubleStarNear } from '../lib/db.js'
   import { applyDsPatch } from '../lib/customObjects.js'
 
@@ -74,6 +74,24 @@
     if (m == null) return null
     if (Array.isArray(m)) return `${m[0]}–${m[1]}`
     return String(m)
+  }
+
+  function solarApparentMag(o) {
+    if (o?.type !== 'solar_system_body') return null
+    const oid = String(o.id || '').toLowerCase()
+    const oname = String(o.name || '').toLowerCase()
+    const body = $solarSystemPositions.find((b) => {
+      const bname = String(b.name || '').toLowerCase()
+      const bid = `solar_${String(b.imageId || bname).toLowerCase()}`
+      return bid === oid || bname === oname
+    })
+    if (!body || body.mag == null || Number.isNaN(Number(body.mag))) return null
+    return Number(body.mag)
+  }
+
+  function formatApparentMag(m) {
+    if (m == null) return null
+    return m.toFixed(2)
   }
 
   function catNumbers(o) {
@@ -149,6 +167,20 @@
 
   function typeLabels(o, ds = null) {
     if (o.dsoType) return [o.dsoType]
+    if (o.type === 'solar_system_body') {
+      const cls = String(o.bodyClass || '').toLowerCase()
+      if (cls === 'planet') return ['Planet']
+      if (cls === 'dwarf_planet') return ['Dwarf planet']
+      if (cls === 'asteroid') return ['Asteroid']
+      if (cls === 'moon') return ['Moon']
+      if (cls === 'star') return ['Star']
+      const name = String(o.name || '').toLowerCase()
+      if (['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'].includes(name)) return ['Planet']
+      if (['pluto', 'ceres', 'eris', 'haumea', 'makemake'].includes(name)) return ['Dwarf planet']
+      if (name === 'moon') return ['Moon']
+      if (name === 'sun') return ['Star']
+      return ['Solar system body']
+    }
     const labels = []
     if (isDouble(o)) {
       const pairs = dblPairs(o, ds)
@@ -176,9 +208,40 @@
   }
 
   function formatSpect(o, ds = null) {
-    const effectiveSpect = isDouble(o) && ds?.spect?.includes('+') ? ds.spect : o.spect
+    const linkedSpect = isDouble(o) ? ds?.spect : null
+    const embeddedSpect = isDouble(o)
+      ? Array.isArray(o.dbl)
+        ? o.dbl.find((entry) => typeof entry?.spect === 'string' && entry.spect.trim())?.spect
+        : null
+      : null
+    const normalize = (s) =>
+      typeof s === 'string'
+        ? s
+            .replace(/\+/g, '/')
+            .replace(/\s*\/\s*/g, ' / ')
+            .replace(/\s+/g, ' ')
+            .split(' / ')
+            .map((part) => part.replace(/\s+/g, ''))
+            .join(' / ')
+            .trim()
+        : ''
+    const linkedNorm = normalize(linkedSpect)
+    const embeddedNorm = normalize(embeddedSpect)
+    const hasComposite = (s) => s.includes(' / ')
+    const dblSpect = isDouble(o)
+      ? hasComposite(embeddedNorm) && !hasComposite(linkedNorm)
+        ? embeddedNorm
+        : hasComposite(linkedNorm) && !hasComposite(embeddedNorm)
+          ? linkedNorm
+          : embeddedNorm.length > linkedNorm.length
+            ? embeddedNorm
+            : linkedNorm
+      : null
+    const effectiveSpect = isDouble(o) ? dblSpect || o.spect : o.spect
     if (!effectiveSpect) return null
-    if (isDouble(o) && effectiveSpect.includes('+')) return effectiveSpect.split('+').join(' / ')
+    if (isDouble(o)) {
+      return normalize(effectiveSpect)
+    }
     return effectiveSpect
   }
 
@@ -254,6 +317,7 @@
           Saturn: Body.Saturn,
           Uranus: Body.Uranus,
           Neptune: Body.Neptune,
+          Pluto: Body.Pluto,
           Moon: Body.Moon,
           Sun: Body.Sun,
         }
@@ -405,6 +469,13 @@
         {#if obj.pos}
           <div class="row"><span class="label">RA</span><span class="value mono">{formatRA(raHours(obj))}</span></div>
           <div class="row"><span class="label">Dec</span><span class="value mono">{formatDec(decDeg(obj))}</span></div>
+          {#if obj.type === 'solar_system_body' && solarApparentMag(obj) != null}
+            <div class="row">
+              <span class="label">Apparent mag</span><span class="value"
+                >{formatApparentMag(solarApparentMag(obj))}</span
+              >
+            </div>
+          {/if}
         {/if}
         {#if obj.constellation}
           <div class="row"><span class="label">Constellation</span><span class="value">{obj.constellation}</span></div>
@@ -431,7 +502,7 @@
             <span class="label">Spectral type</span>
             <span class="value">
               {#each spParts as part, i}
-                {#if i > 0}<span class="spect-sep"> / </span>{/if}
+                {#if i > 0}<span class="spect-sep">{' '}/{' '}</span>{/if}
                 <span class="spect-color" style="color: {spectralColor(part) ?? 'inherit'}">{part}</span>
               {/each}
             </span>
@@ -467,10 +538,17 @@
       {/if}
 
       {#if planetPhaseFraction !== null}
-        <section class="info-section">
+        {@const planetPhaseDeg = (Math.acos(1 - 2 * planetPhaseFraction) * 180) / Math.PI}
+        <section class="info-section moon-section">
           <div class="section-title">Phase</div>
-          <div class="row">
-            <span class="label">Illumination</span><span class="value">{Math.round(planetPhaseFraction * 100)}%</span>
+          <div class="moon-row">
+            <svg viewBox="0 0 100 100" width="64" height="64" class="moon-svg">
+              <circle cx="50" cy="50" r="45" class="moon-dark" />
+              {#if moonPath(planetPhaseDeg)}
+                <path d={moonPath(planetPhaseDeg)} class="moon-lit" />
+              {/if}
+            </svg>
+            <span class="value">{Math.round(planetPhaseFraction * 100)}% illuminated</span>
           </div>
         </section>
       {/if}

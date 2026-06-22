@@ -66,7 +66,7 @@
   function applyPan(dx, dy, raC, decC, sizePx) {
     const fovRad = (FINDER_FOV * Math.PI) / 180
     const scale = sizePx / fovRad
-    const x = -dx / scale
+    const x = dx / scale
     const y = dy / scale
     const rho = Math.sqrt(x * x + y * y)
     if (rho < 1e-10) return { ra0: raC, dec0: decC }
@@ -272,6 +272,7 @@
         showConstellationBoundaries={false}
         showDsos={true}
         showHorizon={true}
+        showSolarSystem={true}
       />
     </div>
   </div>

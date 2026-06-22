@@ -21,6 +21,8 @@
     showConstellationBoundaries,
     showDsos,
     showHorizon,
+    showSolarSystem,
+    solarSystemPositions,
     finderViewActive,
     searchViewActive,
     objectDetailsActive,
@@ -32,6 +34,8 @@
   let lat = 48.2 // default: Vienna
   let lon = 16.37
   let time = new Date()
+  let skyTime = new Date()
+  let clockInterval = null
   let ra0 = 0
   let dec0 = 0
   let fov = 60
@@ -47,7 +51,7 @@
   let loadMagLimit = 0
   let fetching = false
 
-  const NORMAL_VIEW_MIN_FOV = 0.5
+  const NORMAL_VIEW_MIN_FOV = 0.001
   const NORMAL_VIEW_MAX_FOV = 120
   const EUROPE_MIN_DEC = -35
   const TAP_THRESHOLD = 5
@@ -134,7 +138,7 @@
   function applyPan(dx, dy, raC, decC, W, H, fovDeg) {
     const fovRad = (fovDeg * Math.PI) / 180
     const scale = H / fovRad
-    const x = -dx / scale
+    const x = dx / scale
     const y = dy / scale
     const rho = Math.sqrt(x * x + y * y)
     if (rho < 1e-10) return { ra0: raC, dec0: decC }
@@ -218,6 +222,42 @@
       const dist = Math.hypot(pt.px - tapX, pt.py - tapY)
       if (dist <= TAP_RADIUS) hits.push({ obj, dist })
     }
+    if (get(showSolarSystem)) {
+      const PLANET_RADII_KM = {
+        Sun: 696000,
+        Moon: 1737,
+        Mercury: 2440,
+        Venus: 6052,
+        Mars: 3397,
+        Jupiter: 71492,
+        Saturn: 60268,
+        Uranus: 25559,
+        Neptune: 24766,
+        Pluto: 1188,
+      }
+      const AU_KM = 149597870.7
+      for (const body of get(solarSystemPositions)) {
+        const pt = projectToPixel(body.ra, body.dec, ra0, dec0, W, H, fov, 0)
+        if (!pt) continue
+        const physR = PLANET_RADII_KM[body.name]
+        const imgR = physR && body.distAU ? (physR / (body.distAU * AU_KM) / ((fov * Math.PI) / 180)) * H : 0
+        const hitR = Math.max(TAP_RADIUS, imgR)
+        const dist = Math.hypot(pt.px - tapX, pt.py - tapY)
+        if (dist <= hitR) {
+          hits.push({
+            obj: {
+              id: `solar_${body.imageId || body.name.toLowerCase()}`,
+              name: body.name,
+              pos: [body.ra, body.dec],
+              type: 'solar_system_body',
+              bodyClass: body.bodyClass,
+            },
+            dist,
+          })
+        }
+      }
+    }
+
     if (hits.some((h) => h.obj.type === 'star' && h.obj.dbl)) {
       hits = hits.filter((h) => h.obj.type !== 'double_star')
     }
@@ -261,6 +301,11 @@
         e.preventDefault()
         return
       }
+      if (get(finderViewActive)) {
+        finderViewActive.set(false)
+        e.preventDefault()
+        return
+      }
     }
 
     if (get(searchViewActive)) return
@@ -279,15 +324,14 @@
       return
     }
 
-    // s = sync when menu open, search when menu closed
     if (e.key === 's') {
-      if (menuOpen) {
-        menuOpen = false
-        showSync = true
-      } else {
-        objectDetailsActive.set(false)
-        searchViewActive.update((v) => !v)
-      }
+      showSolarSystem.update((v) => !v)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'f') {
+      objectDetailsActive.set(false)
+      searchViewActive.update((v) => !v)
       e.preventDefault()
       return
     }
@@ -322,7 +366,7 @@
       e.preventDefault()
       return
     }
-    if (e.key === 'f') {
+    if (e.key === 'F') {
       finderViewActive.update((v) => !v)
       e.preventDefault()
       return
@@ -385,6 +429,10 @@
   onMount(() => {
     window.addEventListener('keydown', handleKey)
     window.addEventListener('wheel', handleWheel, { passive: false })
+    clockInterval = setInterval(() => {
+      time = new Date()
+      if (time.getMinutes() !== skyTime.getMinutes()) skyTime = time
+    }, 1000)
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => init(pos.coords.latitude, pos.coords.longitude),
@@ -399,6 +447,7 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKey)
     window.removeEventListener('wheel', handleWheel)
+    clearInterval(clockInterval)
   })
 </script>
 
@@ -420,13 +469,14 @@
       {objects}
       {lat}
       {lon}
-      {time}
+      time={skyTime}
       showFovCircle={$showFovCircle}
       showConstellationLines={$showConstellationLines}
       showConstellationNames={$showConstellationNames}
       showConstellationBoundaries={$showConstellationBoundaries}
       showDsos={$showDsos}
       showHorizon={$showHorizon}
+      showSolarSystem={$showSolarSystem}
     />
   {/if}
 
@@ -469,6 +519,7 @@
       {time}
       on:pick={(e) => {
         time = e.detail
+        skyTime = e.detail
         showPicker = false
       }}
       on:cancel={() => {

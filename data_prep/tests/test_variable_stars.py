@@ -59,7 +59,7 @@ class TestMerge:
         gcvs = [{"var_name": "alf Ori", "mag_max": 0.0, "min1": 1.3}]
         xmatch = {"V* alf Ori": "HIP 27989"}
         result = self._pipeline(tmp_path)._merge(gcvs, xmatch)
-        assert result == [(27989, 0.0, 1.3)]
+        assert result == [(27989, 0.0, 1.3, "", "")]
 
     def test_no_hip_match_skipped(self, tmp_path: Path):
         gcvs = [{"var_name": "alf Ori", "mag_max": 0.0, "min1": 1.3}]
@@ -104,7 +104,7 @@ class TestMerge:
 def _write_csv(tmp_path: Path, rows: list[dict], max_mag: float = 4.0) -> Path:
     path = tmp_path / f"variable_stars_m{max_mag:g}.csv"
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["hip", "min_mag", "max_mag"])
+        writer = csv.DictWriter(fh, fieldnames=["hip", "min_mag", "max_mag", "var_type", "period"])
         writer.writeheader()
         writer.writerows(rows)
     return path
@@ -113,7 +113,7 @@ def _write_csv(tmp_path: Path, rows: list[dict], max_mag: float = 4.0) -> Path:
 class TestLoadIndex:
     def test_loads_single_entry(self, tmp_path: Path):
         _write_csv(tmp_path, [{"hip": 27989, "min_mag": 0.0, "max_mag": 1.3}])
-        assert VariableStarPipeline(tmp_path).load_index() == {27989: (0.0, 1.3)}
+        assert VariableStarPipeline(tmp_path).load_index() == {27989: (0.0, 1.3, None, None)}
 
     def test_loads_multiple_entries(self, tmp_path: Path):
         _write_csv(tmp_path, [
@@ -122,7 +122,7 @@ class TestLoadIndex:
         ])
         index = VariableStarPipeline(tmp_path).load_index()
         assert len(index) == 2
-        assert index[14576] == (2.12, 3.4)
+        assert index[14576] == (2.12, 3.4, None, None)
 
     def test_missing_csv_returns_empty_dict(self, tmp_path: Path):
         assert not VariableStarPipeline(tmp_path).load_index()
@@ -130,4 +130,6 @@ class TestLoadIndex:
     def test_respects_max_mag_in_filename(self, tmp_path: Path):
         _write_csv(tmp_path, [{"hip": 27989, "min_mag": 0.0, "max_mag": 1.3}], max_mag=4.0)
         assert not VariableStarPipeline(tmp_path, max_mag=6.0).load_index()
-        assert VariableStarPipeline(tmp_path, max_mag=4.0).load_index() == {27989: (0.0, 1.3)}
+        assert VariableStarPipeline(tmp_path, max_mag=4.0).load_index() == {
+            27989: (0.0, 1.3, None, None)
+        }

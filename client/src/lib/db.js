@@ -475,6 +475,21 @@ export async function getObjectImage(objectId) {
       // NGC, IC, Caldwell etc. — filename matches the suffix directly
       catalogueId = raw
     }
+  } else if (objectId?.startsWith('solar_')) {
+    // solar_mercury → planet_mercury; solar_asteroid_vesta → planet_asteroid_vesta
+    const solarKey = objectId
+      .slice(6)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+    catalogueId = 'planet_' + solarKey
+    const exact = await db.get('images', catalogueId)
+    if (exact) return exact
+    if (catalogueId.startsWith('planet_asteroid_')) {
+      return db.get('images', 'planet_asteroid')
+    }
+    return null
   }
   return db.get('images', catalogueId)
 }

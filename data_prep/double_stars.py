@@ -4,6 +4,7 @@
 
 import csv
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -106,6 +107,21 @@ def _angular_sep_arcsec(pos1: list[float], pos2: list[float]) -> float:
     return math.hypot(dra, dde) * 3600.0
 
 
+def _normalize_spect(spect: str) -> str:
+    """Normalize spectral separators and whitespace for display/storage."""
+    if not spect:
+        return ""
+    normalized = spect.replace("+", "/")
+    normalized = re.sub(r"\s*/\s*", " / ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _is_composite_spect(spect: str) -> bool:
+    """Return True if spectral text appears to encode multiple components."""
+    return " / " in _normalize_spect(spect)
+
+
 class DoubleStarMatcher:
     """Load WDS data and attach double-star metadata to star objects by HIP."""
 
@@ -148,7 +164,7 @@ class DoubleStarMatcher:
         if not stars_with_hip:
             return 0, 0, 0
 
-        return self._apply_systems_to_stars(systems, stars_with_hip)
+        return self._apply_systems_to_stars(systems, stars_with_hip, stars)
 
     def _merge_orb_periods_into_systems(
         self,
@@ -168,9 +184,11 @@ class DoubleStarMatcher:
         self,
         systems: list[dict[str, Any]],
         stars_with_hip: list[dict[str, Any]],
-    ) -> tuple[int, int, int]:
+        all_stars: list[dict[str, Any]],
+    ) -> tuple[int, int, int]:  # pylint: disable=too-many-locals
         """Match systems to stars, attach `dbl` payloads, and return counts."""
         bins = self._build_spatial_bins(stars_with_hip)
+        all_bins = self._build_spatial_bins([s for s in all_stars if s.get("pos")])
         pair_count = 0
         phys_count = 0
         touched: set[int] = set()
@@ -189,9 +207,77 @@ class DoubleStarMatcher:
                     continue
             if not self._passes_mag_check(matched, system):
                 continue
+            self._enrich_system_spect_from_components(system, matched, all_bins)
             pair_count += self._attach_payload_and_count(matched, system, touched)
             phys_count += sum(1 for p in system.get("pairs", []) if "phys" in p)
         return len(touched), pair_count, phys_count
+
+    def _enrich_system_spect_from_components(
+        self,
+        system: dict[str, Any],
+        matched: dict[str, Any],
+        bins: dict[tuple[int, int], list[dict[str, Any]]],
+    ) -> None:
+        """Fill system spect as primary/secondary when only a single type is known."""
+        current = system.get("spect", "") or ""
+        if _is_composite_spect(current):
+            return
+        primary = _normalize_spect(current or (matched.get("spect") or ""))
+        if not primary:
+            return
+        secondary = self._infer_secondary_spect(system, matched, bins)
+        if not secondary:
+            return
+        if _normalize_spect(secondary).upper() == primary.upper():
+            return
+        system["spect"] = f"{primary} / {_normalize_spect(secondary)}"
+
+    def _infer_secondary_spect(
+        self,
+        system: dict[str, Any],
+        matched: dict[str, Any],
+        bins: dict[tuple[int, int], list[dict[str, Any]]],
+    ) -> str | None:  # pylint: disable=too-many-locals
+        """Infer secondary component spectral type from nearby stars."""
+        pair = next((p for p in system.get("pairs", []) if p.get("comp") == "AB"), None)
+        if pair is None:
+            pair = (system.get("pairs") or [None])[0]
+        if not pair:
+            return None
+        sep_field = pair.get("sep")
+        expected_sep = sep_field[-1] if isinstance(sep_field, list) else sep_field
+        pair_mag = pair.get("mag") or []
+        if len(pair_mag) < 2:
+            return None
+        matched_mag = self._mag_to_float(matched.get("mag"))
+        m1, m2 = float(pair_mag[0]), float(pair_mag[1])
+        target_mag = m2
+        if matched_mag is not None and abs(matched_mag - m2) < abs(matched_mag - m1):
+            target_mag = m1
+
+        best_score = math.inf
+        best_star: dict[str, Any] | None = None
+        cand_stars = self._get_bin_candidates(system["pos"][0], system["pos"][1], bins)
+        for cand in cand_stars:
+            if cand is matched or not cand.get("spect"):
+                continue
+            cand_mag = self._mag_to_float(cand.get("mag"))
+            if cand_mag is None or abs(cand_mag - target_mag) > 1.0:
+                continue
+            sep_arc = _angular_sep_arcsec(matched["pos"], cand["pos"])
+            if expected_sep is not None:
+                tol = max(5.0, float(expected_sep) * 0.35)
+                if abs(sep_arc - float(expected_sep)) > tol:
+                    continue
+                score = abs(sep_arc - float(expected_sep)) + abs(cand_mag - target_mag)
+            else:
+                score = abs(cand_mag - target_mag)
+            if score < best_score:
+                best_score = score
+                best_star = cand
+        if best_star is None:
+            return None
+        return str(best_star.get("spect"))
 
     @staticmethod
     def _build_payload(system: dict[str, Any]) -> dict[str, Any]:
@@ -202,7 +288,21 @@ class DoubleStarMatcher:
         }
         if payload["disc"] is None:
             payload.pop("disc")
+        spect = system.get("spect")
+        if isinstance(spect, str) and spect.strip():
+            payload["spect"] = spect
         return payload
+
+    @staticmethod
+    def _prefer_spect(row_spect: str, current_spect: str) -> bool:
+        """Return True when row_spect should replace current_spect."""
+        if not current_spect:
+            return True
+        row_composite = _is_composite_spect(row_spect)
+        current_composite = _is_composite_spect(current_spect)
+        if row_composite and not current_composite:
+            return True
+        return row_composite == current_composite and len(row_spect) > len(current_spect)
 
     def _attach_payload_and_count(
         self,
@@ -344,9 +444,9 @@ class DoubleStarMatcher:
                     system = self._init_system_from_row(wds_id, row, ra, dec)
                     grouped[wds_id] = system
                 else:
-                    # Upgrade spect to a combined ('+') type if a later row has one
-                    row_spect = (row.get("SpType", "") or "").strip()
-                    if row_spect and "+" in row_spect and "+" not in system.get("spect", ""):
+                    # Prefer richer/composite spectral strings from later rows.
+                    row_spect = _normalize_spect(row.get("SpType", "") or "")
+                    if row_spect and self._prefer_spect(row_spect, system.get("spect", "")):
                         system["spect"] = row_spect
 
                 pair = self._build_pair_from_row(row, mag1, mag2, sep1, sep2)
@@ -391,7 +491,7 @@ class DoubleStarMatcher:
         # Attempt to capture any provided spectral type for basic cross-checks
         spect = row.get("SpType", "") or row.get("Sp", "") or row.get("Spec", "")
         if spect:
-            system["spect"] = spect.strip()
+            system["spect"] = _normalize_spect(spect)
         return system
 
     def _build_pair_from_row(

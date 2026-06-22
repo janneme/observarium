@@ -237,6 +237,7 @@ class TestLoadGaiaStars:
 @pytest.mark.network
 def test_adql_accepted_by_gaia_tap():
     """Submit a LIMIT 5 query to verify the ADQL column names are valid."""
+    import urllib.error
     import urllib.parse
     import urllib.request
 
@@ -256,13 +257,19 @@ def test_adql_accepted_by_gaia_tap():
         data=body,
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
-        job_url = resp.geturl().rstrip("/")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
+            job_url = resp.geturl().rstrip("/")
+    except (urllib.error.URLError, TimeoutError, ConnectionResetError) as exc:
+        pytest.skip(f"Gaia TAP unavailable: {exc}")
 
     import time
     for _ in range(30):
-        with urllib.request.urlopen(f"{job_url}/phase", timeout=15) as r:  # noqa: S310
-            phase = r.read().decode("ascii").strip()
+        try:
+            with urllib.request.urlopen(f"{job_url}/phase", timeout=15) as r:  # noqa: S310
+                phase = r.read().decode("ascii").strip()
+        except (urllib.error.URLError, TimeoutError, ConnectionResetError) as exc:
+            pytest.skip(f"Gaia TAP polling failed: {exc}")
         if phase == "COMPLETED":
             return
         if phase in ("ERROR", "ABORTED", "UNKNOWN"):

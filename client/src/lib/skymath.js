@@ -27,7 +27,8 @@ export function toPixel(x, y, W, H, fovDeg, rotation) {
   const xr = x * cosR - y * sinR
   const yr = x * sinR + y * cosR
   return {
-    px: W / 2 + xr * scale,
+    // Mirror X so sky handedness matches typical visual sky charts.
+    px: W / 2 - xr * scale,
     py: H / 2 - yr * scale,
   }
 }

@@ -179,6 +179,7 @@ class SolarSystemPipeline:
     ) -> None:
         self._sources_dir = sources_dir
         self._output_dir = output_dir
+        self._debug = debug
         cache = cache_dir or sources_dir
         self._downloader = Downloader(cache, debug=debug)
 
@@ -194,7 +195,23 @@ class SolarSystemPipeline:
         source = self._downloader.fetch(MPCORB_URL, MPCORB_FILENAME)
         minor_planets = self._process_minor_planets(source, max_mag=max_mag)
         planets = _get_planet_catalog(self._sources_dir)
-        return self._write(planets, minor_planets)
+        output = self._write(planets, minor_planets)
+        self._print_summary(planets, minor_planets, output, max_mag)
+        return output
+
+    def _print_summary(
+        self,
+        planets: list[dict[str, Any]],
+        minor_planets: list[dict[str, Any]],
+        output_path: Path,
+        max_mag: float | None,
+    ) -> None:
+        """Print concise pipeline summary similar to other data-prep commands."""
+        cutoff = ASTEROID_MAX_MAGNITUDE if max_mag is None else max_mag
+        size_mb = output_path.stat().st_size / 1_048_576
+        print(f"Planets       : {len(planets)} loaded from sources/planets.json")
+        print(f"Asteroids     : {len(minor_planets):,} with opposition mag <= {cutoff:g}")
+        print(f"Output        : {output_path} ({size_mb:.2f} MB)")
 
     def _process_minor_planets(
         self,

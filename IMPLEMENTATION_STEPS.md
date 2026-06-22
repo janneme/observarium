@@ -1158,7 +1158,7 @@ Technical notes:
 
 ---
 
-### Step 26: Solar system & special object rendering
+### Step 26: Solar system & special object rendering ✅
 
 **README refs:** §2.1d, §5.2  
 **Deliverable:** Planets, Sun, Moon and visible asteroids rendered on the Main

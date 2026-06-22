@@ -41,8 +41,8 @@ describe('toPixel', () => {
     // A purely-x offset at rot=0 should become a purely-y offset at rot=PI/2
     const { px: px0, py: py0 } = toPixel(1, 0, W, H, fov, 0)
     const { px: pxR, py: pyR } = toPixel(1, 0, W, H, fov, Math.PI / 2)
-    // At rot=0: px moved right from centre, py stayed at H/2
-    expect(px0).toBeGreaterThan(W / 2)
+    // At rot=0: mirrored projection means +x is left of centre.
+    expect(px0).toBeLessThan(W / 2)
     expect(py0).toBeCloseTo(H / 2)
     // At rot=PI/2: x contribution rotates into y axis
     expect(pxR).toBeCloseTo(W / 2, 5)

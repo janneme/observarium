@@ -3,7 +3,7 @@
   import CustomInput from './CustomInput.svelte'
   import OnScreenKeyboard from './OnScreenKeyboard.svelte'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { searchViewActive, objectDetailsActive, pendingFocus } from '../stores/ui.js'
+  import { searchViewActive, objectDetailsActive, pendingFocus, solarSystemPositions } from '../stores/ui.js'
   import { doSearch } from '../lib/search.js'
   import { getSearchIndex } from '../lib/db.js'
 
@@ -33,7 +33,15 @@
     searchViewActive.set(false)
   }
 
-  $: results = doSearch(query, index)
+  $: solarEntries = $solarSystemPositions.map((b) => ({
+    id: `solar_${b.imageId || b.name.toLowerCase()}`,
+    name: b.name,
+    pos: [b.ra, b.dec],
+    type: 'solar_system_body',
+    bodyClass: b.bodyClass,
+  }))
+
+  $: results = doSearch(query, index ? [...solarEntries, ...index] : solarEntries.length ? solarEntries : null)
 
   function accept(item) {
     selectedObject.set(item.obj)
