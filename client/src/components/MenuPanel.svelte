@@ -324,7 +324,14 @@
       </button>
 
       <!-- 10: Telescopes -->
-      <button class="grid-item" on:click={stub} aria-label="Telescopes">
+      <button
+        class="grid-item"
+        on:click={() => {
+          dispatch('telescopes')
+          close()
+        }}
+        aria-label="Telescopes"
+      >
         <div class="icon-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <rect x="2" y="9" width="15" height="6" rx="2" />

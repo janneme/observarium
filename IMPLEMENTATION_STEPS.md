@@ -1180,7 +1180,7 @@ Technical notes:
 
 ## Phase 5 — Observations & Sync
 
-### Step 27: Telescopes screen
+### Step 27: Telescopes screen ✅
 
 **README refs:** §5.6  
 **Deliverable:** Telescopes and eyepieces CRUD screen, data stored in IndexedDB

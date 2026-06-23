@@ -10,6 +10,7 @@
   import LoupePanel from '../components/LoupePanel.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
   import ObjectDetails from '../screens/ObjectDetails.svelte'
+  import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import { getObjectsInArea } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
@@ -69,6 +70,7 @@
   let showPicker = false
   let showAbout = false
   let showSync = false
+  let showTelescopes = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -378,6 +380,7 @@
     }
     if (e.key === 't') {
       menuOpen = false
+      showTelescopes = true
       e.preventDefault()
       return
     }
@@ -512,6 +515,9 @@
     on:update={() => {
       showSync = true
     }}
+    on:telescopes={() => {
+      showTelescopes = true
+    }}
   />
 
   {#if showPicker}
@@ -542,6 +548,14 @@
         showSync = false
       }}
       on:synced={loadObjects}
+    />
+  {/if}
+
+  {#if showTelescopes}
+    <TelescopesScreen
+      onClose={() => {
+        showTelescopes = false
+      }}
     />
   {/if}
 

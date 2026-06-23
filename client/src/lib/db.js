@@ -320,6 +320,11 @@ export async function bulkPutObservations(items) {
   await tx.done
 }
 
+export async function getAllObservations() {
+  const db = await getDB()
+  return db.getAll('observations')
+}
+
 // --------------------------------------------------------------------------
 // Zone helpers
 // --------------------------------------------------------------------------
@@ -449,6 +454,27 @@ export async function getTodayObservation() {
   return db.get('observations', today)
 }
 
+export async function getObservationByDate(date) {
+  const db = await getDB()
+  return db.get('observations', date)
+}
+
+export async function putObservation(record) {
+  const db = await getDB()
+  await db.put('observations', record)
+}
+
+export async function getPendingChangesCount() {
+  const n = await getMeta('pendingChanges')
+  return Number.isFinite(Number(n)) ? Number(n) : 0
+}
+
+export async function incrementPendingChanges(delta = 1) {
+  const next = (await getPendingChangesCount()) + delta
+  await setMeta('pendingChanges', next)
+  return next
+}
+
 export async function toggleObjectObserved(objectId) {
   const db = await getDB()
   const today = new Date().toISOString().slice(0, 10)
@@ -460,6 +486,7 @@ export async function toggleObjectObserved(objectId) {
     existing.objects.splice(idx, 1)
   }
   await db.put('observations', existing)
+  await incrementPendingChanges(1)
   return existing.objects.some((o) => o.id === objectId)
 }
 
