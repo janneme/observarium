@@ -44,6 +44,12 @@ export async function getDataHash() {
   return data.hash
 }
 
+export async function getImagesHash() {
+  const res = await authFetch('/images-hash')
+  const data = await res.json()
+  return data.hash
+}
+
 export async function getObservations() {
   const res = await authFetch('/observations')
   return res.json()

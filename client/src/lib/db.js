@@ -264,8 +264,17 @@ export async function markChunkComplete(filename) {
   }
 }
 
-export async function clearCompletedChunks() {
-  await setMeta('completedChunks', [])
+export async function clearCompletedChunks(filenames) {
+  if (!Array.isArray(filenames) || filenames.length === 0) {
+    await setMeta('completedChunks', [])
+    return
+  }
+  const arr = (await getMeta('completedChunks')) || []
+  const removeSet = new Set(filenames)
+  await setMeta(
+    'completedChunks',
+    arr.filter((name) => !removeSet.has(name)),
+  )
 }
 
 export async function bulkPutObjects(items) {
@@ -311,6 +320,11 @@ export async function bulkPutImages(items) {
   const tx = db.transaction('images', 'readwrite')
   await Promise.all(items.map((item) => tx.store.put(item)))
   await tx.done
+}
+
+export async function getImagesCount() {
+  const db = await getDB()
+  return db.count('images')
 }
 
 export async function bulkPutObservations(items) {

@@ -1,7 +1,7 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte'
   import { push } from 'svelte-spa-router'
-  import { runSync } from '../lib/datasync.js'
+  import { runUpdateSync } from '../lib/datasync.js'
 
   const dispatch = createEventDispatcher()
 
@@ -11,11 +11,12 @@
 
   let objectsProgress = 0
   let imagesProgress = 0
-  let observationsDone = false
 
   let objectsSize = 0
   let imagesSize = 0
-  let observationsSize = 0
+  let objectsUpToDate = false
+  let imagesUpToDate = false
+  let upToDate = false
 
   function formatSize(bytes) {
     if (bytes >= 1_000_000) return `${+(bytes / 1_000_000).toPrecision(2)} MB`
@@ -37,23 +38,24 @@
     sessionExpired = false
     objectsProgress = 0
     imagesProgress = 0
-    observationsDone = false
+    objectsUpToDate = false
+    imagesUpToDate = false
+    upToDate = false
 
     try {
-      const result = await runSync({
+      const result = await runUpdateSync({
         onObjectsProgress: (p) => {
           objectsProgress = p
         },
         onImagesProgress: (p) => {
           imagesProgress = p
         },
-        onObservationsDone: () => {
-          observationsDone = true
-        },
       })
       objectsSize = result.objectsSize
       imagesSize = result.imagesSize
-      observationsSize = result.observationsSize
+      objectsUpToDate = !!result.objectsUpToDate
+      imagesUpToDate = !!result.imagesUpToDate
+      upToDate = !!result.upToDate
       phase = 'done'
       dispatch('synced')
     } catch (err) {
@@ -96,45 +98,46 @@
     <div class="phases">
       <div class="phase-row">
         <span class="phase-label">Objects</span>
-        <div class="progress-track">
-          <div class="progress-bar" style="width: {Math.round(objectsProgress * 100)}%"></div>
-        </div>
-        <span class="phase-pct"
-          >{Math.round(objectsProgress * 100)}%{phase === 'done' && objectsSize
-            ? ` (${formatSize(objectsSize)})`
-            : ''}</span
-        >
+        {#if phase === 'done' && objectsUpToDate}
+          <span class="phase-up-to-date">Up to date</span>
+        {:else}
+          <div class="progress-track">
+            <div class="progress-bar" style="width: {Math.round(objectsProgress * 100)}%"></div>
+          </div>
+          <span class="phase-pct"
+            >{Math.round(objectsProgress * 100)}%{phase === 'done' && objectsSize
+              ? ` (${formatSize(objectsSize)})`
+              : ''}</span
+          >
+        {/if}
       </div>
 
       <div class="phase-row">
         <span class="phase-label">Images</span>
-        <div class="progress-track">
-          <div class="progress-bar" style="width: {Math.round(imagesProgress * 100)}%"></div>
-        </div>
-        <span class="phase-pct"
-          >{Math.round(imagesProgress * 100)}%{phase === 'done' && imagesSize
-            ? ` (${formatSize(imagesSize)})`
-            : ''}</span
-        >
+        {#if phase === 'done' && imagesUpToDate}
+          <span class="phase-up-to-date">Up to date</span>
+        {:else}
+          <div class="progress-track">
+            <div class="progress-bar" style="width: {Math.round(imagesProgress * 100)}%"></div>
+          </div>
+          <span class="phase-pct"
+            >{Math.round(imagesProgress * 100)}%{phase === 'done' && imagesSize
+              ? ` (${formatSize(imagesSize)})`
+              : ''}</span
+          >
+        {/if}
       </div>
 
       <div class="phase-row">
         <span class="phase-label">Observations</span>
-        <div class="progress-track">
-          <div class="progress-bar" style="width: {observationsDone ? 100 : 0}%"></div>
-        </div>
-        <span class="phase-pct"
-          >{observationsDone ? '100' : '0'}%{phase === 'done' && observationsSize
-            ? ` (${formatSize(observationsSize)})`
-            : ''}</span
-        >
+        <span class="phase-up-to-date">Up to date</span>
       </div>
     </div>
 
     {#if phase === 'loading'}
       <p class="status-msg">Updating…</p>
     {:else if phase === 'done'}
-      <p class="status-msg success">Data updated successfully.</p>
+      <p class="status-msg success">{upToDate ? 'Everything is up to date.' : 'Data updated successfully.'}</p>
     {:else if phase === 'error'}
       <p class="error-msg">{errorMsg}</p>
       <div class="actions">
@@ -256,6 +259,13 @@
     opacity: 0.6;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+
+  .phase-up-to-date {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--fg);
+    opacity: 0.85;
   }
 
   .status-msg {

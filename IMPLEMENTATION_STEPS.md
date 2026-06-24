@@ -1234,7 +1234,7 @@ Technical notes:
 
 ---
 
-### Step 30: Update object data screen
+### Step 30: Update object data screen ✅
 
 **README refs:** §5.13  
 **Deliverable:** Hash-check screen that fetches fresh data only when needed.

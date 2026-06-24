@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { getManifest, getImagesUrl, getObservations } from './api.js'
+import { getDataHash, getImagesHash, getManifest, getImagesUrl, getObservations } from './api.js'
 import {
   bulkPutObjects,
   bulkPutImages,
@@ -8,7 +8,10 @@ import {
   computeZone,
   storeTier1Blob,
   bulkPutZoneT2Blobs,
+  getMeta,
+  getImagesCount,
   storeManifest,
+  getStoredManifest,
   getCompletedChunks,
   markChunkComplete,
   clearCompletedChunks,
@@ -123,6 +126,53 @@ async function ingestChunk(url, filename, onProgress) {
   await markChunkComplete(filename)
 }
 
+function getChangedChunkFilenames(manifest, storedManifest) {
+  if (!storedManifest || !Array.isArray(storedManifest.t2_chunks)) {
+    return manifest.t2_chunks.map((chunk) => chunk.filename)
+  }
+  const oldByName = new Map(storedManifest.t2_chunks.map((chunk) => [chunk.filename, chunk.hash]))
+  return manifest.t2_chunks
+    .filter((chunk) => oldByName.get(chunk.filename) !== chunk.hash)
+    .map((chunk) => chunk.filename)
+}
+
+async function downloadAndStoreImages(onImagesProgress) {
+  const imgProg = onImagesProgress || (() => {})
+  const imagesUrl = await getImagesUrl()
+  const imagesData = await fetchWithProgress(imagesUrl, (p) => imgProg(p * 0.7))
+  const imagesZip = await JSZip.loadAsync(imagesData, {
+    onUpdate(metadata) {
+      if (metadata.percent != null) imgProg(0.7 + (metadata.percent / 100) * 0.3)
+    },
+  })
+  const imageItems = []
+  for (const [filename, file] of Object.entries(imagesZip.files)) {
+    if (file.dir) continue
+    const ext = filename.split('.').pop().toLowerCase()
+    const catalogueId = filename.replace(/\.[^.]+$/, '')
+    const blob = await file.async('blob')
+    const mimeType =
+      ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'
+    imageItems.push({ catalogueId, blob: new Blob([blob], { type: mimeType }), filename })
+  }
+  const imagesSize = imageItems.reduce((s, item) => s + item.blob.size, 0)
+  await bulkPutImages(imageItems)
+  imgProg(1)
+  return imagesSize
+}
+
+async function maybeRefreshImages(onImagesProgress) {
+  const [remoteImagesHash, localImagesHash] = await Promise.all([getImagesHash(), getMeta('imagesHash')])
+  if (remoteImagesHash && localImagesHash && remoteImagesHash === localImagesHash) {
+    const imgProg = onImagesProgress || (() => {})
+    imgProg(1)
+    return { imagesSize: 0, imagesChanged: false, remoteImagesHash }
+  }
+  const imagesSize = await downloadAndStoreImages(onImagesProgress)
+  if (remoteImagesHash) await setMeta('imagesHash', remoteImagesHash)
+  return { imagesSize, imagesChanged: true, remoteImagesHash }
+}
+
 /**
  * Run the full data sync: objects (T1 + T2), images, observations.
  *
@@ -164,29 +214,11 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
   }
 
   await storeManifest(manifest)
+  if (manifest.version) await setMeta('dataHash', manifest.version)
   objProg(1)
 
   // Images
-  const imagesUrl = await getImagesUrl()
-  const imagesData = await fetchWithProgress(imagesUrl, (p) => imgProg(p * 0.7))
-  const imagesZip = await JSZip.loadAsync(imagesData, {
-    onUpdate(metadata) {
-      if (metadata.percent != null) imgProg(0.7 + (metadata.percent / 100) * 0.3)
-    },
-  })
-  const imageItems = []
-  for (const [filename, file] of Object.entries(imagesZip.files)) {
-    if (file.dir) continue
-    const ext = filename.split('.').pop().toLowerCase()
-    const catalogueId = filename.replace(/\.[^.]+$/, '')
-    const blob = await file.async('blob')
-    const mimeType =
-      ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'
-    imageItems.push({ catalogueId, blob: new Blob([blob], { type: mimeType }), filename })
-  }
-  const imagesSize = imageItems.reduce((s, item) => s + item.blob.size, 0)
-  await bulkPutImages(imageItems)
-  imgProg(1)
+  const { imagesSize } = await maybeRefreshImages(imgProg)
 
   // Observations
   const observations = await getObservations()
@@ -197,4 +229,128 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
   obsDone()
 
   return { objectsSize: totalBytes, imagesSize, observationsSize }
+}
+
+/**
+ * Incremental data update for the "Update Data" screen.
+ *
+ * Behaviour:
+ * - Checks /data-hash and exits quickly when local data are up to date.
+ * - If changed, downloads only changed object artifacts (stars_t1, objects, changed t2 chunks).
+ * - Refreshes images only when object-data hash changed.
+ * - Does not overwrite observations during update-data flow.
+ */
+export async function runUpdateSync({ onObjectsProgress, onImagesProgress, onObservationsDone } = {}) {
+  const objProg = onObjectsProgress || (() => {})
+  const imgProg = onImagesProgress || (() => {})
+  const obsDone = onObservationsDone || (() => {})
+
+  const [remoteDataHash, remoteImagesHash, storedManifest, localImagesHash, localImagesCount] = await Promise.all([
+    getDataHash(),
+    getImagesHash(),
+    getStoredManifest(),
+    getMeta('imagesHash'),
+    getImagesCount(),
+  ])
+  const dataUpToDate = !!(storedManifest?.version && storedManifest.version === remoteDataHash)
+  const hasLocalImages = localImagesCount > 0
+  const imagesUpToDate = !!(
+    remoteImagesHash &&
+    ((localImagesHash && remoteImagesHash === localImagesHash) || (!localImagesHash && hasLocalImages))
+  )
+
+  if (imagesUpToDate && remoteImagesHash && localImagesHash !== remoteImagesHash) {
+    await setMeta('imagesHash', remoteImagesHash)
+  }
+
+  if (dataUpToDate && imagesUpToDate) {
+    return {
+      objectsSize: 0,
+      imagesSize: 0,
+      observationsSize: 0,
+      objectsUpToDate: true,
+      imagesUpToDate: true,
+      upToDate: true,
+    }
+  }
+
+  let manifest = storedManifest
+  if (!dataUpToDate) manifest = await getManifest()
+  if (!manifest) throw new Error('Missing local manifest for update check')
+
+  const starsChanged = !storedManifest || storedManifest.stars_t1?.hash !== manifest.stars_t1.hash
+  const objectsZipChanged = !storedManifest || storedManifest.objects?.hash !== manifest.objects.hash
+  const changedChunkFilenames = getChangedChunkFilenames(manifest, storedManifest)
+  const changedChunkSet = new Set(changedChunkFilenames)
+  const changedChunks = manifest.t2_chunks.filter((chunk) => changedChunkSet.has(chunk.filename))
+  const objectDataChanged = starsChanged || objectsZipChanged || changedChunks.length > 0
+
+  if (!objectDataChanged && imagesUpToDate) {
+    if (!dataUpToDate && remoteDataHash) await setMeta('dataHash', remoteDataHash)
+    return {
+      objectsSize: 0,
+      imagesSize: 0,
+      observationsSize: 0,
+      objectsUpToDate: true,
+      imagesUpToDate: true,
+      upToDate: true,
+    }
+  }
+
+  objProg(0)
+  imgProg(0)
+
+  if (changedChunkFilenames.length > 0) {
+    await clearCompletedChunks(changedChunkFilenames)
+  }
+
+  const totalBytes =
+    (starsChanged ? manifest.stars_t1.size : 0) +
+    (objectsZipChanged ? manifest.objects.size : 0) +
+    changedChunks.reduce((s, chunk) => s + chunk.size, 0)
+
+  let bytesLoaded = 0
+  if (totalBytes === 0) {
+    objProg(1)
+  } else {
+    if (starsChanged) {
+      await ingestT1(manifest.stars_t1.url)
+      bytesLoaded += manifest.stars_t1.size
+      objProg(bytesLoaded / totalBytes)
+    }
+    if (objectsZipChanged) {
+      await ingestObjects(manifest.objects.url)
+      bytesLoaded += manifest.objects.size
+      objProg(bytesLoaded / totalBytes)
+    }
+    for (const chunk of changedChunks) {
+      await ingestChunk(chunk.url, chunk.filename, (p) => objProg((bytesLoaded + chunk.size * p) / totalBytes))
+      bytesLoaded += chunk.size
+      objProg(bytesLoaded / totalBytes)
+    }
+  }
+
+  if (!dataUpToDate) {
+    await storeManifest(manifest)
+    if (remoteDataHash) await setMeta('dataHash', remoteDataHash)
+  }
+  objProg(1)
+
+  let imagesSize = 0
+  if (imagesUpToDate) {
+    imgProg(1)
+  } else {
+    const result = await downloadAndStoreImages(imgProg)
+    imagesSize = result
+    if (remoteImagesHash) await setMeta('imagesHash', remoteImagesHash)
+  }
+  obsDone()
+  return {
+    objectsSize: totalBytes,
+    imagesSize,
+    observationsSize: 0,
+    objectsUpToDate: !objectDataChanged,
+    imagesUpToDate,
+    upToDate: false,
+  }
 }

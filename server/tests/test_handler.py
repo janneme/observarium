@@ -68,3 +68,30 @@ def test_handle_data_hash_missing(monkeypatch):
 
     out = handler.handle_data_hash()
     assert out["hash"] is None
+
+
+def test_handle_images_hash(monkeypatch):
+    class DummyBackend:
+        def get_hash(self, key):
+            assert key == "images.zip"
+            return "img123"
+
+    monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
+
+    out = handler.handle_images_hash()
+    assert out["hash"] == "img123"
+
+
+def test_route_images_hash_requires_auth():
+    resp = handler._route_presign("/images-hash", "GET", {"headers": {}})
+    assert resp["statusCode"] == 401
+
+
+def test_route_images_hash_success(monkeypatch):
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "u"})
+    monkeypatch.setattr(handler, "handle_images_hash", lambda: {"hash": "img123"})
+    event = {"headers": {"Authorization": "Bearer token"}}
+
+    resp = handler._route_presign("/images-hash", "GET", event)
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"])["hash"] == "img123"

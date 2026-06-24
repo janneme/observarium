@@ -122,6 +122,15 @@ def handle_data_hash() -> dict:
         return {"hash": None}
 
 
+def handle_images_hash() -> dict:
+    """Return content hash of images.zip from storage backend."""
+    backend = storage_backend.get_backend()
+    try:
+        return {"hash": backend.get_hash("images.zip")}
+    except Exception:
+        return {"hash": None}
+
+
 def handle_manifest() -> dict:
     """Read manifest.json and augment with pre-signed download URLs."""
     backend = storage_backend.get_backend()
@@ -326,6 +335,22 @@ def _route_presign(path: str, method: str, event: dict):
         except Exception:
             traceback.print_exc()
             return build_response(500, {"error": "Could not generate presigned URL"})
+
+    if path == "/images-hash":
+        token = _get_bearer_token_from_event(event)
+        if not token:
+            return build_response(401, {"error": "Authorization required"})
+        try:
+            verify_jwt(token)
+        except Exception as exc:
+            print(f"[auth] token rejected: {exc}")
+            return build_response(401, {"error": "Invalid token"})
+        try:
+            out = handle_images_hash()
+            return build_response(200, out)
+        except Exception:
+            traceback.print_exc()
+            return build_response(500, {"error": "Could not fetch images hash"})
 
     return None
 
