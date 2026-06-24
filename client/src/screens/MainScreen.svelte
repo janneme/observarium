@@ -6,6 +6,7 @@
   import DateTimePicker from '../components/DateTimePicker.svelte'
   import AboutPanel from '../components/AboutPanel.svelte'
   import DataSyncPanel from '../components/DataSyncPanel.svelte'
+  import SyncObservationsPanel from '../components/SyncObservationsPanel.svelte'
   import FinderPanel from '../components/FinderPanel.svelte'
   import LoupePanel from '../components/LoupePanel.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
@@ -72,6 +73,7 @@
   let showPicker = false
   let showAbout = false
   let showSync = false
+  let showObservationSync = false
   let showTelescopes = false
   let showObservations = false
   let returnToObservationsFromObjectDetails = false
@@ -307,6 +309,16 @@
 
   function handleKey(e) {
     if (e.key === 'Escape') {
+      if (showObservationSync) {
+        showObservationSync = false
+        e.preventDefault()
+        return
+      }
+      if (menuOpen) {
+        menuOpen = false
+        e.preventDefault()
+        return
+      }
       if (showObservations) {
         showObservations = false
         e.preventDefault()
@@ -341,6 +353,12 @@
       return
     }
 
+    if (e.key === 'S') {
+      menuOpen = false
+      showObservationSync = true
+      e.preventDefault()
+      return
+    }
     if (e.key === 's') {
       showSolarSystem.update((v) => !v)
       e.preventDefault()
@@ -539,6 +557,9 @@
     on:observations={() => {
       showObservations = true
     }}
+    on:sync={() => {
+      showObservationSync = true
+    }}
   />
 
   {#if showPicker}
@@ -576,6 +597,17 @@
     <TelescopesScreen
       onClose={() => {
         showTelescopes = false
+      }}
+    />
+  {/if}
+
+  {#if showObservationSync}
+    <SyncObservationsPanel
+      on:close={() => {
+        showObservationSync = false
+      }}
+      on:synced={() => {
+        showObservationSync = false
       }}
     />
   {/if}

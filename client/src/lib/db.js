@@ -334,6 +334,16 @@ export async function bulkPutObservations(items) {
   await tx.done
 }
 
+export async function replaceAllObservations(items) {
+  const db = await getDB()
+  const tx = db.transaction('observations', 'readwrite')
+  await tx.store.clear()
+  if (Array.isArray(items) && items.length > 0) {
+    await Promise.all(items.map((item) => tx.store.put(item)))
+  }
+  await tx.done
+}
+
 export async function getAllObservations() {
   const db = await getDB()
   return db.getAll('observations')
@@ -488,9 +498,42 @@ export async function getPendingChangesCount() {
   return Number.isFinite(Number(n)) ? Number(n) : 0
 }
 
-export async function incrementPendingChanges(delta = 1) {
+export async function setPendingChangesCount(value = 0) {
+  const next = Math.max(0, Number(value) || 0)
+  await setMeta('pendingChanges', next)
+  return next
+}
+
+export async function getPendingObservationDates() {
+  const arr = await getMeta('pendingObservationDates')
+  if (!Array.isArray(arr)) return []
+  return [...new Set(arr.map((x) => String(x || '').trim()).filter(Boolean))].sort((a, b) => b.localeCompare(a))
+}
+
+export async function markPendingObservationDates(dates) {
+  if (!Array.isArray(dates) || dates.length === 0) return
+  const existing = await getPendingObservationDates()
+  const merged = new Set(existing)
+  for (const d of dates) {
+    const v = String(d || '').trim()
+    if (v) merged.add(v)
+  }
+  await setMeta(
+    'pendingObservationDates',
+    [...merged].sort((a, b) => b.localeCompare(a)),
+  )
+}
+
+export async function clearPendingObservationDates() {
+  await setMeta('pendingObservationDates', [])
+}
+
+export async function incrementPendingChanges(delta = 1, dates = []) {
   const next = (await getPendingChangesCount()) + delta
   await setMeta('pendingChanges', next)
+  if (Array.isArray(dates) && dates.length > 0) {
+    await markPendingObservationDates(dates)
+  }
   return next
 }
 
@@ -505,7 +548,7 @@ export async function toggleObjectObserved(objectId) {
     existing.objects.splice(idx, 1)
   }
   await db.put('observations', existing)
-  await incrementPendingChanges(1)
+  await incrementPendingChanges(1, [today])
   return existing.objects.some((o) => o.id === objectId)
 }
 

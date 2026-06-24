@@ -449,7 +449,14 @@
       </button>
 
       <!-- 17: Synchronize observation data -->
-      <button class="grid-item" on:click={stub} aria-label="Synchronize observations">
+      <button
+        class="grid-item"
+        on:click={() => {
+          dispatch('sync')
+          close()
+        }}
+        aria-label="Synchronize observations"
+      >
         <div class="icon-wrap">
           <svg
             viewBox="0 0 24 24"
@@ -467,7 +474,7 @@
             <span class="badge">{$pendingChanges}</span>
           {/if}
         </div>
-        <span class="item-lbl">Sync (s)</span>
+        <span class="item-lbl">Sync (S)</span>
       </button>
 
       <!-- 18: About -->

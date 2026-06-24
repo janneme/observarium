@@ -229,7 +229,7 @@
       }
 
       await putObservation(nextRecord)
-      const nextPending = await incrementPendingChanges(1)
+      const nextPending = await incrementPendingChanges(1, [dateKey])
       pendingChanges.set(nextPending)
       dispatch('saved')
     } catch (err) {

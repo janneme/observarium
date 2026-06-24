@@ -1258,7 +1258,7 @@ Technical notes:
 
 ---
 
-### Step 31: Synchronize observations screen
+### Step 31: Synchronize observations screen ✅
 
 **README refs:** §5.14  
 **Deliverable:** One-shot observation sync screen.

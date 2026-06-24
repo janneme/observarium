@@ -226,8 +226,8 @@
     return used.map((r) => telescopeResultLabel(r)).join(' | ')
   }
 
-  async function bumpPending() {
-    const nextPending = await incrementPendingChanges(1)
+  async function bumpPending(dates = []) {
+    const nextPending = await incrementPendingChanges(1, dates)
     pendingChanges.set(nextPending)
   }
 
@@ -385,7 +385,7 @@
     observations = sortedObservations(next)
     objectEdit = null
     objectEditError = ''
-    await bumpPending()
+    await bumpPending([date])
   }
 
   function startObservationEdit(obs) {
@@ -458,7 +458,7 @@
     objectEdit = null
     observationEdit = null
     errorMsg = ''
-    await bumpPending()
+    await bumpPending([nextDate])
   }
 
   function openDeleteObject(date, entry) {
@@ -506,7 +506,7 @@
       if (objectEdit?.date === task.date && objectEdit?.objectId === task.objectId) objectEdit = null
     }
 
-    await bumpPending()
+    await bumpPending([task.date])
   }
 
   async function openAddObject(date) {
@@ -565,7 +565,7 @@
     await putObservation(record)
     observations = sortedObservations([...observations, record])
     startObservationEdit(record)
-    await bumpPending()
+    await bumpPending([date])
   }
 
   async function addObjectToObservation(date, objectId) {
@@ -585,7 +585,7 @@
     observations = sortedObservations(next)
     closeAddObject()
     if (createdEntry) startObjectEdit(date, createdEntry)
-    await bumpPending()
+    await bumpPending([date])
   }
 
   async function loadData() {
@@ -810,7 +810,9 @@
                   {#each obs.objects as entry}
                     <div class="object-row" class:editing={isObjectEditing(obs.date, entry.id)}>
                       <div class="object-main">
-                        <span class="obj-symbol"><ObservationObjectSymbol kind={objectSymbolKind(objectById.get(entry.id))} /></span>
+                        <span class="obj-symbol"
+                          ><ObservationObjectSymbol kind={objectSymbolKind(objectById.get(entry.id))} /></span
+                        >
                         <button
                           class="object-name object-link"
                           type="button"

@@ -54,3 +54,12 @@ export async function getObservations() {
   const res = await authFetch('/observations')
   return res.json()
 }
+
+export async function saveObservations(observations) {
+  const res = await authFetch('/observations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(observations),
+  })
+  return res.json()
+}
