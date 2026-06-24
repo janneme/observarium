@@ -63,7 +63,16 @@
     if (obj.name) return obj.name
     if (obj.bay && obj.constellation) return `${obj.bay} ${obj.constellation}`
     if (obj.flam && obj.constellation) return `${obj.flam} ${obj.constellation}`
-    return (obj.id || '').replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2')
+    const id = String(obj.id || '')
+    if (id.startsWith('dso_M')) return `M ${Number(id.slice(5))}`
+    if (id.startsWith('dso_NGC')) return `NGC ${Number(id.slice(7))}`
+    if (id.startsWith('dso_IC')) return `IC ${Number(id.slice(6))}`
+    if (id.startsWith('dso_C')) return `C ${Number(id.slice(5))}`
+    if (id.startsWith('solar_')) {
+      const name = id.slice(6).replace(/_/g, ' ').trim()
+      return name ? name[0].toUpperCase() + name.slice(1) : id
+    }
+    return id.replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2')
   }
 </script>
 

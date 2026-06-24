@@ -12,8 +12,9 @@
   } from 'astronomy-engine'
   import { selectedObject } from '../stores/selectedObject.js'
   import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
-  import { getTodayObservation, toggleObjectObserved, getObjectImage, getDoubleStarNear } from '../lib/db.js'
+  import { getTodayObservation, getObjectImage, getDoubleStarNear } from '../lib/db.js'
   import { applyDsPatch } from '../lib/customObjects.js'
+  import ObservationFormPanel from '../components/ObservationFormPanel.svelte'
 
   export let lat = 48.2
   export let lon = 16.37
@@ -30,6 +31,7 @@
   let moonPhaseDeg = null
   let moonIllumination = null
   let planetPhaseFraction = null
+  let showObservationForm = false
 
   $: obj = $selectedObject
 
@@ -345,9 +347,28 @@
     }
   }
 
-  async function toggleObserved() {
+  function openObservedForm() {
     if (!obj) return
-    isObservedToday = await toggleObjectObserved(obj.id)
+    showObservationForm = true
+  }
+
+  function shouldIgnoreShortcutTarget(target) {
+    if (!target || !(target instanceof Element)) return false
+    const tag = target.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+    return !!target.closest('[contenteditable="true"]')
+  }
+
+  function onGlobalKeyDown(event) {
+    if (!$objectDetailsActive || showObservationForm || !obj) return
+    if (event.defaultPrevented || event.repeat) return
+    if (event.altKey || event.ctrlKey || event.metaKey) return
+    if (shouldIgnoreShortcutTarget(event.target)) return
+    const isShortcutKey = String(event.key).toLowerCase() === 'o' || event.code === 'KeyO'
+    if (!isShortcutKey) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    openObservedForm()
   }
 
   function close() {
@@ -363,14 +384,25 @@
     if (obj.ngc != null) return `NGC ${obj.ngc}`
     if (obj.ic != null) return `IC ${obj.ic}`
     if (obj.caldwell != null) return `C ${obj.caldwell}`
-    return (obj.id || '').replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2') || '—'
+    const id = String(obj.id || '')
+    if (id.startsWith('dso_M')) return `M ${Number(id.slice(5))}`
+    if (id.startsWith('dso_NGC')) return `NGC ${Number(id.slice(7))}`
+    if (id.startsWith('dso_IC')) return `IC ${Number(id.slice(6))}`
+    if (id.startsWith('dso_C')) return `C ${Number(id.slice(5))}`
+    if (id.startsWith('solar_')) {
+      const name = id.slice(6).replace(/_/g, ' ').trim()
+      if (name) return name[0].toUpperCase() + name.slice(1)
+    }
+    return id.replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2') || '—'
   }
 
   onMount(() => {
     if (obj) loadData(obj)
+    window.addEventListener('keydown', onGlobalKeyDown, true)
   })
 
   onDestroy(() => {
+    window.removeEventListener('keydown', onGlobalKeyDown, true)
     if (blobUrlToRevoke) URL.revokeObjectURL(blobUrlToRevoke)
   })
 
@@ -393,9 +425,8 @@
     <button
       class="observed-btn"
       class:observed={isObservedToday}
-      on:click={toggleObserved}
-      title={isObservedToday ? 'Mark as not observed' : 'Mark as observed tonight'}
-      >{isObservedToday ? '★' : '☆'}</button
+      on:click={openObservedForm}
+      title={isObservedToday ? 'Edit observation' : 'Create observation'}>{isObservedToday ? '★' : '☆'}</button
     >
   </div>
 
@@ -565,6 +596,19 @@
         </section>
       {/if}
     </div>
+  {/if}
+
+  {#if showObservationForm && obj}
+    <ObservationFormPanel
+      objectId={obj.id}
+      on:saved={async () => {
+        showObservationForm = false
+        await loadData(obj)
+      }}
+      on:cancel={() => {
+        showObservationForm = false
+      }}
+    />
   {/if}
 </div>
 

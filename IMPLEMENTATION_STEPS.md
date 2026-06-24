@@ -1196,7 +1196,7 @@ Technical notes:
 
 ---
 
-### Step 28: Observation form + Observed button
+### Step 28: Observation form + Observed button ✅
 
 **README refs:** §5.16 (Observed button and form)  
 **Deliverable:** The Observed button on Object Details opens a form; saving
@@ -1205,17 +1205,22 @@ as pending sync.
 
 Technical notes:
 
-- Observation record schema: `{ date, location: {lat, lon} | null, objects: [...] }`.
-  Each object entry: `{ id, telescopeResults: [{telescopeId, seen, eyepieceId | null}], notes }`.
+- Observation record schema: `{ date, location: {name?, lat?, lon?} | null, notes, objects: [...] }`.
+  Each object entry: `{ id, telescopeResults: [{telescopeId, seen, eyepieceIds, eyepieceId | null}], notes }`.
 - Location: use `navigator.geolocation.getCurrentPosition()` to prefill;
-  provide a "Clear location" button (README §B3).
+  provide a "Clear location" button (README §B3). The form also supports
+  manual location name (city/site).
 - Pending sync tracking: maintain a `pendingChanges` count in the `meta` store,
   increment on every write. The menu badge in Step 21 reads this value.
 - Use `<CustomTextarea>` from Step 16 for the notes fields.
 
+Status note:
+
+- Implemented and in active use from "Object Details" via the "Observed" button.
+
 ---
 
-### Step 29: Observations list screen
+### Step 29: Observations list screen ✅
 
 **README refs:** §5.5  
 **Deliverable:** Expandable observation history sorted by date descending.

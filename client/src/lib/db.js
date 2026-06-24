@@ -464,6 +464,11 @@ export async function putObservation(record) {
   await db.put('observations', record)
 }
 
+export async function deleteObservationByDate(date) {
+  const db = await getDB()
+  await db.delete('observations', date)
+}
+
 export async function getPendingChangesCount() {
   const n = await getMeta('pendingChanges')
   return Number.isFinite(Number(n)) ? Number(n) : 0

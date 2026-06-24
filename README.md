@@ -400,8 +400,23 @@ the "Object Finding Paths" screen.
 The screen displays expandable list of observations
 by date (sorted in descending order). Expanding the date we can see
 observation details and list of observed objects with all the details collected.
-For every item there is an "Edit" icon and "Delete" icon. If we click on
-"Edit", the text field next to the Edit button becomes editable and buttons "Accept" and "Cancel" appear.
+Observation header format is:
+
+- `DATE, LOCATION (OBJECTS_OBSERVED)` when location name is available
+- `DATE (OBJECTS_OBSERVED)` otherwise
+
+For each observation there are icon buttons to:
+
+- Edit observation metadata (date, location name, latitude/longitude, session notes)
+- Delete observation (with confirmation dialog)
+- Add object via search
+
+For each object in the observation there are icon buttons to:
+
+- Edit object-specific details (telescopes/eyepieces used, object notes)
+- Delete object from observation (with confirmation dialog)
+
+Object name/catalogue in the list opens the corresponding "Object Details" screen.
 
 ## 5.6 Telescopes
 
@@ -639,16 +654,16 @@ displayed:
 
 - Date (prefilled with current date and time, but we can override it; if we override the
   date, the data are saved to observation of the overridden date)
-- Location (prefilled with the current GPS coordinates, with an option to clear it;
+- Location name (city / observing site, optional)
+- Location (GPS coordinates, prefilled with the current GPS coordinates, with an option to clear it;
   clearing is appropriate when the observation form is filled in retrospectively
   and the current GPS position is no longer relevant)
 - List of available telescopes, each with options (displayed as selectable
   exclusive icons):
   - Seen
   - Unseen (we tried to see the object in the instrument but we did not succeed)
-    If we select "Seen" for a telescope that needs an eyepiece, an optional selection
-    of eyepiece is offered - here we select just one choice (the
-    eyepiece that we used and it brought the best result among all eyepieces we tried).
+    If we select "Seen" for a telescope that needs an eyepiece, optional selection
+    of eyepieces is offered.
 - Observation details (details related to the observation session, like
   weather, seeing conditions etc.)
 - Object details

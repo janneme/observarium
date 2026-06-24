@@ -311,7 +311,14 @@
       </button>
 
       <!-- 8: Observations -->
-      <button class="grid-item" on:click={stub} aria-label="Observations">
+      <button
+        class="grid-item"
+        on:click={() => {
+          dispatch('observations')
+          close()
+        }}
+        aria-label="Observations"
+      >
         <div class="icon-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <rect x="4" y="2" width="14" height="20" rx="2" />

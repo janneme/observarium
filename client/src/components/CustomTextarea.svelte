@@ -141,13 +141,31 @@
 
 <style>
   .custom-textarea {
-    min-height: 4rem;
-    padding: 0.5rem;
+    min-height: calc(2 * 1.25em + 0.24rem);
+    padding: 0.12rem 0.5rem;
     border: 1px solid rgba(127, 127, 127, 0.08);
     border-radius: 6px;
     white-space: pre-wrap;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
   }
+
+  .custom-textarea pre {
+    margin: 0;
+    line-height: 1.25;
+    white-space: pre-wrap;
+    width: 100%;
+  }
+
+  .custom-textarea:focus-visible {
+    outline: none;
+    border-color: rgba(80, 150, 255, 0.7);
+    box-shadow: 0 0 0 2px rgba(80, 150, 255, 0.2);
+  }
+
   .placeholder {
     opacity: 0.5;
   }
@@ -165,5 +183,15 @@
     50% {
       opacity: 0;
     }
+  }
+
+  :global([data-theme='nightly']) .custom-textarea {
+    border-color: rgba(200, 0, 0, 0.35);
+    background: rgba(200, 0, 0, 0.04);
+  }
+
+  :global([data-theme='nightly']) .custom-textarea:focus-visible {
+    border-color: #cc0000;
+    box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.25);
   }
 </style>

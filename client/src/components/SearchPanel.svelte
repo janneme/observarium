@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte'
   import CustomInput from './CustomInput.svelte'
   import OnScreenKeyboard from './OnScreenKeyboard.svelte'
+  import { clearTarget } from '../stores/keyboard.js'
   import { selectedObject } from '../stores/selectedObject.js'
   import { searchViewActive, objectDetailsActive, pendingFocus, solarSystemPositions } from '../stores/ui.js'
   import { doSearch } from '../lib/search.js'
@@ -27,9 +28,11 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', onKey)
+    clearTarget()
   })
 
   function close() {
+    clearTarget()
     searchViewActive.set(false)
   }
 

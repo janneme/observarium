@@ -11,7 +11,8 @@
   import SearchPanel from '../components/SearchPanel.svelte'
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
-  import { getObjectsInArea } from '../lib/db.js'
+  import ObservationsScreen from './ObservationsScreen.svelte'
+  import { getObjectsInArea, getPendingChangesCount } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { selectedObject } from '../stores/selectedObject.js'
@@ -28,6 +29,7 @@
     searchViewActive,
     objectDetailsActive,
     pendingFocus,
+    pendingChanges,
   } from '../stores/ui.js'
   import { get } from 'svelte/store'
   import { toggleTheme } from '../stores/theme.js'
@@ -71,6 +73,8 @@
   let showAbout = false
   let showSync = false
   let showTelescopes = false
+  let showObservations = false
+  let returnToObservationsFromObjectDetails = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -296,8 +300,18 @@
     maybeReload()
   }
 
+  $: if (!$objectDetailsActive && returnToObservationsFromObjectDetails) {
+    returnToObservationsFromObjectDetails = false
+    showObservations = true
+  }
+
   function handleKey(e) {
     if (e.key === 'Escape') {
+      if (showObservations) {
+        showObservations = false
+        e.preventDefault()
+        return
+      }
       if (get(objectDetailsActive)) {
         objectDetailsActive.set(false)
         e.preventDefault()
@@ -311,6 +325,7 @@
     }
 
     if (get(searchViewActive)) return
+    if (showObservations) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -332,6 +347,7 @@
       return
     }
     if (e.key === 'f') {
+      menuOpen = false
       objectDetailsActive.set(false)
       searchViewActive.update((v) => !v)
       e.preventDefault()
@@ -375,6 +391,7 @@
     }
     if (e.key === 'o') {
       menuOpen = false
+      showObservations = true
       e.preventDefault()
       return
     }
@@ -430,6 +447,7 @@
   }
 
   onMount(() => {
+    getPendingChangesCount().then((n) => pendingChanges.set(n))
     window.addEventListener('keydown', handleKey)
     window.addEventListener('wheel', handleWheel, { passive: false })
     clockInterval = setInterval(() => {
@@ -518,6 +536,9 @@
     on:telescopes={() => {
       showTelescopes = true
     }}
+    on:observations={() => {
+      showObservations = true
+    }}
   />
 
   {#if showPicker}
@@ -555,6 +576,21 @@
     <TelescopesScreen
       onClose={() => {
         showTelescopes = false
+      }}
+    />
+  {/if}
+
+  {#if showObservations}
+    <ObservationsScreen
+      onClose={() => {
+        showObservations = false
+        returnToObservationsFromObjectDetails = false
+      }}
+      onOpenObject={(obj) => {
+        returnToObservationsFromObjectDetails = true
+        showObservations = false
+        selectedObject.set(obj)
+        objectDetailsActive.set(true)
       }}
     />
   {/if}

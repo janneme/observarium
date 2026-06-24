@@ -3,6 +3,7 @@
   import { getMeta, setMeta, getAllObservations } from '../lib/db.js'
   import CustomInput from '../components/CustomInput.svelte'
   import CustomCheckbox from '../components/CustomCheckbox.svelte'
+  import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import { keyboardActive } from '../stores/keyboard.js'
 
@@ -24,6 +25,10 @@
   let editingEyepieceId = null
   let telescopeDraft = null
   let eyepieceDraft = null
+  let confirmOpen = false
+  let confirmTitle = 'Confirm'
+  let confirmMessage = ''
+  let pendingDelete = null
 
   function sortByName(items) {
     return [...items].sort((a, b) =>
@@ -74,6 +79,11 @@
         for (const result of entry.telescopeResults) {
           if (result?.telescopeId) telescopeIds.add(result.telescopeId)
           if (result?.eyepieceId) eyepieceIds.add(result.eyepieceId)
+          if (Array.isArray(result?.eyepieceIds)) {
+            for (const id of result.eyepieceIds) {
+              if (id) eyepieceIds.add(id)
+            }
+          }
         }
       }
     }
@@ -186,32 +196,60 @@
     cancelEditEyepiece()
   }
 
-  async function deleteTelescope(item) {
+  async function requestDeleteTelescope(item) {
     clearMessages()
     const { telescopeIds } = await inUseIds()
     if (telescopeIds.has(item.id)) {
       warningMsg = 'This telescope is used in observations and cannot be deleted.'
       return
     }
-    if (!confirm(`Delete telescope "${item.name}"?`)) return
+    pendingDelete = { kind: 'telescope', item }
+    confirmTitle = 'Delete telescope'
+    confirmMessage = `Delete telescope "${item.name}"?`
+    confirmOpen = true
+  }
+
+  async function deleteTelescope(item) {
     telescopes = sortByName(telescopes.filter((t) => t.id !== item.id))
     await persistTelescopes()
     saveMsg = 'Telescope deleted.'
     if (editingTelescopeId === item.id) cancelEditTelescope()
   }
 
-  async function deleteEyepiece(item) {
+  async function requestDeleteEyepiece(item) {
     clearMessages()
     const { eyepieceIds } = await inUseIds()
     if (eyepieceIds.has(item.id)) {
       warningMsg = 'This eyepiece is used in observations and cannot be deleted.'
       return
     }
-    if (!confirm(`Delete eyepiece "${item.name}"?`)) return
+    pendingDelete = { kind: 'eyepiece', item }
+    confirmTitle = 'Delete eyepiece'
+    confirmMessage = `Delete eyepiece "${item.name}"?`
+    confirmOpen = true
+  }
+
+  async function deleteEyepiece(item) {
     eyepieces = sortByName(eyepieces.filter((e) => e.id !== item.id))
     await persistEyepieces()
     saveMsg = 'Eyepiece deleted.'
     if (editingEyepieceId === item.id) cancelEditEyepiece()
+  }
+
+  function cancelConfirm() {
+    confirmOpen = false
+    pendingDelete = null
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) {
+      cancelConfirm()
+      return
+    }
+    const { kind, item } = pendingDelete
+    cancelConfirm()
+    if (kind === 'telescope') await deleteTelescope(item)
+    else await deleteEyepiece(item)
   }
 
   onMount(async () => {
@@ -281,7 +319,7 @@
                     </button>
                     <button
                       class="icon-btn danger"
-                      on:click={() => deleteTelescope(t)}
+                      on:click={() => requestDeleteTelescope(t)}
                       aria-label="Delete telescope"
                       title="Delete"
                     >
@@ -364,7 +402,7 @@
                     </button>
                     <button
                       class="icon-btn danger"
-                      on:click={() => deleteEyepiece(e)}
+                      on:click={() => requestDeleteEyepiece(e)}
                       aria-label="Delete eyepiece"
                       title="Delete"
                     >
@@ -405,6 +443,16 @@
   {#if $keyboardActive}
     <OnScreenKeyboard />
   {/if}
+
+  <ConfirmDialog
+    open={confirmOpen}
+    title={confirmTitle}
+    message={confirmMessage}
+    confirmLabel="Delete"
+    cancelLabel="Cancel"
+    on:confirm={confirmDelete}
+    on:cancel={cancelConfirm}
+  />
 </div>
 
 <style>
