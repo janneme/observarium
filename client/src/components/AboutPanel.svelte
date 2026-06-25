@@ -1,11 +1,11 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte'
-  import { getCatalogueCounts } from '../lib/db.js'
+  import { getAboutStats } from '../lib/db.js'
 
   const dispatch = createEventDispatcher()
   const version = import.meta.env.VITE_APP_VERSION_DATE || '0.1.0'
 
-  let counts = undefined // undefined = loading, null = no data synced yet
+  let stats = undefined
 
   function close() {
     dispatch('close')
@@ -19,14 +19,23 @@
     return n.toLocaleString()
   }
 
-  $: val = (n) => (counts === undefined ? '…' : fmt(counts?.[n]))
+  function fmtBytes(bytes) {
+    if (bytes == null) return '—'
+    if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(2)} GB`
+    if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(2)} MB`
+    if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} kB`
+    return `${bytes} B`
+  }
+
+  $: val = (n) => (stats === undefined ? '…' : fmt(stats?.[n]))
+  $: valBytes = (n) => (stats === undefined ? '…' : fmtBytes(stats?.[n]))
 
   onMount(async () => {
     try {
-      counts = await getCatalogueCounts()
+      stats = await getAboutStats()
     } catch (e) {
-      console.error('[AboutPanel] getCatalogueCounts failed:', e)
-      counts = null
+      console.error('[AboutPanel] getAboutStats failed:', e)
+      stats = null
     }
   })
 </script>
@@ -62,28 +71,36 @@
     <p class="tagline">A sky atlas for visual observers</p>
     <p class="version">Build {version}</p>
 
-    <h3 class="section-head">Catalogue</h3>
+    <h3 class="section-head">Data size</h3>
+    <dl class="counts">
+      <dt>Object data</dt>
+      <dd>{valBytes('objectDataBytes')}</dd>
+      <dt>Images</dt>
+      <dd>{valBytes('imagesBytes')}</dd>
+      <dt>User data</dt>
+      <dd>{valBytes('userDataBytes')}</dd>
+      <dt>Total local (estimated)</dt>
+      <dd>{valBytes('totalEstimatedBytes')}</dd>
+    </dl>
+
+    <h3 class="section-head">Objects</h3>
     <dl class="counts">
       <dt>Stars</dt>
-      <dd>{val('stars')}</dd>
-      <dt>Variable stars</dt>
-      <dd>{val('variableStars')}</dd>
-      <dt>Double stars</dt>
-      <dd>{val('doubleStars')}</dd>
-      <dt>Galaxies</dt>
-      <dd>{val('galaxies')}</dd>
-      <dt>Open clusters</dt>
-      <dd>{val('openClusters')}</dd>
-      <dt>Globular clusters</dt>
-      <dd>{val('globularClusters')}</dd>
-      <dt>Planetary nebulae</dt>
-      <dd>{val('planetaryNebulae')}</dd>
-      <dt>Other nebulae</dt>
-      <dd>{val('nebulae')}</dd>
-      <dt>DSO images</dt>
-      <dd>{val('dsoImages')}</dd>
-      <dt>Asteroids</dt>
-      <dd>{val('asteroids')}</dd>
+      <dd>{val('starsCount')}</dd>
+      <dt>Deep sky objects</dt>
+      <dd>{val('dsoCount')}</dd>
+      <dt>Defined finding paths</dt>
+      <dd>{val('findingPathsCount')}</dd>
+    </dl>
+
+    <h3 class="section-head">Observations</h3>
+    <dl class="counts">
+      <dt>Observations</dt>
+      <dd>{val('observationsCount')}</dd>
+      <dt>Observed objects</dt>
+      <dd>{val('observedObjectsCount')}</dd>
+      <dt>Unique observed objects</dt>
+      <dd>{val('uniqueObservedObjectsCount')}</dd>
     </dl>
   </div>
 </div>

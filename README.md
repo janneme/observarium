@@ -156,16 +156,22 @@ incremental updates.
 deployment, compresses them into the appropriate ZIP files, and uploads them
 to S3. This covers both the object data ZIP (DEFLATE) and the image ZIP (STORE).
 
-### 3.1.4 Terraform Deployment
+### 3.1.4 OpenTofu Deployment
 
-We will use Terraform with a local tfstate to deploy to AWS. A make task
+We use OpenTofu (Terraform-compatible) with a local state file to deploy to
+AWS. A make task
 `make deploy` should be supported from the root with `AWS_PROFILE=personal`.
 It performs the following in order:
 
-1. Applies any Terraform infrastructure changes.
+1. Runs `tofu init -upgrade` and applies infrastructure changes.
 2. Deploys updated Lambda code.
 3. Detects changed data files, re-zips them, and uploads to S3.
-4. Deploys the built Svelte client to the S3 static hosting bucket.
+4. Deploys the built Svelte client to S3 and serves it through CloudFront.
+
+At the end of deployment, the Makefile prints both endpoints:
+
+- Client URL (CloudFront default domain)
+- Server URL (Lambda Function URL)
 
 No CI/CD in scope.
 
@@ -177,7 +183,8 @@ components:
 ### 3.2.1 Lambda
 
 A Lambda exposed via a Lambda Function URL (no API Gateway). CORS is configured
-on the Function URL to allow requests from the client's S3 static hosting origin.
+on the Function URL to allow requests from local development origins and the
+CloudFront client origin.
 The Lambda covers the following operations:
 
 - user login: calls Cognito `InitiateAuth` with the supplied username and password
@@ -201,11 +208,17 @@ Two S3 buckets:
 - Image ZIP (JPEG files bundled with STORE method, produced by `make deploy`)
 - User observation data (one JSON file per user)
 
-**Client bucket** (S3 static website hosting, public read):
+**Client bucket** (S3 origin for frontend assets):
 
 - Built Svelte SPA (HTML, JS, CSS assets)
 
-### 3.2.3 AWS Cognito
+### 3.2.3 CloudFront
+
+CloudFront serves the client app over HTTPS using the default CloudFront domain
+(`*.cloudfront.net`). It fronts the client S3 bucket, uses a short cache TTL,
+and provides SPA fallback to `index.html` for unknown routes.
+
+### 3.2.4 AWS Cognito
 
 Used for user management. The client app can still be used without authentication.
 Authentication is only needed for syncing data (reading object data,
@@ -214,11 +227,11 @@ the user fills in their username and password in the application, the Lambda cal
 Cognito's `InitiateAuth` API, and the returned Cognito access token is passed back
 to the client and stored in sessionStorage for the duration of the session.
 
-### 3.2.4 IAM Role
+### 3.2.5 IAM Role
 
 IAM role for the lambda function.
 
-### 3.2.5 CloudWatch
+### 3.2.6 CloudWatch
 
 A named log group for the lambda function.
 
@@ -614,10 +627,17 @@ the progress bar is displayed during the download like in the Welcome screen.
 
 ## 5.14 Synchronize Observation Data
 
-The screen is accessible from the menu only if there are some unsynchronized
-changes in the observation data. It contains the survey of changes
-to be synchronized and a button "Synchronize" and a button "Back". After pressing
-the button data are sent to the server and operation status is displayed.
+The screen is accessible from the menu at any time. If there are unsynchronized
+changes in local observation data, the menu item shows the count as a badge.
+The screen contains a survey of local changes to be synchronized and buttons
+"Synchronize" and "Back".
+
+After pressing "Synchronize", the app:
+
+1. Pushes local observations to the server when local pending changes exist.
+2. Pulls observations from the server and replaces local observation data.
+
+Operation status is displayed in the screen.
 
 ## 5.15 About
 

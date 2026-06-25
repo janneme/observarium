@@ -38,7 +38,7 @@ observarium/
 │   ├── sources/               # Raw downloaded catalogues (git-ignored)
 │   ├── output/                # Uncompressed processed data (git-ignored)
 │   └── requirements.txt
-└── infra/                     # Terraform
+└── infra/                     # OpenTofu (Terraform-compatible)
     └── main.tf
 ```
 
@@ -1265,15 +1265,19 @@ Technical notes:
 
 Technical notes:
 
-- Accessible from the menu only when `pendingChanges > 0` (README §5.14).
+- Accessible from the menu at any time; when `pendingChanges > 0` the menu item
+  shows the pending count as a badge.
 - Display: list of dates with modified observation records before syncing.
-- On "Synchronize": call `POST /observations` with the full observation array
-  from IndexedDB (last-write-wins strategy). On success, set `pendingChanges = 0`
-  in the `meta` store and display a success message.
+- On "Synchronize":
+  - If local pending changes exist, call `POST /observations` with the full
+    observation array from IndexedDB (last-write-wins strategy), then clear
+    local pending metadata.
+  - Always fetch server observations afterwards and replace the local
+    observation store so the screen also supports pull-only sync.
 
 ---
 
-### Step 32: About screen + full `make deploy`
+### Step 32: About screen + full `make deploy` ✅
 
 **README refs:** §5.15, §3.1.4  
 **Deliverable:** About screen populated with live stats; `make deploy` runs the
@@ -1286,10 +1290,11 @@ Technical notes:
   count entries in `findingPaths`.
 - Data sizes: `navigator.storage.estimate()` gives an approximate total; for
   per-store sizes iterate and sum value byte lengths.
-- `make deploy` steps (README §3.1.4): run `terraform apply`, then package and
-  push Lambda zip (`zip -r lambda.zip server/ && aws lambda update-function-code`),
-  then `make data-upload` (typically with `STORAGE=s3` for cloud deploy), then
+- `make deploy` steps (README §3.1.4): run `tofu init -upgrade` and
+  `tofu apply`, then package and push Lambda zip, then `make data-upload`
+  (typically with `STORAGE=s3` for cloud deploy), then
   `npm --prefix client run build && aws s3 sync client/dist/ s3://CLIENT_BUCKET --delete`.
+- Deployment output prints the CloudFront client URL and Lambda server URL.
 
 ---
 

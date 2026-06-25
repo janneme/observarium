@@ -27,12 +27,13 @@ BEARER_PARTS = 2
 
 
 def build_response(status_code: int, body: dict | list | None = None):
-    """Build a JSON API response dict with CORS headers."""
+    """Build a JSON API response dict.
+
+    CORS headers are provided by the Lambda Function URL configuration in
+    production and by local_server.py in local development.
+    """
     headers = {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Authorization,Content-Type",
-        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     }
 
     return {

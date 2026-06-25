@@ -7,6 +7,7 @@ Usage:
 import argparse
 import json
 import mimetypes
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -18,6 +19,17 @@ from handler import lambda_handler
 
 class LocalLambdaHandler(BaseHTTPRequestHandler):
     """HTTP request handler that simulates Lambda Function URL events."""
+
+    def _cors_origin(self):
+        origin = self.headers.get("Origin", "")
+        allowed = {
+            x.strip()
+            for x in os.environ.get(
+                "LOCAL_CORS_ORIGINS", "http://localhost:6543,http://127.0.0.1:6543"
+            ).split(",")
+            if x.strip()
+        }
+        return origin if origin in allowed else ""
 
     def _build_event(self):
         """Construct a Lambda Function URL event dict from the HTTP request."""
@@ -74,6 +86,11 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
         body = lambda_response.get("body", "")
 
         self.send_response(status_code)
+        cors_origin = self._cors_origin()
+        if cors_origin:
+            self.send_header("Access-Control-Allow-Origin", cors_origin)
+            self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
         for key, value in headers.items():
             self.send_header(key, value)
         self.end_headers()
@@ -102,7 +119,11 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(size))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        cors_origin = self._cors_origin()
+        if cors_origin:
+            self.send_header("Access-Control-Allow-Origin", cors_origin)
+            self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
         self.end_headers()
         with path.open("rb") as fh:
             self.wfile.write(fh.read())

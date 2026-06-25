@@ -60,9 +60,14 @@ resource "aws_s3_bucket_cors_configuration" "data" {
   bucket = aws_s3_bucket.data.id
 
   cors_rule {
-    allowed_origins = ["*"]
+    allowed_origins = [
+      "http://${aws_s3_bucket_website_configuration.client.website_endpoint}",
+      "https://${aws_cloudfront_distribution.client.domain_name}",
+      "http://localhost:6543",
+      "http://127.0.0.1:6543"
+    ]
     allowed_methods = ["GET"]
-    allowed_headers = ["*"]
+    allowed_headers = ["Authorization", "Content-Type"]
     max_age_seconds = 3600
   }
 }
@@ -115,6 +120,72 @@ resource "aws_s3_bucket_policy" "client" {
   })
 
   depends_on = [aws_s3_bucket_public_access_block.client]
+}
+
+# CloudFront distribution for HTTPS client delivery (default cloudfront.net domain)
+resource "aws_cloudfront_distribution" "client" {
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = "Observarium client distribution"
+  default_root_object = "index.html"
+  price_class         = "PriceClass_100"
+
+  origin {
+    domain_name = aws_s3_bucket_website_configuration.client.website_endpoint
+    origin_id   = "client-s3-website"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "client-s3-website"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+
+    allowed_methods = ["GET", "HEAD", "OPTIONS"]
+    cached_methods  = ["GET", "HEAD"]
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 10
+    max_ttl     = 60
+  }
+
+  # SPA fallback
+  custom_error_response {
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
 }
 
 # ============================================================================
@@ -322,8 +393,13 @@ resource "aws_lambda_function_url" "main" {
   authorization_type = "NONE"
 
   cors {
-    allow_origins     = ["*"]  # Will be restricted to client bucket URL in production
-    allow_methods     = ["*"]
+    allow_origins     = [
+      "http://${aws_s3_bucket_website_configuration.client.website_endpoint}",
+      "https://${aws_cloudfront_distribution.client.domain_name}",
+      "http://localhost:6543",
+      "http://127.0.0.1:6543"
+    ]
+    allow_methods     = ["GET", "POST", "DELETE"]
     allow_headers     = ["content-type", "authorization"]
     expose_headers    = []
     max_age          = 86400
@@ -376,6 +452,16 @@ output "client_website_endpoint" {
 output "client_website_url" {
   description = "Full URL for the client website"
   value       = "http://${aws_s3_bucket_website_configuration.client.website_endpoint}"
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name"
+  value       = aws_cloudfront_distribution.client.domain_name
+}
+
+output "cloudfront_url" {
+  description = "CloudFront HTTPS URL for client access"
+  value       = "https://${aws_cloudfront_distribution.client.domain_name}"
 }
 
 output "lambda_function_url" {

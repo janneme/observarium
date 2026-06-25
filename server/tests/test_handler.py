@@ -12,7 +12,7 @@ import handler
 def test_build_response_headers():
     res = handler.build_response(200, {"ok": True})
     assert res["statusCode"] == 200
-    assert "Access-Control-Allow-Origin" in res["headers"]
+    assert "Access-Control-Allow-Origin" not in res["headers"]
     body = json.loads(res["body"])
     assert body["ok"] is True
 

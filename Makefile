@@ -1,5 +1,6 @@
 .DEFAULT_GOAL := help
 AWS_PROFILE   ?= personal
+MAG           ?= 9
 
 .PHONY: help deploy deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload lint test
 
@@ -8,14 +9,20 @@ help:
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
 
 deploy: ## Apply Terraform, deploy Lambda, sync data, deploy client
-	@echo "==> Terraform apply"
-	cd infra && terraform apply -auto-approve
+	@echo "==> OpenTofu init"
+	cd infra && tofu init -upgrade
+	@echo "==> OpenTofu apply"
+	cd infra && tofu apply -auto-approve
 	@echo "==> Deploy Lambda"
 	$(MAKE) deploy-lambda
 	@echo "==> Sync data to S3"
-	$(MAKE) data-upload
+	@DATA_BUCKET=$$(cd infra && tofu output -raw data_bucket_name); \
+	$(MAKE) data-upload STORAGE=s3 MAG=$(MAG) DATA_BUCKET=$$DATA_BUCKET
 	@echo "==> Deploy client to S3"
 	$(MAKE) deploy-client
+	@echo "==> Deployment endpoints"
+	@echo "Client: $$(cd infra && tofu output -raw cloudfront_url)"
+	@echo "Server: $$(cd infra && tofu output -raw lambda_function_url)"
 
 dev: ## Run both frontend and backend development servers
 	python3 run.py
@@ -30,8 +37,8 @@ data-prep: ## Run the data preparation pipeline
 	cd data_prep && uv run python main.py $(ARGS)
 
 data-upload: ## Detect changed data files, re-zip and upload to storage backend
-	@echo "Running data upload (STORAGE=$(STORAGE) MAG=$(mag))"
-	cd data_prep && MAG=$(mag) STORAGE=$(STORAGE) PYTHONPATH=.. uv run python data_upload.py
+	@echo "Running data upload (STORAGE=$(STORAGE) MAG=$(MAG))"
+	cd data_prep && MAG=$(MAG) STORAGE=$(STORAGE) DATA_BUCKET=$(DATA_BUCKET) PYTHONPATH=.. uv run python data_upload.py
 
 lint: ## Run ruff, pylint, eslint, prettier, and svelte-check on all packages
 	@printf '\033[1;36m==> Linting server\033[0m\n'
@@ -58,15 +65,19 @@ deploy-lambda: ## Build Lambda zip (linux/x86_64 wheels) and update the function
 	  "boto3>=1.35.0" "PyJWT>=2.9.0" "cryptography>=43.0.0"
 	cd /tmp/lambda-build && zip -qr $(CURDIR)/infra/lambda_function.zip .
 	@echo "==> Staging Lambda package via S3"
+	@DATA_BUCKET=$$(cd infra && tofu output -raw data_bucket_name); \
 	AWS_PROFILE=$(AWS_PROFILE) aws s3 cp $(CURDIR)/infra/lambda_function.zip \
-	  s3://observarium-data-0b5ad51e/_lambda/lambda_function.zip --quiet
+	  s3://$$DATA_BUCKET/_lambda/lambda_function.zip --quiet
 	@echo "==> Updating Lambda function code"
+	@DATA_BUCKET=$$(cd infra && tofu output -raw data_bucket_name); \
 	AWS_PROFILE=$(AWS_PROFILE) aws lambda update-function-code \
 	  --function-name observarium \
-	  --s3-bucket observarium-data-0b5ad51e \
+	  --s3-bucket $$DATA_BUCKET \
 	  --s3-key _lambda/lambda_function.zip \
 	  --query '{LastModified:LastModified,CodeSize:CodeSize}' \
 	  --output json
 
 deploy-client: ## Build client and sync to S3
-	cd client && VITE_APP_VERSION_DATE=$$(date +%Y-%m-%d) npm run build
+	cd client && VITE_APP_VERSION_DATE=$$(date +%Y-%m-%d) VITE_SERVER_URL=$$(cd ../infra && tofu output -raw lambda_function_url) npm run build
+	@CLIENT_BUCKET=$$(cd infra && tofu output -raw client_bucket_name); \
+	AWS_PROFILE=$(AWS_PROFILE) aws s3 sync client/dist/ s3://$$CLIENT_BUCKET --delete

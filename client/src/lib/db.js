@@ -315,6 +315,125 @@ export async function getCatalogueCounts() {
   }
 }
 
+const _encoder = new TextEncoder()
+
+function _roughBytes(value) {
+  if (value == null) return 0
+  if (value instanceof Blob) return value.size
+  if (typeof value === 'string') return _encoder.encode(value).length
+  if (value instanceof ArrayBuffer) return value.byteLength
+  if (ArrayBuffer.isView(value)) return value.byteLength
+  try {
+    return _encoder.encode(JSON.stringify(value)).length
+  } catch {
+    return 0
+  }
+}
+
+async function _storeBytes(db, storeName) {
+  const rows = await db.getAll(storeName)
+  let total = 0
+  for (const row of rows) total += _roughBytes(row)
+  return total
+}
+
+function _observationStats(observations) {
+  const allObjects = []
+  for (const obs of observations || []) {
+    const entries = Array.isArray(obs?.objects) ? obs.objects : []
+    for (const entry of entries) {
+      const id = String(entry?.id || '').trim()
+      if (id) allObjects.push(id)
+    }
+  }
+  return {
+    observationsCount: (observations || []).length,
+    observedObjectsCount: allObjects.length,
+    uniqueObservedObjectsCount: new Set(allObjects).size,
+  }
+}
+
+function _countFindingPaths(findingPaths) {
+  if (!findingPaths || typeof findingPaths !== 'object') return 0
+  let count = 0
+  for (const byStart of Object.values(findingPaths)) {
+    if (!byStart || typeof byStart !== 'object') continue
+    count += Object.keys(byStart).length
+  }
+  return count
+}
+
+function _countDsosFromMeta(objCounts) {
+  if (!objCounts || typeof objCounts !== 'object') return null
+  let total = 0
+  for (const [key, value] of Object.entries(objCounts)) {
+    if (key === 'double_star') continue
+    total += Number(value) || 0
+  }
+  return total
+}
+
+export async function getAboutStats() {
+  const db = await getDB()
+  const [
+    observations,
+    starStats,
+    objCounts,
+    findingPaths,
+    starsT1,
+    constellations,
+    solarSystem,
+    moonFeatures,
+    manifest,
+  ] = await Promise.all([
+    db.getAll('observations'),
+    getMeta('catalogueStats'),
+    getMeta('catalogueObjectCounts'),
+    getMeta('findingPaths'),
+    getMeta('stars_t1'),
+    getMeta('constellations'),
+    getMeta('solar_system'),
+    getMeta('moon_features'),
+    getMeta('dataManifest'),
+  ])
+
+  const [objectsBytes, zonesBytes, imagesBytes, observationsBytes] = await Promise.all([
+    _storeBytes(db, 'objects'),
+    _storeBytes(db, 'zones_t2'),
+    _storeBytes(db, 'images'),
+    _storeBytes(db, 'observations'),
+  ])
+
+  const objectMetaBytes =
+    _roughBytes(starsT1) +
+    _roughBytes(starStats) +
+    _roughBytes(objCounts) +
+    _roughBytes(constellations) +
+    _roughBytes(solarSystem) +
+    _roughBytes(moonFeatures) +
+    _roughBytes(manifest)
+  const findingPathsBytes = _roughBytes(findingPaths)
+
+  const estimate = await navigator.storage?.estimate?.()
+  const starsCount =
+    (Number(starStats?.stars_t1) || 0) +
+    (Number(starStats?.stars_t2) || 0) +
+    (Number(starStats?.variable_t1) || 0) +
+    (Number(starStats?.variable_t2) || 0)
+  const dsoCount = _countDsosFromMeta(objCounts)
+
+  return {
+    objectDataBytes: objectsBytes + zonesBytes + objectMetaBytes,
+    imagesBytes,
+    userDataBytes: observationsBytes + findingPathsBytes,
+    totalEstimatedBytes: estimate?.usage ?? null,
+    starsCount,
+    dsoCount,
+    findingPathsCount: _countFindingPaths(findingPaths),
+    ..._observationStats(observations),
+  }
+}
+
 export async function bulkPutImages(items) {
   const db = await getDB()
   const tx = db.transaction('images', 'readwrite')
