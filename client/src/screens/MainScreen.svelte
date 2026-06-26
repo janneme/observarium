@@ -10,6 +10,7 @@
   import FinderPanel from '../components/FinderPanel.svelte'
   import LoupePanel from '../components/LoupePanel.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
+  import FindingPathsScreen from './FindingPathsScreen.svelte'
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
@@ -76,6 +77,11 @@
   let showObservationSync = false
   let showTelescopes = false
   let showObservations = false
+  let showFindingPaths = false
+  let findingPathsObject = null
+  let findingPathsFromFinder = false
+  let findingPathsStateVersion = 0
+  let findingPathsStartHip = null
   let returnToObservationsFromObjectDetails = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
@@ -314,6 +320,12 @@
         e.preventDefault()
         return
       }
+      if (showFindingPaths) {
+        showFindingPaths = false
+        findingPathsObject = null
+        e.preventDefault()
+        return
+      }
       if (menuOpen) {
         menuOpen = false
         e.preventDefault()
@@ -336,8 +348,11 @@
       }
     }
 
+    // Finder has its own keymap; do not let global shortcuts interfere.
+    if (get(finderViewActive)) return
+
     if (get(searchViewActive)) return
-    if (showObservations) return
+    if (showObservations || showFindingPaths) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -522,6 +537,7 @@
   <TopBar
     {time}
     {menuOpen}
+    finderMode={$finderViewActive}
     on:menutoggle={() => {
       searchViewActive.set(false)
       objectDetailsActive.set(false)
@@ -628,11 +644,58 @@
   {/if}
 
   {#if $finderViewActive}
-    <FinderPanel mainRa0={ra0} mainDec0={dec0} {lat} {lon} {time} />
+    <FinderPanel
+      mainRa0={ra0}
+      mainDec0={dec0}
+      {lat}
+      {lon}
+      time={skyTime}
+      pathStateVersion={findingPathsStateVersion}
+      on:recordpath={(e) => {
+        findingPathsObject = e.detail?.object || get(selectedObject)
+        if (!findingPathsObject) return
+        findingPathsFromFinder = true
+        showFindingPaths = true
+      }}
+      on:guidepath={(e) => {
+        findingPathsObject = e.detail?.object || get(selectedObject)
+        if (!findingPathsObject) return
+        findingPathsFromFinder = false
+        findingPathsStartHip = e.detail?.startHip ?? null
+        showFindingPaths = true
+      }}
+    />
   {/if}
 
   {#if $searchViewActive}
-    <SearchPanel />
+    <SearchPanel
+      on:findingpaths={(e) => {
+        findingPathsObject = e.detail?.object
+        if (!findingPathsObject) return
+        selectedObject.set(findingPathsObject)
+        searchViewActive.set(false)
+        findingPathsFromFinder = false
+        showFindingPaths = true
+      }}
+    />
+  {/if}
+
+  {#if showFindingPaths}
+    <FindingPathsScreen
+      contextObject={findingPathsObject}
+      initialSelectStart={findingPathsFromFinder}
+      initialStartHip={findingPathsStartHip}
+      {lat}
+      {lon}
+      time={skyTime}
+      on:close={() => {
+        showFindingPaths = false
+        findingPathsObject = null
+        findingPathsFromFinder = false
+        findingPathsStartHip = null
+        findingPathsStateVersion += 1
+      }}
+    />
   {/if}
 
   {#if $objectDetailsActive}
@@ -647,7 +710,7 @@
       {objects}
       {lat}
       {lon}
-      {time}
+      time={skyTime}
       magLimit={loupeMagLim}
       on:select={(e) => {
         showLoupe = false

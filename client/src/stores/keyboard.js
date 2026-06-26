@@ -76,6 +76,72 @@ export function clearTarget() {
 }
 
 export function handleKeyDown(e) {
+  const cur = get(_current)
+
+  // Global rule: when custom keyboard is active, consume all key strokes here.
+  // Esc closes the keyboard only.
+  if (cur) {
+    if (e.key === 'Escape') {
+      clearTarget()
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      return
+    }
+
+    // Track hardware modifiers while keyboard is active.
+    if (e.key === 'Shift') {
+      hwShift.set(true)
+      flashKey('SHIFT')
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      return
+    }
+    if (e.key === 'CapsLock') {
+      hwCapsLock.update((v) => !v)
+      flashKey('CAPS')
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      return
+    }
+
+    if (e.getModifierState) hwCapsLock.set(e.getModifierState('CapsLock'))
+
+    let handled = true
+    let label = null
+    if (e.key === 'Backspace') {
+      cur.backspace()
+      label = 'BACKSPACE'
+    } else if (e.key === 'Enter') {
+      if (e.shiftKey && typeof cur.shiftEnter === 'function') cur.shiftEnter()
+      else if (typeof cur.enter === 'function') cur.enter()
+      else cur.insertChar('\n')
+      label = 'ENTER'
+    } else if (e.key === 'ArrowLeft') {
+      cur.moveLeft()
+      label = 'LEFT'
+    } else if (e.key === 'ArrowRight') {
+      cur.moveRight()
+      label = 'RIGHT'
+    } else if (e.key === 'ArrowUp') {
+      cur.moveUp()
+      label = 'UP'
+    } else if (e.key === 'ArrowDown') {
+      cur.moveDown()
+      label = 'DOWN'
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      cur.insertChar(e.key)
+      label = e.key === ' ' ? 'SPACE' : e.key
+    } else {
+      handled = false
+    }
+
+    // Even unhandled keys must not leak to app shortcuts while keyboard is active.
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    if (handled && label) flashKey(label)
+    return
+  }
+
   // Track hardware Shift immediately (before checking for a focused input)
   if (e.key === 'Shift') {
     hwShift.set(true)
@@ -90,33 +156,33 @@ export function handleKeyDown(e) {
   // Keep CapsLock in sync with the browser's actual state on every other key
   if (e.getModifierState) hwCapsLock.set(e.getModifierState('CapsLock'))
 
-  const cur = get(_current)
-  if (!cur) return
+  const cur2 = get(_current)
+  if (!cur2) return
 
   let handled = true
   let label = null
   if (e.key === 'Backspace') {
-    cur.backspace()
+    cur2.backspace()
     label = 'BACKSPACE'
   } else if (e.key === 'Enter') {
-    if (e.shiftKey && typeof cur.shiftEnter === 'function') cur.shiftEnter()
-    else if (typeof cur.enter === 'function') cur.enter()
-    else cur.insertChar('\n')
+    if (e.shiftKey && typeof cur2.shiftEnter === 'function') cur2.shiftEnter()
+    else if (typeof cur2.enter === 'function') cur2.enter()
+    else cur2.insertChar('\n')
     label = 'ENTER'
   } else if (e.key === 'ArrowLeft') {
-    cur.moveLeft()
+    cur2.moveLeft()
     label = 'LEFT'
   } else if (e.key === 'ArrowRight') {
-    cur.moveRight()
+    cur2.moveRight()
     label = 'RIGHT'
   } else if (e.key === 'ArrowUp') {
-    cur.moveUp()
+    cur2.moveUp()
     label = 'UP'
   } else if (e.key === 'ArrowDown') {
-    cur.moveDown()
+    cur2.moveDown()
     label = 'DOWN'
   } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    cur.insertChar(e.key)
+    cur2.insertChar(e.key)
     label = e.key === ' ' ? 'SPACE' : e.key
   } else {
     handled = false

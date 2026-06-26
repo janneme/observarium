@@ -536,85 +536,111 @@ near to the actual Moon terminator.
 
 ## 5.12 Object Finding Paths
 
-First let us define what is the "object finding path". It consists of:
+### Data model
 
-- a starting point (a bright star)
-- sequence of movements in the finder, each one consisting of a vector which has
-  a. a start point
-  b. an end point
-  c. and optionally a multiplier (how many times the vector is applied to move the
-  finderscope view to the next location). It must be a multiple of 0.5
-  and vector x multiplier cannot exceed 2x the FINDER_FOV.
+An object finding path consists of:
 
-The start and end point is either a star or just a point in the sky represented
-by its coordinates (typically a well memorable point among stars in the 8x50
-finder scope view)
+- A **path start** — a bright star (the anchor from which the first hop begins).
+- A **sequence of steps**, where each step has:
+  - a **start point** — always a star (or the target object for the final step)
+  - an **end point** — any sky position (a star, or a memorable point between stars);
+    the final step has no end point
+  - an optional **multiplier** — how many times the vector is applied; must be a
+    multiple of 0.5; vector × multiplier must not exceed 2× FINDER_FOV
 
-We can record more object finding paths for the same object that differ by the
-starting point, but only one per a starting point.
+The step name is derived from its start point. Step N+1's start point is the
+same sky location as step N's effective end (start + (end − start) × multiplier),
+but this is only an auto-fill — the user may override it.
 
-The screen always has the context of the object for which we define the
-finding path (it is not entered in this screen). The screen is opened from:
+Multiple paths may be defined for the same object, differing by path-start star,
+but only one path per path-start star is allowed.
+
+### Screen layout
+
+The screen always has the context of the object for which paths are being defined
+(set when opening the screen). It is opened from:
 
 - The "Finding Paths" icon in search results (5.4)
 - The "Record guide to find object" button in the Finder View (5.3.2)
 
-The UI for the Screen consists of the following elements:
+UI elements:
 
-a. A finder scope view
-b. Expandable list of finding paths already defined each one labeled as
-"STAR_NAME (CONSTELLATION_NAME)" (the starting point) with a "Delete" icon.
-Here only one path can be expanded at a time (expanding one path
-collapses the previously expanded path).
-c. "Add" icon to add a new path.
+a. A finder scope view (top portion of screen)
+b. A step list (scrollable, below the finder)
+c. A "+ Path" button in the header (hidden while recording a new path)
 
-The finder scope view has a fixed position - if we need to scroll the list
-of paths because it is too long, the position of the finder must not change
-during the scrolling.
+The finder scope view position does not change during list scrolling.
 
-If we click on finding path name, the view in the finder is moved to the path
-start point.
+### Arrows in the finder
 
-If we expand a finding path, the steps are labeled just as "Step 1", "Step 2" etc.
-Just if the vector has multiplier 1 and the end point is a named star, it is
-labeled as "Step N (STAR_NAME)". If we select a path step, the position in
-the finder is moved to the location defined by the previous step (or the starting
-point of the path if it is the first step) and the vector of this step
-is drawn in the finder view as an arrow and it is labeled with the multiplier
-if the multiplier is not 1 (like "2x").
+For any step that has both a start and an end point defined, an arrow is drawn in
+the finder view from the start to the end. The arrow is clipped to the finder
+circle boundary (it is not omitted just because part of it falls outside the
+current view). If the multiplier is not 1×, the arrow is labeled "Nx".
 
-For each step there are buttons:
+All arrows for the active path are always visible, not only for the selected step.
 
-- Delete — triggers a confirmation dialog stating which steps will be removed
-  (e.g. "This will delete Step 2 and all subsequent steps. Continue?").
-  All subsequent steps are deleted along with the selected step.
-- Edit start point (not for the first step)
-- Edit end point
-- Set multiplier
+### Recording a new path
 
-For the last step we can define just the start point which will be then
-interpreted as the location of the searched object.
+Pressing "+ Path" opens a start-star search panel. After the user selects the path-
+start star the header changes to:
 
-If we enter editing of the start or end point, the vector and multiplier is
-removed from the finder view and we are allowed to select a point in the finder
-by tapping. If we tap again, the position is just updated.
-The indicator of the selected position has two modes:
-a. object selected - the position is identified as an object
-b. just a position - there is no object bright enough (magnitude 7 at most)
-at the position selected
+  Path STAR_NAME ⇒ CAT_NUMBER (OBJECT_NAME)
 
-In the starting/end point selection mode
-we can also zoom the finder view by two fingers to allow for more precise
-position selection. The buttons "Accept" and "Cancel" are displayed near the
-finder view to enable accepting or cancelling the position specified. After
-pressing "Accept" or "Cancel" the zoom returns to the default level and
-the vector is drawn (provided both start and end point has been specified).
+The step list switches to recording mode, showing only the steps of the new path
+being built (initially empty). The first step is added automatically.
 
-The multiplier button is displayed only when both start and end point is defined.
-If we click on this button additional buttons 1x, 1.5x, 2x ... (up to the maximum
-allowed vector length) and also the "Cancel" button are shown.
+### Selecting and editing a step
 
-There is also a button "Add" below existing steps to add the next step.
+Only one step can be active (selected) at a time. Tapping a step in the list
+selects it and centers the finder on the **anchor** for that step: the effective
+end of the previous step (start + (end − start) × multiplier), or the path-start
+star for step 1. The finder zoom resets to the standard FOV when a step is selected.
+
+**Placing a pending point:**
+While a step is active, the user can tap anywhere in the finder to place a cross
+(the pending point). Tapping again moves the cross to the new tap position. The
+user may freely pan and zoom the finder to position the cross precisely — zoom is
+enabled in this mode and does not load higher-magnitude stars.
+
+**Assignment buttons** (enabled only when a pending point exists):
+
+- **Set start** — available for all steps except step 1; visible only when the
+  pending point is within snap distance of a rendered star, in which case the
+  position is snapped to the exact star location. Sets the step's start point,
+  clears the pending cross, and resets the finder to standard FOV immediately.
+- **Set end** — always available when a pending point exists (regardless of star
+  proximity). Sets the step's end point, clears the pending cross, and resets
+  the finder to standard FOV immediately.
+
+**Multiplier button** — shown only when both start and end are defined. Clicking
+it shows buttons 1×, 1.5×, 2×, … (up to the maximum allowed by vector length)
+plus a Cancel button.
+
+**Delete** — removes the selected step. No confirmation dialog is shown, but all
+subsequent steps are silently deleted at the same time (see Cascade delete below).
+
+**Set Final** — shown only when the target object falls within the current finder
+view. Clicking it sets the target object as the step's start point, removes the
+end point, and locks the step from further editing. This marks the path as complete.
+
+### Auto-prefill of the next step's start
+
+When step N's end point is a star and its multiplier is 1×, the next step's start
+point is automatically filled with that star. The user may still override it with
+"Set start".
+
+### Cascade delete
+
+Whenever any part of step N is changed (start, end, or multiplier) or step N is
+deleted, all steps N+1, N+2, … are silently removed without confirmation. This
+keeps the path internally consistent.
+
+### Step labels
+
+- A step with no start point set: "Step N"
+- A step with a named star as start point: "Step N (STAR_NAME)"
+- The final step (start = target object, no end point): "Step N (TARGET_NAME)"
 
 ## 5.13 Update object data
 

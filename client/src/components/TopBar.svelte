@@ -2,9 +2,11 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte'
   import { selectedObject } from '../stores/selectedObject.js'
   import { searchViewActive } from '../stores/ui.js'
+  import ObservationObjectSymbol from './ObservationObjectSymbol.svelte'
 
   export let time = new Date()
   export let menuOpen = false
+  export let finderMode = false
 
   const dispatch = createEventDispatcher()
 
@@ -42,25 +44,93 @@
     }
   })
 
-  function objIcon(obj) {
-    if (!obj) return ''
-    if (obj.type === 'double_star') return '⊛'
-    if (obj.type === 'star') return '★'
-    const dt = obj.dsoType || ''
-    if (dt === 'Gx' || dt.includes('galaxy')) return '⊛'
-    if (dt === 'OC') return '⊕'
-    if (dt === 'GC') return '⊗'
-    if (dt === 'Nb' || dt.includes('nebula')) return '◎'
-    return '◉'
+  function objectSymbolKind(obj) {
+    if (!obj) return 'generic'
+    if (obj.type === 'double_star') return 'double_star'
+    if (obj.type === 'star') return 'star'
+    if (obj.type === 'solar_system_body') return String(obj.name || '').toLowerCase() || 'generic'
+
+    const type = String(obj.dsoType || '').toLowerCase()
+    if (type === 'open cluster') return 'open_cluster'
+    if (type === 'globular cluster') return 'globular_cluster'
+    if (type === 'planetary nebula') return 'planetary_nebula'
+    if (type === 'spiral galaxy' || type === 'elliptical galaxy' || type === 'galaxy') return 'galaxy'
+    if (type === 'dark nebula') return 'dark_nebula'
+    if (type === 'galaxy cluster' || type === 'cluster of galaxies') return 'galaxy_cluster'
+    if (type === 'quasar' || type === 'qso' || type === 'bl lac') return 'quasar'
+    if (type.includes('nebula')) return 'nebula'
+    return 'generic'
   }
 
   function battFillW(level) {
     return Math.max(0, Math.round((13 * level) / 100))
   }
 
-  function objLabel(obj) {
+  function greekFromBayer(bayer) {
+    const raw = String(bayer || '').trim()
+    if (!raw) return null
+    const first = raw.split(/\s+/)[0] || ''
+    const cleaned = first
+      .toLowerCase()
+      .replace(/[0-9]+$/g, '')
+      .replace(/[._-]+$/g, '')
+    const greekChars = 'αβγδεζηθικλμνξοπρστυφχψω'
+    if (cleaned && greekChars.includes(cleaned[0])) return cleaned[0]
+    const key = cleaned.length >= 3 ? cleaned.slice(0, 3) : cleaned
+    const map = {
+      alf: 'α',
+      alp: 'α',
+      bet: 'β',
+      gam: 'γ',
+      del: 'δ',
+      eps: 'ε',
+      zet: 'ζ',
+      eta: 'η',
+      the: 'θ',
+      iot: 'ι',
+      kap: 'κ',
+      lam: 'λ',
+      mu: 'μ',
+      nu: 'ν',
+      xi: 'ξ',
+      omi: 'ο',
+      pi: 'π',
+      rho: 'ρ',
+      sig: 'σ',
+      tau: 'τ',
+      ups: 'υ',
+      phi: 'φ',
+      chi: 'χ',
+      psi: 'ψ',
+      ome: 'ω',
+    }
+    return map[key] || null
+  }
+
+  function preferredStarLabel(obj) {
+    const rawName = String(obj?.name || '').trim()
+    if (rawName) return rawName
+    const rawBay = String(obj?.bay || '').trim()
+    const greek = greekFromBayer(obj?.bay)
+    if (greek && obj?.constellation) return `${greek} ${obj.constellation}`
+    if (rawBay && obj?.constellation) return `${rawBay} ${obj.constellation}`
+    if (obj?.hip != null) return `HIP ${obj.hip}`
+    if (obj?.hd != null) return `HD ${obj.hd}`
+    if (obj?.sao != null) return `SAO ${obj.sao}`
+    if (obj?.flam != null && obj?.constellation) return `${obj.flam} ${obj.constellation}`
+    return String(obj?.id || 'Star')
+  }
+
+  function primaryCatalogueLabel(obj) {
     if (!obj) return ''
-    if (obj.name) return obj.name
+    if (obj.type === 'star') return preferredStarLabel(obj)
+    if (obj.m != null) return `M ${obj.m}`
+    if (obj.ngc != null) return `NGC ${obj.ngc}`
+    if (obj.ic != null) return `IC ${obj.ic}`
+    if (obj.caldwell != null) return `C ${obj.caldwell}`
+    if (obj.hip != null) return `HIP ${obj.hip}`
+    if (obj.hd != null) return `HD ${obj.hd}`
+    if (obj.sao != null) return `SAO ${obj.sao}`
     if (obj.bay && obj.constellation) return `${obj.bay} ${obj.constellation}`
     if (obj.flam && obj.constellation) return `${obj.flam} ${obj.constellation}`
     const id = String(obj.id || '')
@@ -70,9 +140,20 @@
     if (id.startsWith('dso_C')) return `C ${Number(id.slice(5))}`
     if (id.startsWith('solar_')) {
       const name = id.slice(6).replace(/_/g, ' ').trim()
-      return name ? name[0].toUpperCase() + name.slice(1) : id
+      return name ? name[0].toUpperCase() + name.slice(1) : 'Solar object'
     }
+    if (obj.name) return obj.name
     return id.replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2')
+  }
+
+  function objLabel(obj) {
+    if (!obj) return ''
+    if (obj.type === 'star') return preferredStarLabel(obj)
+    const catalogue = primaryCatalogueLabel(obj)
+    const rawName = String(obj.name || '').trim()
+    if (!rawName) return catalogue
+    if (rawName.toLowerCase() === String(catalogue).toLowerCase()) return catalogue
+    return `${catalogue} (${rawName})`
   }
 </script>
 
@@ -122,7 +203,7 @@
     </div>
   </div>
 
-  {#if $selectedObject && !menuOpen && !$searchViewActive}
+  {#if $selectedObject && !menuOpen && !$searchViewActive && !finderMode}
     <div
       class="row2"
       role="button"
@@ -130,11 +211,8 @@
       on:click={() => dispatch('objectdetails')}
       on:keydown={(e) => e.key === 'Enter' && dispatch('objectdetails')}
     >
-      <span class="obj-icon">{objIcon($selectedObject)}</span>
+      <span class="obj-icon"><ObservationObjectSymbol kind={objectSymbolKind($selectedObject)} /></span>
       <span class="obj-name">{objLabel($selectedObject)}</span>
-      {#if $selectedObject.constellation}
-        <span class="obj-const">{$selectedObject.constellation}</span>
-      {/if}
     </div>
   {/if}
 </div>
@@ -259,10 +337,5 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .obj-const {
-    opacity: 0.45;
-    font-size: 0.75rem;
-    flex-shrink: 0;
   }
 </style>

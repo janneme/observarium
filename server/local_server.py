@@ -89,7 +89,9 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
         cors_origin = self._cors_origin()
         if cors_origin:
             self.send_header("Access-Control-Allow-Origin", cors_origin)
-            self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
+            self.send_header(
+                "Access-Control-Allow-Headers", "Authorization,Content-Type"
+            )
             self.send_header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
         for key, value in headers.items():
             self.send_header(key, value)
@@ -122,7 +124,9 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
         cors_origin = self._cors_origin()
         if cors_origin:
             self.send_header("Access-Control-Allow-Origin", cors_origin)
-            self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
+            self.send_header(
+                "Access-Control-Allow-Headers", "Authorization,Content-Type"
+            )
             self.send_header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
         self.end_headers()
         with path.open("rb") as fh:

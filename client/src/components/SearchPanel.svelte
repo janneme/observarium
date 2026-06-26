@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy, tick } from 'svelte'
+  import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte'
   import CustomInput from './CustomInput.svelte'
   import OnScreenKeyboard from './OnScreenKeyboard.svelte'
   import { clearTarget } from '../stores/keyboard.js'
@@ -7,6 +7,22 @@
   import { searchViewActive, objectDetailsActive, pendingFocus, solarSystemPositions } from '../stores/ui.js'
   import { doSearch } from '../lib/search.js'
   import { getSearchIndex } from '../lib/db.js'
+
+  const dispatch = createEventDispatcher()
+
+  export let placeholder = 'Search objects…'
+  export let emptyHint = 'Type to search'
+  export let noResultsHint = 'No results'
+  export let useSearchStore = true
+  export let manageSelection = true
+  export let includeSolar = true
+  export let showDetailsAction = true
+  export let showFindingPathsAction = true
+  export let autoCloseOnAccept = true
+  export let topOffset = '2.75rem'
+  export let zIndex = 9
+  export let resultFilter = null
+  export let onAcceptObject = null
 
   let query = ''
   let results = []
@@ -33,46 +49,69 @@
 
   function close() {
     clearTarget()
-    searchViewActive.set(false)
+    if (useSearchStore) searchViewActive.set(false)
+    dispatch('close')
   }
 
-  $: solarEntries = $solarSystemPositions.map((b) => ({
-    id: `solar_${b.imageId || b.name.toLowerCase()}`,
-    name: b.name,
-    pos: [b.ra, b.dec],
-    type: 'solar_system_body',
-    bodyClass: b.bodyClass,
-  }))
+  $: solarEntries = includeSolar
+    ? $solarSystemPositions.map((b) => ({
+        id: `solar_${b.imageId || b.name.toLowerCase()}`,
+        name: b.name,
+        pos: [b.ra, b.dec],
+        type: 'solar_system_body',
+        bodyClass: b.bodyClass,
+      }))
+    : []
 
-  $: results = doSearch(query, index ? [...solarEntries, ...index] : solarEntries.length ? solarEntries : null)
+  $: rawResults = doSearch(query, index ? [...solarEntries, ...index] : solarEntries.length ? solarEntries : null)
 
-  function accept(item) {
-    selectedObject.set(item.obj)
-    if (item.obj.pos) pendingFocus.set({ ra: item.obj.pos[0], dec: item.obj.pos[1] })
-    close()
+  $: results =
+    typeof resultFilter === 'function'
+      ? rawResults.filter((item) => {
+          try {
+            return !!resultFilter(item.obj)
+          } catch {
+            return false
+          }
+        })
+      : rawResults
+
+  async function accept(item) {
+    if (typeof onAcceptObject === 'function') {
+      const shouldContinue = await onAcceptObject(item.obj, item)
+      if (shouldContinue === false) return
+    }
+    dispatch('accept', { object: item.obj, item })
+    if (manageSelection) {
+      selectedObject.set(item.obj)
+      if (item.obj.pos) pendingFocus.set({ ra: item.obj.pos[0], dec: item.obj.pos[1] })
+    }
+    if (autoCloseOnAccept) close()
   }
 
   function details(item) {
-    selectedObject.set(item.obj)
-    searchViewActive.set(false)
-    objectDetailsActive.set(true)
+    dispatch('details', { object: item.obj, item })
+    if (manageSelection) {
+      selectedObject.set(item.obj)
+      if (useSearchStore) searchViewActive.set(false)
+      objectDetailsActive.set(true)
+    }
   }
 
   function findingPaths(item) {
-    // Stub — Finding Paths screen not yet implemented
-    console.log('[Search] findingPaths:', item.obj.id)
+    dispatch('findingpaths', { object: item.obj })
   }
 </script>
 
-<div class="search-overlay" on:pointerdown|stopPropagation>
+<div class="search-overlay" style={`top:${topOffset}; z-index:${zIndex};`} on:pointerdown|stopPropagation>
   <div class="search-bar">
     <div class="input-wrap">
       <CustomInput
         bind:this={inputComp}
         bind:value={query}
-        placeholder="Search objects…"
-        on:enter={() => results[0] && accept(results[0])}
-        on:shiftEnter={() => results[0] && details(results[0])}
+        {placeholder}
+        on:enter={async () => results[0] && (await accept(results[0]))}
+        on:shiftEnter={() => showDetailsAction && results[0] && details(results[0])}
       />
     </div>
     {#if query}
@@ -95,9 +134,9 @@
     {#if loading}
       <div class="hint">Loading…</div>
     {:else if !query}
-      <div class="hint">Type to search</div>
+      <div class="hint">{emptyHint}</div>
     {:else if results.length === 0}
-      <div class="hint">No results</div>
+      <div class="hint">{noResultsHint}</div>
     {:else}
       {#each results as item (item.obj.id)}
         <div class="result-row">
@@ -107,11 +146,20 @@
                 .constellation}){/if}</span
           >
           <div class="result-actions">
-            <button class="act-btn" on:click={() => accept(item)} title="Accept" aria-label="Accept">✓</button>
-            <button class="act-btn" on:click={() => details(item)} title="Details" aria-label="Details">ℹ</button>
-            <button class="act-btn" on:click={() => findingPaths(item)} title="Finding Paths" aria-label="Finding Paths"
-              >◎</button
+            <button class="act-btn" on:click={async () => await accept(item)} title="Accept" aria-label="Accept"
+              >✓</button
             >
+            {#if showDetailsAction}
+              <button class="act-btn" on:click={() => details(item)} title="Details" aria-label="Details">ℹ</button>
+            {/if}
+            {#if showFindingPathsAction}
+              <button
+                class="act-btn"
+                on:click={() => findingPaths(item)}
+                title="Finding Paths"
+                aria-label="Finding Paths">◎</button
+              >
+            {/if}
           </div>
         </div>
       {/each}

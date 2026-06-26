@@ -1300,7 +1300,7 @@ Technical notes:
 
 ## Phase 6 — Object Finding Paths
 
-### Step 33: Object Finding Paths screen (define & edit)
+### Step 33: Object Finding Paths screen (define & edit) ✅
 
 **README refs:** §5.12  
 **Deliverable:** Full path recording UI with fixed Finder View, expandable step

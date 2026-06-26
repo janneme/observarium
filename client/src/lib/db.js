@@ -234,6 +234,61 @@ export async function setMeta(key, value) {
   await db.put('meta', { key, value })
 }
 
+function _cloneSteps(steps) {
+  if (!Array.isArray(steps)) return []
+  return steps
+    .map((step) => {
+      if (!step || typeof step !== 'object') return null
+      const startPoint = step.startPoint && typeof step.startPoint === 'object' ? { ...step.startPoint } : null
+      const endPoint = step.endPoint && typeof step.endPoint === 'object' ? { ...step.endPoint } : null
+      const multiplier = Number(step.multiplier)
+      const out = {
+        startPoint,
+        endPoint,
+        multiplier: Number.isFinite(multiplier) ? multiplier : 1,
+      }
+      if (step.final === true) out.final = true
+      return out
+    })
+    .filter(Boolean)
+}
+
+export async function getFindingPathsForObject(objectId) {
+  const all = (await getMeta('findingPaths')) || {}
+  const byStart = all[objectId]
+  if (!byStart || typeof byStart !== 'object') return {}
+  const out = {}
+  for (const [startHip, path] of Object.entries(byStart)) {
+    out[startHip] = { steps: _cloneSteps(path?.steps) }
+  }
+  return out
+}
+
+export async function saveFindingPathForObject(objectId, startHip, pathValue) {
+  const all = (await getMeta('findingPaths')) || {}
+  const key = String(startHip)
+  const next = {
+    ...all,
+    [objectId]: {
+      ...(all[objectId] || {}),
+      [key]: { steps: _cloneSteps(pathValue?.steps) },
+    },
+  }
+  await setMeta('findingPaths', next)
+}
+
+export async function deleteFindingPathForObject(objectId, startHip) {
+  const all = (await getMeta('findingPaths')) || {}
+  if (!all[objectId]) return
+  const key = String(startHip)
+  const byStart = { ...all[objectId] }
+  delete byStart[key]
+  const next = { ...all }
+  if (Object.keys(byStart).length === 0) delete next[objectId]
+  else next[objectId] = byStart
+  await setMeta('findingPaths', next)
+}
+
 export async function storeManifest(manifest) {
   const stored = {
     version: manifest.version,

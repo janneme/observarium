@@ -35,6 +35,7 @@
   export let magLimitOverride = null
   export let finderMode = false
   export let showSolarSystem = true
+  export let overlayArrows = []
 
   let canvas
   let W = 0,
@@ -78,6 +79,7 @@
     showSolarSystem
     magLimitOverride
     finderMode
+    overlayArrows
     dirty = true
   }
 
@@ -989,6 +991,51 @@
     const survey = {}
     function tally(label) {
       survey[label] = (survey[label] ?? 0) + 1
+    }
+
+    // Pass 0: overlay arrows (behind DSOs and stars)
+    if (overlayArrows.length) {
+      const nightly = currentTheme === 'nightly'
+      const arrowColor = nightly ? 'rgba(204,68,0,0.55)' : 'rgba(255,255,255,0.45)'
+      const labelColor = nightly ? 'rgba(204,68,0,0.65)' : 'rgba(255,255,255,0.55)'
+      ctx.save()
+      ctx.strokeStyle = arrowColor
+      ctx.lineWidth = 1.5
+      for (const arr of overlayArrows) {
+        const from = projectToPixel(arr.fromRa, arr.fromDec, ra0, dec0, W, H, fov, rotation)
+        const to = projectToPixel(arr.toRa, arr.toDec, ra0, dec0, W, H, fov, rotation)
+        if (!from || !to) continue
+        const dx = to.px - from.px
+        const dy = to.py - from.py
+        const len = Math.hypot(dx, dy)
+        if (len < 2) continue
+        const ux = dx / len
+        const uy = dy / len
+        // shorten line end so chevron tip sits exactly at toRa/toDec
+        const tipX = to.px
+        const tipY = to.py
+        ctx.beginPath()
+        ctx.moveTo(from.px, from.py)
+        ctx.lineTo(tipX, tipY)
+        ctx.stroke()
+        // open chevron head
+        const hw = 8
+        ctx.beginPath()
+        ctx.moveTo(tipX - ux * hw + uy * hw * 0.5, tipY - uy * hw - ux * hw * 0.5)
+        ctx.lineTo(tipX, tipY)
+        ctx.lineTo(tipX - ux * hw - uy * hw * 0.5, tipY - uy * hw + ux * hw * 0.5)
+        ctx.stroke()
+        if (arr.label) {
+          ctx.fillStyle = labelColor
+          ctx.font = '11px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          const mx = (from.px + tipX) / 2
+          const my = (from.py + tipY) / 2
+          ctx.fillText(arr.label, mx - uy * 11, my + ux * 11)
+        }
+      }
+      ctx.restore()
     }
 
     // Pass 1: DSOs (rendered first so stars paint on top)

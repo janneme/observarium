@@ -22,5 +22,5 @@
   })
 </script>
 
-<svelte:window on:keydown={handleKeyDown} on:keyup={handleKeyUp} />
+<svelte:window on:keydown|capture={handleKeyDown} on:keyup|capture={handleKeyUp} />
 <Router {routes} />
