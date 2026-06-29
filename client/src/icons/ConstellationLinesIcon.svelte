@@ -8,12 +8,19 @@
   fill="none"
   stroke="currentColor"
   stroke-width="1.4"
+  stroke-linecap="round"
   {...$$restProps}
 >
-  <circle cx="4" cy="6" r="2" fill="currentColor" stroke="none" />
-  <circle cx="20" cy="8" r="1.6" fill="currentColor" stroke="none" />
-  <circle cx="14" cy="19" r="1.6" fill="currentColor" stroke="none" />
-  <line x1="4" y1="6" x2="20" y2="8" stroke-linecap="round" />
-  <line x1="20" y1="8" x2="14" y2="19" stroke-linecap="round" />
-  <line x1="4" y1="6" x2="14" y2="19" stroke-linecap="round" />
+  <!-- Cassiopeia: realistic proportions. Stars left→right: Caph, Schedar, Cih(γ), Ruchbah, Segin -->
+  <!-- First valley (Schedar) is moderate; second valley (Ruchbah) is the deepest. -->
+  <!-- Shape descends left-to-right: Caph is highest, final peak slightly lower. -->
+  <line x1="2.5" y1="5" x2="6.5" y2="15" />
+  <line x1="6.5" y1="15" x2="13" y2="9" />
+  <line x1="13" y1="9" x2="17" y2="19" />
+  <line x1="17" y1="19" x2="22" y2="7.5" />
+  <circle cx="2.5" cy="5" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="6.5" cy="15" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="13" cy="9" r="1.5" fill="currentColor" stroke="none" />
+  <circle cx="17" cy="19" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="22" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
 </svg>

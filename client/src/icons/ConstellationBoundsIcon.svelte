@@ -8,8 +8,17 @@
   fill="none"
   stroke="currentColor"
   stroke-width="1.4"
-  stroke-dasharray="3 2.2"
+  stroke-linecap="round"
   {...$$restProps}
 >
-  <polygon points="12,3 21,8 21,16 12,21 3,16 3,8" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="2.5" y1="5" x2="6.5" y2="15" />
+  <line x1="6.5" y1="15" x2="13" y2="9" />
+  <line x1="13" y1="9" x2="17" y2="19" />
+  <line x1="17" y1="19" x2="22" y2="7.5" />
+  <circle cx="2.5" cy="5" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="6.5" cy="15" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="13" cy="9" r="1.5" fill="currentColor" stroke="none" />
+  <circle cx="17" cy="19" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="22" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
+  <rect x="1.5" y="3" width="21" height="18" rx="0.5" stroke-dasharray="3 2" stroke-width="1.2" />
 </svg>

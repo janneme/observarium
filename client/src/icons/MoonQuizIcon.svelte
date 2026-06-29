@@ -2,16 +2,14 @@
   export let size = '1em'
 </script>
 <svg
-  viewBox="0 0 24 24"
+  viewBox="0 0 32 32"
   width={size}
   height={size}
-  fill="none"
-  stroke="currentColor"
-  stroke-width="1.5"
-  stroke-linecap="round"
+  fill="currentColor"
   {...$$restProps}
 >
-  <path d="M18 13.5A7 7 0 1 1 10.5 6a5 5 0 0 0 7.5 7.5z" />
-  <path d="M19 3 Q21 3 21 5 Q21 6.5 19.5 6.5 L19.5 8" stroke-width="1.3" />
-  <circle cx="19.5" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
+  <g style="color: #5a8fd4" opacity="0.6">
+    <path fill="currentColor" d="M13.5025,5.4136A15.0755,15.0755,0,0,0,25.096,23.6082a11.1134,11.1134,0,0,1-7.9749,3.3893c-.1385,0-.2782.0051-.4178,0A11.0944,11.0944,0,0,1,13.5025,5.4136M14.98,3a1.0024,1.0024,0,0,0-.1746.0156A13.0959,13.0959,0,0,0,16.63,28.9973c.1641.006.3282,0,.4909,0a13.0724,13.0724,0,0,0,10.702-5.5556,1.0094,1.0094,0,0,0-.7833-1.5644A13.08,13.08,0,0,1,15.8892,4.38,1.0149,1.0149,0,0,0,14.98,3Z" />
+  </g>
+  <text x="16" y="17" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="currentColor">?</text>
 </svg>

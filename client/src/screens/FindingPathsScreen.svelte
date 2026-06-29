@@ -239,7 +239,14 @@
     await Promise.all([loadLabels(), loadPaths()])
     if (initialStartHip != null) {
       const hip = String(initialStartHip)
-      if (pathsByStart[hip]) expandedStartHip = hip
+      if (pathsByStart[hip]) {
+        expandedStartHip = hip
+        const path = pathsByStart[hip]
+        if (path?.steps?.length) {
+          activeStepIndex = 0
+          centerOn(stepAnchor(path, 0))
+        }
+      }
     }
     await loadFinderObjects()
   }
@@ -249,6 +256,10 @@
   $: recordingStartLabel = recordingStartHip
     ? starsByHip.get(String(recordingStartHip))?.label || `HIP ${recordingStartHip}`
     : null
+  $: expandedStartLabel = expandedStartHip
+    ? starsByHip.get(String(expandedStartHip))?.label || `HIP ${expandedStartHip}`
+    : null
+  $: guideMode = initialStartHip != null
 
   function pathStartPoint(startHip) {
     const star = starsByHip.get(String(startHip))
@@ -434,6 +445,7 @@
   }
 
   function handlePointerDown(e) {
+    if (guideMode) return
     e.preventDefault()
     e.stopPropagation()
     wrapEl.setPointerCapture(e.pointerId)
@@ -463,7 +475,7 @@
 
   function handleFinderWheel(e) {
     e.stopPropagation()
-    if (!e.ctrlKey) return
+    if (!e.ctrlKey || guideMode) return
     e.preventDefault()
     const nextFov = finderFov * Math.pow(1.008, e.deltaY)
     finderFov = Math.max(1.5, Math.min(20, nextFov))
@@ -497,12 +509,12 @@
     loadFinderObjects()
   }
 
-  function effectiveStepEnd(step) {
+  function effectiveStepEnd(step, resolvedStart) {
     if (!step?.startPoint && !step?.endPoint) return null
     if (!step.endPoint) return step.startPoint ? clonePoint(step.startPoint) : null
     const m = normalizeMultiplier(step.multiplier)
-    if (m === 1 || !step.startPoint) return clonePoint(step.endPoint)
-    const s = step.startPoint
+    const s = step.startPoint || resolvedStart
+    if (m === 1 || !s) return clonePoint(step.endPoint)
     const e = step.endPoint
     let dRa = e.ra - s.ra
     if (dRa > 180) dRa -= 360
@@ -517,7 +529,8 @@
     if (!path || idx < 0) return pathStartPoint(expandedStartHip)
     const prev = path.steps[idx - 1]
     if (!prev) return pathStartPoint(expandedStartHip)
-    return effectiveStepEnd(prev) || clonePoint(prev.startPoint)
+    const resolvedStart = prev.startPoint || stepAnchor(path, idx - 1)
+    return effectiveStepEnd(prev, resolvedStart) || clonePoint(resolvedStart)
   }
 
   function selectStep(idx) {
@@ -607,7 +620,11 @@
       const next = { ...pathsByStart }
       delete next[startHip]
       pathsByStart = next
-      ensureExpandedPath()
+      if (guideMode) {
+        dispatch('close')
+      } else {
+        ensureExpandedPath()
+      }
     }
     confirmOpen = true
   }
@@ -636,12 +653,11 @@
 
   function stepTitleParts(step, idx, path) {
     const resolvedStart = step?.startPoint || stepAnchor(path, idx)
-    const from = placeLabel(resolvedStart)
-    const to = placeLabel(step?.endPoint)
     const m = normalizeMultiplier(step?.multiplier)
     return {
       prefix: `${idx + 1}. `,
-      body: `${from} → ${to}`,
+      from: placeLabel(resolvedStart),
+      to: placeLabel(step?.endPoint),
       mx: m !== 1 ? ` (${m}x)` : null,
     }
   }
@@ -714,11 +730,15 @@
         Path {recordingStartLabel} ⇒ {objectFullLabel(objectCtx)}
       {:else if initialSelectStart}
         Select start (bright star)
+      {:else if guideMode && expandedStartLabel}
+        {expandedStartLabel}<span class="title-arrow">→</span>{objectFullLabel(objectCtx)}
       {:else}
         Finding Paths · {objectLabel(objectCtx)}
       {/if}
     </div>
-    {#if !recordingStartHip}
+    {#if guideMode}
+      <button class="btn danger" on:click={() => askDeletePath(expandedStartHip)}>Delete</button>
+    {:else if !recordingStartHip}
       <button class="btn" on:click={startPathSelection}>＋ Path</button>
     {/if}
   </div>
@@ -773,7 +793,7 @@
       {/if}
     </div>
 
-    {#if activeStepIndex != null}
+    {#if activeStepIndex != null && !guideMode}
       <div class="edit-bar">
         <div class="edit-label">{pendingPoint ? pointLabel(pendingPoint) : 'Tap finder to place a point'}</div>
         {#if pendingPoint}
@@ -781,6 +801,19 @@
             <button class="btn small" on:click={clearPending}>Clear</button>
           </div>
         {/if}
+      </div>
+    {/if}
+    {#if guideMode && activeStepIndex != null}
+      {@const _gp = pathsByStart[expandedStartHip]}
+      {@const _gs = _gp?.steps || []}
+      {@const _navP = stepTitleParts(_gs[activeStepIndex], activeStepIndex, _gp)}
+      <div class="step-nav">
+        <button class="nav-btn" disabled={activeStepIndex === 0} on:click={() => selectStep(activeStepIndex - 1)}>‹</button>
+        <span class="step-nav-label">
+          {activeStepIndex + 1}/{_gs.length}
+          <strong class="step-nav-name">{_navP.from}<span class="step-arrow">→</span>{_navP.to}{#if _navP.mx}<span class="step-mx">{_navP.mx}</span>{/if}</strong>
+        </span>
+        <button class="nav-btn" disabled={activeStepIndex === _gs.length - 1} on:click={() => selectStep(activeStepIndex + 1)}>›</button>
       </div>
     {/if}
   </div>
@@ -802,7 +835,7 @@
             {@const p = stepTitleParts(step, idx, recordingPath)}
             <div class="step-row" class:active={activeStepIndex === idx}>
               <button class="step-main" on:click={() => selectStep(idx)}>
-                {p.prefix}{p.body}{#if p.mx}<span class="step-mx">{p.mx}</span>{/if}
+                {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span>{/if}
               </button>
               {#if activeStepIndex === idx}
                 <div class="step-actions">
@@ -845,7 +878,7 @@
       {/if}
     {:else}
       <!-- Normal mode: show full path list -->
-      {#if pathEntryList.length === 0}
+      {#if pathEntryList.length === 0 && !guideMode}
         <div class="empty">No paths defined for this object.</div>
       {/if}
 
@@ -875,7 +908,7 @@
                 {@const p = stepTitleParts(step, idx, entry.path)}
                 <div class="step-row" class:active={activeStepIndex === idx}>
                   <button class="step-main" on:click={() => selectStep(idx)}>
-                    {p.prefix}{p.body}{#if p.mx}<span class="step-mx">{p.mx}</span>{/if}
+                    {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span>{/if}
                   </button>
                   {#if activeStepIndex === idx}
                     <div class="step-actions">
@@ -989,9 +1022,10 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
+    font-size: 1.1rem;
+    line-height: 1;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
     flex-shrink: 0;
   }
@@ -1265,6 +1299,15 @@
     border-color: rgba(180, 0, 0, 0.3);
   }
 
+  :global([data-theme='nightly']) .finder-wrap {
+    border-color: rgba(180, 0, 0, 0.4);
+  }
+
+  :global([data-theme='nightly']) .edit-bar {
+    border-color: rgba(204, 68, 0, 0.45);
+    background: rgba(160, 40, 0, 0.12);
+  }
+
   :global([data-theme='nightly']) .btn,
   :global([data-theme='nightly']) .mini,
   :global([data-theme='nightly']) .add-step,
@@ -1291,7 +1334,7 @@
   }
 
   :global([data-theme='nightly']) .step-row.active .step-main {
-    color: #e05010;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .cross::before {
@@ -1324,8 +1367,67 @@
     color: #cc0000;
   }
 
+  .step-arrow,
+  .title-arrow {
+    font-size: 1.15em;
+    vertical-align: 0.05em;
+    margin: 0 0.2em;
+  }
+
   .step-mx {
     font-weight: normal;
     opacity: 0.75;
+  }
+
+  .btn.danger {
+    border-color: rgba(255, 120, 120, 0.5);
+    color: #ff9a9a;
+  }
+
+  .step-nav {
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+
+  .step-nav-label {
+    font-size: 0.85rem;
+    text-align: center;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .step-nav-name {
+    margin-left: 0.4em;
+    font-weight: 700;
+  }
+
+  .nav-btn {
+    border: 1px solid rgba(232, 232, 232, 0.3);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--fg);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 1rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  :global([data-theme='nightly']) .btn.danger {
+    border-color: rgba(200, 0, 0, 0.5);
+    color: #cc0000;
+  }
+
+  :global([data-theme='nightly']) .nav-btn {
+    border-color: rgba(180, 0, 0, 0.35);
+    color: #cc0000;
+    background: rgba(180, 0, 0, 0.08);
   }
 </style>

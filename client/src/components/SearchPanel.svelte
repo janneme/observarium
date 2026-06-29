@@ -232,6 +232,8 @@
     flex: 1;
     overflow-y: auto;
     overscroll-behavior: contain;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin-top: 0.4rem;
   }
 
   .hint {
@@ -245,7 +247,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.05rem 0.75rem;
+    padding: 0.65rem 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     cursor: pointer;
   }

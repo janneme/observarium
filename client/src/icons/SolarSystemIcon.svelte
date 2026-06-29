@@ -11,8 +11,9 @@
   stroke-linecap="round"
   {...$$restProps}
 >
-  <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-  <ellipse cx="12" cy="12" rx="9" ry="4" />
-  <circle cx="21" cy="12" r="1.5" fill="currentColor" stroke="none" />
-  <circle cx="3" cy="12" r="1" fill="currentColor" stroke="none" />
+  <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
+  <ellipse cx="12" cy="12" rx="5.5" ry="4.5" stroke-width="0.7" />
+  <ellipse cx="12" cy="12" rx="9" ry="7.4" stroke-width="0.7" />
+  <circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" />
+  <circle cx="21" cy="12" r="1" fill="currentColor" stroke="none" />
 </svg>

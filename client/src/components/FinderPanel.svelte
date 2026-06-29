@@ -63,6 +63,8 @@
     void checkPath()
   }
 
+  $: pathCount = Object.values(rawPaths).filter((p) => Array.isArray(p?.steps) && p.steps.length > 0).length
+
   async function loadObjects() {
     const margin = FINDER_FOV * 2
     objects = await getObjectsInArea(
@@ -242,6 +244,22 @@
   // ─────────────────────────────────────────────────────────────
 
   function handleKey(e) {
+    if (guidePickerOpen) {
+      if (e.key === 'Escape') {
+        guidePickerOpen = false
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      if (e.key.length === 1) {
+        const match = guideOptions.find(opt => opt.label.toLowerCase().startsWith(e.key.toLowerCase()))
+        if (match) pickGuide(match.startHip)
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      return
+    }
+
     if (searching) {
       if (e.key === 'Escape') {
         closeSearch()
@@ -259,14 +277,14 @@
       return
     }
 
-    if (e.key === 'r') {
+    if (e.key === 'a') {
       if ($selectedObject) recordPath()
       e.preventDefault()
       e.stopPropagation()
       return
     }
 
-    if (e.key === 'g') {
+    if (e.key === 'p') {
       if ($selectedObject && hasPath) openGuidePicker()
       e.preventDefault()
       e.stopPropagation()
@@ -561,10 +579,10 @@
       <button class="finder-btn" on:click={switchToMain}>Switch to normal view</button>
       <button class="finder-btn" on:click={openSearch}>Find object</button>
       {#if hasPath}
-        <button class="finder-btn" on:click={openGuidePicker}>Guide to find the object</button>
+        <button class="finder-btn" on:click={openGuidePicker}>Paths{' '}<span class="guide-btn-count">({pathCount})</span></button>
       {/if}
       {#if $selectedObject}
-        <button class="finder-btn" on:click={recordPath}>Record guide to find object</button>
+        <button class="finder-btn" on:click={recordPath}>Add finding path</button>
       {/if}
     </div>
   {/if}
@@ -576,8 +594,7 @@
       <div class="guide-picker-list">
         {#each guideOptions as opt}
           <button class="finder-btn" on:click={() => pickGuide(opt.startHip)}>
-            {opt.label} ({opt.stepCount}
-            {opt.stepCount === 1 ? 'step' : 'steps'})
+            <strong>{opt.label}</strong>{' '}<span class="opt-steps">({opt.stepCount} {opt.stepCount === 1 ? 'step' : 'steps'})</span>
           </button>
         {/each}
       </div>
@@ -700,7 +717,7 @@
 
   .guide-pick-title {
     font-size: 1.6vh;
-    opacity: 0.6;
+    color: rgba(255, 255, 255, 0.6);
     text-align: center;
     padding: 0 0 0.4vh;
   }
@@ -715,7 +732,14 @@
 
   .guide-cancel-btn {
     margin-top: 0.4vh;
-    opacity: 0.6;
+  }
+
+  .opt-steps {
+    font-weight: normal;
+  }
+
+  .guide-btn-count {
+    font-weight: normal;
   }
 
   .finder-btn {
@@ -727,6 +751,7 @@
     border-radius: 1.2vh;
     font-size: 1.8vh;
     font-family: inherit;
+    font-weight: 600;
     text-align: center;
     cursor: pointer;
     transition: background 150ms;
@@ -750,6 +775,10 @@
   :global([data-theme='nightly']) .guide-picker-modal {
     background: #1a0000;
     border-color: rgba(180, 0, 0, 0.25);
+  }
+
+  :global([data-theme='nightly']) .guide-pick-title {
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .circle-container::after {
@@ -820,6 +849,7 @@
 
   .fs-keyboard {
     flex-shrink: 0;
+    margin-bottom: 0.5rem;
   }
 
   .fs-results {
@@ -840,7 +870,7 @@
   .fs-result-row {
     display: flex;
     align-items: center;
-    padding: 0.6rem 0.75rem;
+    padding: 0.9rem 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     cursor: pointer;
   }

@@ -11,8 +11,21 @@
   stroke-linecap="round"
   {...$$restProps}
 >
-  <ellipse cx="11" cy="13" rx="8" ry="3.5" transform="rotate(-20 11 13)" />
-  <circle cx="11" cy="13" r="2" fill="currentColor" stroke="none" />
-  <path d="M19 3 Q21 3 21 5 Q21 6.5 19.5 6.5 L19.5 8" stroke-width="1.3" />
-  <circle cx="19.5" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
+  <g style="color: #5a8fd4" opacity="0.6">
+    <!-- Globular cluster (top-left) -->
+    <circle cx="6" cy="6" r="3.5" stroke="currentColor" />
+    <line x1="2.5" y1="6" x2="9.5" y2="6" stroke="currentColor" />
+    <line x1="6" y1="2.5" x2="6" y2="9.5" stroke="currentColor" />
+    <!-- Open cluster (top-right) -->
+    <circle cx="18" cy="6" r="3.5" stroke="currentColor" stroke-dasharray="2 1.5" />
+    <!-- Planetary nebula (bottom-left) -->
+    <circle cx="6" cy="18" r="2.5" stroke="currentColor" />
+    <line x1="2" y1="18" x2="4" y2="18" stroke="currentColor" />
+    <line x1="8" y1="18" x2="10" y2="18" stroke="currentColor" />
+    <line x1="6" y1="14" x2="6" y2="16" stroke="currentColor" />
+    <line x1="6" y1="20" x2="6" y2="22" stroke="currentColor" />
+    <!-- Galaxy (bottom-right) -->
+    <ellipse cx="18" cy="18" rx="4.5" ry="1.8" stroke="currentColor" />
+  </g>
+  <text x="12" y="13" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="currentColor" stroke="none">?</text>
 </svg>

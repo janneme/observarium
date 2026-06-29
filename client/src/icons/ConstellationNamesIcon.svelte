@@ -8,11 +8,17 @@
   fill="none"
   stroke="currentColor"
   stroke-width="1.4"
+  stroke-linecap="round"
   {...$$restProps}
 >
-  <circle cx="4" cy="6" r="2" fill="currentColor" stroke="none" />
-  <circle cx="20" cy="8" r="1.6" fill="currentColor" stroke="none" />
-  <circle cx="14" cy="19" r="1.6" fill="currentColor" stroke="none" />
-  <line x1="8" y1="9" x2="13" y2="11" stroke-linecap="round" stroke-width="1.2" stroke-dasharray="1.5 1.5" />
-  <text x="12" y="6" font-size="6" text-anchor="middle" fill="currentColor" stroke="none" style="font-style:italic">α</text>
+  <line x1="2.5" y1="5" x2="6.5" y2="15" />
+  <line x1="6.5" y1="15" x2="13" y2="9" />
+  <line x1="13" y1="9" x2="17" y2="19" />
+  <line x1="17" y1="19" x2="22" y2="7.5" />
+  <circle cx="2.5" cy="5" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="6.5" cy="15" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="13" cy="9" r="1.5" fill="currentColor" stroke="none" />
+  <circle cx="17" cy="19" r="1.3" fill="currentColor" stroke="none" />
+  <circle cx="22" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
+  <text x="10" y="12" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="currentColor" stroke="none">T</text>
 </svg>

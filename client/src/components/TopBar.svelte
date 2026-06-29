@@ -1,14 +1,32 @@
 <script>
   import { createEventDispatcher, onMount, onDestroy } from 'svelte'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { searchViewActive } from '../stores/ui.js'
+  import { searchViewActive, finderViewActive } from '../stores/ui.js'
+  import { theme, toggleTheme } from '../stores/theme.js'
   import ObservationObjectSymbol from './ObservationObjectSymbol.svelte'
   import HamburgerIcon from '../icons/HamburgerIcon.svelte'
   import SearchIcon from '../icons/SearchIcon.svelte'
+  import FinderViewIcon from '../icons/FinderViewIcon.svelte'
+  import NightModeIcon from '../icons/NightModeIcon.svelte'
+  import { getDoubleStarNear } from '../lib/db.js'
 
   export let time = new Date()
   export let menuOpen = false
   export let finderMode = false
+
+  let linkedDs = null
+
+  $: {
+    const obj = $selectedObject
+    if (obj?.type === 'star' && obj?.dbl && !Array.isArray(obj.dbl)) {
+      linkedDs = null
+      getDoubleStarNear(obj.pos[0], obj.pos[1]).then((ds) => {
+        if ($selectedObject?.id === obj.id) linkedDs = ds
+      })
+    } else {
+      linkedDs = null
+    }
+  }
 
   const dispatch = createEventDispatcher()
 
@@ -61,6 +79,7 @@
     if (obj.type === 'star') {
       if (obj.dbl === 'm') return 'double_star_multi'
       if (obj.dbl) return 'double_star'
+      if (Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1) return 'variable_star'
       return 'star'
     }
     if (obj.type === 'solar_system_body') return String(obj.name || '').toLowerCase() || 'generic'
@@ -170,6 +189,75 @@
     if (rawName.toLowerCase() === String(catalogue).toLowerCase()) return catalogue
     return `${catalogue} (${rawName})`
   }
+
+  function dblPairs(obj, ds) {
+    if (obj.type === 'double_star') return obj.pairs || []
+    if (Array.isArray(obj.dbl)) return obj.dbl.flatMap((e) => e.pairs || [])
+    if (obj.dbl && ds) return ds.pairs || []
+    return []
+  }
+
+  function dblMainPair(obj, ds) {
+    const pairs = dblPairs(obj, ds)
+    return pairs.find((p) => p.comp === 'AB') || pairs[0] || null
+  }
+
+  function formatSep(sep) {
+    if (sep == null) return null
+    if (Array.isArray(sep)) return `${sep[0]}″–${sep[1]}″`
+    return `${sep}″`
+  }
+
+  function dsoSizeStr(obj) {
+    const s = obj.size
+    if (s == null) return null
+    const major = Array.isArray(s) ? s[0] : s
+    const fmt = (arcmin) => {
+      if (major < 1) return `${Math.round(arcmin * 60)}″`
+      if (major < 60) return `${arcmin.toFixed(1)}′`
+      return `${(arcmin / 60).toFixed(2)}°`
+    }
+    if (Array.isArray(s)) return `${fmt(s[0])}×${fmt(s[1])}`
+    return fmt(s)
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  }
+
+  function selectedObjLabel(obj, ds) {
+    if (!obj) return ''
+    const isDoubleObj = obj.type === 'double_star' || (obj.type === 'star' && !!obj.dbl)
+    if (isDoubleObj) {
+      const name = preferredStarLabel(obj)
+      const pair = dblMainPair(obj, ds)
+      const parts = []
+      const sep = pair ? formatSep(pair.sep) : null
+      if (sep != null) parts.push(`sep. ${sep}`)
+      if (pair?.mag && Array.isArray(pair.mag)) parts.push(`mag. ${pair.mag[0]}/${pair.mag[1]}`)
+      return esc(parts.length ? `${name} (${parts.join(', ')})` : name)
+    }
+    if (obj.type === 'star') {
+      const name = preferredStarLabel(obj)
+      if (Array.isArray(obj.mag)) return esc(`${name} (mag. ${obj.mag[0]}–${obj.mag[1]})`)
+      if (obj.mag != null) return esc(`${name} (mag. ${obj.mag})`)
+      return esc(name)
+    }
+    if (obj.type === 'dso') {
+      const catLabel = primaryCatalogueLabel(obj)
+      const rawName = String(obj.name || '').trim()
+      const normalizedName = rawName.split(',').map((s) => s.trim()).filter(Boolean).join(', ')
+      const hasName = normalizedName && normalizedName.toLowerCase() !== catLabel.toLowerCase()
+      const sizeStr = dsoSizeStr(obj)
+      const magStr = obj.mag != null ? `mag. ${Array.isArray(obj.mag) ? obj.mag[0] : obj.mag}` : null
+      const parts = [sizeStr, magStr].filter(Boolean)
+      const detail = parts.length ? esc(` (${parts.join(', ')})`) : ''
+      return hasName
+        ? `<strong>${esc(catLabel)}</strong> ${esc(normalizedName)}${detail}`
+        : `<strong>${esc(catLabel)}</strong>${detail}`
+    }
+    return esc(objLabel(obj))
+  }
 </script>
 
 <div class="top-bar" on:pointerdown|stopPropagation>
@@ -181,11 +269,17 @@
     </button>
 
     <div class="center-group">
+      <button class="toggle-btn" class:active={$searchViewActive} on:click={() => dispatch('searchtoggle')} aria-label="Search">
+        <SearchIcon />
+      </button>
+      <button class="toggle-btn" class:active={$finderViewActive} on:click={() => finderViewActive.update((v) => !v)} aria-label="Finder view">
+        <FinderViewIcon />
+      </button>
+      <button class="toggle-btn" class:active={$theme === 'nightly'} on:click={toggleTheme} aria-label="Night mode">
+        <NightModeIcon />
+      </button>
       <button class="menu-btn" on:click={() => dispatch('menutoggle')} aria-label="Menu">
         <HamburgerIcon />
-      </button>
-      <button class="search-btn" on:click={() => dispatch('searchtoggle')} aria-label="Search">
-        <SearchIcon />
       </button>
     </div>
 
@@ -212,7 +306,7 @@
       on:keydown={(e) => e.key === 'Enter' && dispatch('objectdetails')}
     >
       <span class="obj-icon"><ObservationObjectSymbol kind={objectSymbolKind($selectedObject)} /></span>
-      <span class="obj-name">{objLabel($selectedObject)}</span>
+      <span class="obj-name">{@html selectedObjLabel($selectedObject, linkedDs)}</span>
     </div>
   {/if}
 </div>
@@ -277,7 +371,7 @@
     justify-content: center;
   }
 
-  .search-btn {
+  .toggle-btn {
     background: none;
     border: none;
     color: inherit;
@@ -286,10 +380,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.75;
+    opacity: 0.45;
   }
 
-  .search-btn:hover {
+  .toggle-btn.active,
+  .toggle-btn:hover {
     opacity: 1;
   }
 
@@ -337,5 +432,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .obj-name :global(strong) {
+    font-weight: 600;
   }
 </style>

@@ -11,13 +11,16 @@
   stroke-linecap="round"
   {...$$restProps}
 >
-  <circle cx="4" cy="8" r="1.8" fill="currentColor" stroke="none" />
-  <circle cx="13" cy="4" r="1.5" fill="currentColor" stroke="none" />
-  <circle cx="19" cy="10" r="1.5" fill="currentColor" stroke="none" />
-  <circle cx="14" cy="17" r="1.5" fill="currentColor" stroke="none" />
-  <line x1="4" y1="8" x2="13" y2="4" />
-  <line x1="13" y1="4" x2="19" y2="10" />
-  <line x1="19" y1="10" x2="14" y2="17" />
-  <path d="M4 19 Q5.5 17.5 7 18.5 Q8 19.5 7 20.5 L6.5 21.5" stroke-width="1.3" />
-  <circle cx="6.5" cy="22.5" r="0.75" fill="currentColor" stroke="none" />
+  <g style="color: #5a8fd4" opacity="0.6">
+    <line x1="2.5" y1="5" x2="6.5" y2="15" stroke="currentColor" />
+    <line x1="6.5" y1="15" x2="13" y2="9" stroke="currentColor" />
+    <line x1="13" y1="9" x2="17" y2="19" stroke="currentColor" />
+    <line x1="17" y1="19" x2="22" y2="7.5" stroke="currentColor" />
+    <circle cx="2.5" cy="5" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="6.5" cy="15" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="13" cy="9" r="1.5" fill="currentColor" stroke="none" />
+    <circle cx="17" cy="19" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="22" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
+  </g>
+  <text x="10" y="13" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="currentColor" stroke="none">?</text>
 </svg>

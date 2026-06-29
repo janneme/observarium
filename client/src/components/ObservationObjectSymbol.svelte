@@ -56,17 +56,24 @@
     </svg>
   {:else if kind === 'double_star'}
     <svg viewBox="0 0 20 20" class="svg" fill="none">
-      <circle cx="10" cy="10" r="2.5" fill="currentColor" />
+      <circle cx="10" cy="10" r="3" fill="currentColor" />
       <line x1="12.5" y1="7.5" x2="16.4" y2="3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
     </svg>
   {:else if kind === 'double_star_multi'}
     <svg viewBox="0 0 20 20" class="svg" fill="none">
-      <circle cx="10" cy="10" r="2.5" fill="currentColor" />
+      <circle cx="10" cy="10" r="3" fill="currentColor" />
       <line x1="11.4" y1="6.5" x2="15.3" y2="2.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
       <line x1="13.5" y1="8.6" x2="17.4" y2="4.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
     </svg>
   {:else if kind === 'star'}
-    <span class="glyph">★</span>
+    <svg viewBox="0 0 20 20" class="svg" fill="currentColor">
+      <circle cx="10" cy="10" r="3" />
+    </svg>
+  {:else if kind === 'variable_star'}
+    <svg viewBox="0 0 20 20" class="svg" fill="none">
+      <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.2" />
+      <circle cx="10" cy="10" r="1.5" fill="currentColor" />
+    </svg>
   {:else if isSolar(kind)}
     <span class="glyph">{solarGlyph[kind]}</span>
   {:else}

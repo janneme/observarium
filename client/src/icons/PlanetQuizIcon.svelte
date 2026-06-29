@@ -11,8 +11,12 @@
   stroke-linecap="round"
   {...$$restProps}
 >
-  <circle cx="10" cy="14" r="5" />
-  <ellipse cx="10" cy="14" rx="9.5" ry="3" transform="rotate(-15 10 14)" />
-  <path d="M19 3 Q21 3 21 5 Q21 6.5 19.5 6.5 L19.5 8" stroke-width="1.3" />
-  <circle cx="19.5" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
+  <g style="color: #5a8fd4" opacity="0.6">
+    <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
+    <ellipse cx="12" cy="12" rx="5.5" ry="4.5" stroke="currentColor" />
+    <ellipse cx="12" cy="12" rx="9" ry="7.4" stroke="currentColor" />
+    <circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="21" cy="12" r="1" fill="currentColor" stroke="none" />
+  </g>
+  <text x="12" y="13" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="currentColor" stroke="none">?</text>
 </svg>
