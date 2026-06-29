@@ -816,12 +816,24 @@ class StarPipeline:
     def _dbl_csv_nature(s: dict[str, Any]) -> str:
         if not s.get("dbl"):
             return ""
+        letters: set[str] = set()
+        has_vis = False
+        has_phys = False
         for entry in s.get("dbl", []):
             for pair in entry.get("pairs", []):
                 if "vis" in pair:
-                    return "a"
+                    has_vis = True
                 if "phys" in pair:
-                    return "p"
+                    has_phys = True
+                for c in str(pair.get("comp", "")):
+                    if "A" <= c <= "Z":
+                        letters.add(c)
+        if len(letters) > 2:
+            return "m"
+        if has_vis:
+            return "a"
+        if has_phys:
+            return "p"
         return "1"
 
     def _write_csv(

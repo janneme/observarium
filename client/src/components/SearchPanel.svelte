@@ -6,7 +6,8 @@
   import { selectedObject } from '../stores/selectedObject.js'
   import { searchViewActive, objectDetailsActive, pendingFocus, solarSystemPositions } from '../stores/ui.js'
   import { doSearch } from '../lib/search.js'
-  import { getSearchIndex } from '../lib/db.js'
+  import { getSearchIndex, getObjectIdsWithFindingPaths } from '../lib/db.js'
+  import FindingPathsIcon from '../icons/FindingPathsIcon.svelte'
 
   const dispatch = createEventDispatcher()
 
@@ -29,6 +30,7 @@
   let index = null
   let loading = true
   let inputComp
+  let objectIdsWithPaths = new Set()
 
   function onKey(e) {
     if (e.key === 'Escape') close()
@@ -36,7 +38,7 @@
 
   onMount(async () => {
     window.addEventListener('keydown', onKey)
-    index = await getSearchIndex()
+    ;[index, objectIdsWithPaths] = await Promise.all([getSearchIndex(), getObjectIdsWithFindingPaths()])
     loading = false
     await tick()
     inputComp?.focus()
@@ -139,26 +141,25 @@
       <div class="hint">{noResultsHint}</div>
     {:else}
       {#each results as item (item.obj.id)}
-        <div class="result-row">
+        <div class="result-row" on:click={async () => await accept(item)}>
           <span class="result-label"
             >{#each item.spans as span}{#if span.hl}<span class="hl">{span.text}</span
                 >{:else}{span.text}{/if}{/each}{#if item.showCon && item.obj.constellation}{' '}({item.obj
                 .constellation}){/if}</span
           >
-          <div class="result-actions">
-            <button class="act-btn" on:click={async () => await accept(item)} title="Accept" aria-label="Accept"
-              >✓</button
-            >
+          <div class="result-actions" on:click|stopPropagation>
             {#if showDetailsAction}
               <button class="act-btn" on:click={() => details(item)} title="Details" aria-label="Details">ℹ</button>
             {/if}
-            {#if showFindingPathsAction}
+            {#if showFindingPathsAction && objectIdsWithPaths.has(item.obj.id)}
               <button
                 class="act-btn"
                 on:click={() => findingPaths(item)}
                 title="Finding Paths"
-                aria-label="Finding Paths">◎</button
+                aria-label="Finding Paths"
               >
+                <FindingPathsIcon />
+              </button>
             {/if}
           </div>
         </div>
@@ -244,8 +245,9 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.65rem 0.75rem;
+    padding: 0.05rem 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
   }
 
   .result-row:active {
@@ -276,9 +278,9 @@
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.6);
-    font-size: 1.1rem;
-    width: 2.2rem;
-    height: 2.2rem;
+    font-size: 2rem;
+    width: 3.2rem;
+    height: 3.2rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -292,7 +294,7 @@
     color: #fff;
   }
 
-  /* Make CustomInput border visible on dark background */
+/* Make CustomInput border visible on dark background */
   .search-overlay :global(.custom-input) {
     border-color: rgba(255, 255, 255, 0.18);
   }

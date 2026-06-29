@@ -1,6 +1,7 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte'
   import { getAboutStats } from '../lib/db.js'
+  import AppIcon from '../icons/AppIcon.svelte'
 
   const dispatch = createEventDispatcher()
   const version = import.meta.env.VITE_APP_VERSION_DATE || '0.1.0'
@@ -47,21 +48,7 @@
 <div class="panel" role="dialog" aria-modal="true" aria-label="About Observarium" on:pointerdown|stopPropagation>
   <div class="header">
     <div class="title-row">
-      <svg
-        class="app-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.4"
-        stroke-linecap="round"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
-        <line x1="12" y1="1" x2="12" y2="3.5" />
-        <line x1="12" y1="20.5" x2="12" y2="23" />
-        <line x1="1" y1="12" x2="3.5" y2="12" />
-        <line x1="20.5" y1="12" x2="23" y2="12" />
-      </svg>
+      <AppIcon size="28" class="app-icon" />
       <span class="app-name">Observarium</span>
     </div>
     <button class="close-btn" on:click={close} aria-label="Close">✕</button>
@@ -145,7 +132,7 @@
     gap: 10px;
   }
 
-  .app-icon {
+  :global(.app-icon) {
     width: 28px;
     height: 28px;
     color: var(--accent);
@@ -232,7 +219,7 @@
     border-bottom-color: rgba(180, 0, 0, 0.25);
   }
 
-  :global([data-theme='nightly']) .app-icon {
+  :global([data-theme='nightly'] .app-icon) {
     color: #cc2200;
   }
 </style>

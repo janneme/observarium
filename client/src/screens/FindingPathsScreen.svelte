@@ -15,6 +15,7 @@
   } from '../lib/db.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { toggleTheme } from '../stores/theme.js'
+  import DeleteIcon from '../icons/DeleteIcon.svelte'
 
   export let contextObject = null
   export let initialSelectStart = false
@@ -860,12 +861,7 @@
               aria-label="Delete path"
               title="Delete path"
             >
-              <svg viewBox="0 0 32 32" aria-hidden="true">
-                <rect x="12" y="12" width="2" height="12" />
-                <rect x="18" y="12" width="2" height="12" />
-                <path d="M4,6V8H6V28a2,2,0,0,0,2,2H24a2,2,0,0,0,2-2V8h2V6ZM8,28V8H24V28Z" />
-                <rect x="12" y="2" width="8" height="2" />
-              </svg>
+              <DeleteIcon size="0.9rem" aria-hidden="true" />
             </button>
           </div>
 
@@ -1168,12 +1164,6 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-  }
-
-  .icon-btn svg {
-    width: 0.9rem;
-    height: 0.9rem;
-    fill: currentColor;
   }
 
   .icon-btn.danger {

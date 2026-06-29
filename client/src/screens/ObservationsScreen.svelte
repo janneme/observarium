@@ -16,6 +16,11 @@
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
+  import PlusIcon from '../icons/PlusIcon.svelte'
+  import EditIcon from '../icons/EditIcon.svelte'
+  import DeleteIcon from '../icons/DeleteIcon.svelte'
+  import AcceptIcon from '../icons/AcceptIcon.svelte'
+  import CloseIcon from '../icons/CloseIcon.svelte'
 
   export let onClose = () => {}
   export let onOpenObject = () => {}
@@ -88,10 +93,23 @@
     return fallbackLabelFromId(obj.id)
   }
 
+  function dsLetterCount(pairs) {
+    if (!Array.isArray(pairs)) return 0
+    const letters = new Set()
+    for (const p of pairs)
+      for (const c of String(p.comp || ''))
+        if (c >= 'A' && c <= 'Z') letters.add(c)
+    return letters.size
+  }
+
   function objectSymbolKind(obj) {
     if (!obj) return 'generic'
-    if (obj.type === 'double_star') return 'double_star'
-    if (obj.type === 'star') return 'star'
+    if (obj.type === 'double_star') return dsLetterCount(obj.pairs) > 2 ? 'double_star_multi' : 'double_star'
+    if (obj.type === 'star') {
+      if (obj.dbl === 'm') return 'double_star_multi'
+      if (obj.dbl) return 'double_star'
+      return 'star'
+    }
     if (obj.type === 'solar_system_body') return String(obj.name || '').toLowerCase() || 'generic'
 
     const type = String(obj.dsoType || '').toLowerCase()
@@ -642,9 +660,7 @@
     <button class="back-btn" type="button" on:click={onClose}>←</button>
     <span class="header-title">Observations</span>
     <button class="icon-btn add-observation" type="button" on:click={addObservation} title="Add observation">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" />
-      </svg>
+      <PlusIcon size="1rem" aria-hidden="true" />
     </button>
   </div>
 
@@ -672,11 +688,7 @@
                 on:click={(e) => onObservationEditClick(obs, e)}
                 title="Edit observation"
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    d="M4 20h4l10-10-4-4L4 16v4Zm12.7-12.7 1.3-1.3a1 1 0 0 1 1.4 0l.9.9a1 1 0 0 1 0 1.4L19 9.6l-2.3-2.3Z"
-                  />
-                </svg>
+                <EditIcon size="1rem" aria-hidden="true" />
               </button>
               <button
                 class="icon-btn danger"
@@ -684,12 +696,7 @@
                 on:click={(e) => onObservationDeleteClick(obs.date, e)}
                 title="Delete observation"
               >
-                <svg viewBox="0 0 32 32" aria-hidden="true">
-                  <rect x="12" y="12" width="2" height="12" />
-                  <rect x="18" y="12" width="2" height="12" />
-                  <path d="M4,6V8H6V28a2,2,0,0,0,2,2H24a2,2,0,0,0,2-2V8h2V6ZM8,28V8H24V28Z" />
-                  <rect x="12" y="2" width="8" height="2" />
-                </svg>
+                <DeleteIcon size="1rem" aria-hidden="true" />
               </button>
             </span>
           </div>
@@ -730,9 +737,7 @@
                       title="Accept"
                       aria-label="Accept"
                     >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M20 6 9 17l-5-5 1.4-1.4L9 14.2 18.6 4.6z" />
-                      </svg>
+                      <AcceptIcon size="1rem" aria-hidden="true" />
                     </button>
                     <button
                       class="icon-btn"
@@ -741,11 +746,7 @@
                       title="Cancel"
                       aria-label="Cancel"
                     >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z"
-                        />
-                      </svg>
+                      <CloseIcon size="1rem" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -1218,12 +1219,6 @@
     justify-content: center;
     padding: 0;
     line-height: 1;
-  }
-
-  .icon-btn svg {
-    width: 1rem;
-    height: 1rem;
-    fill: currentColor;
   }
 
   .icon-btn.danger {

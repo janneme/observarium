@@ -600,10 +600,19 @@
     ctx.globalAlpha = 1
   }
 
+  function dsLetterCount(pairs) {
+    if (!Array.isArray(pairs)) return 0
+    const letters = new Set()
+    for (const p of pairs)
+      for (const c of String(p.comp || ''))
+        if (c >= 'A' && c <= 'Z') letters.add(c)
+    return letters.size
+  }
+
   function drawStar(ctx, obj, pt, above) {
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
-    ctx.globalAlpha = above ? 0.92 : 0.22
+    ctx.globalAlpha = 0.92
     ctx.beginPath()
     ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
     let fill
@@ -646,7 +655,7 @@
   function addVariableRing(ctx, obj, pt, above) {
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
-    ctx.globalAlpha = above ? 0.7 : 0.15
+    ctx.globalAlpha = 0.7
     ctx.beginPath()
     const gap = Math.max(1.5, r * 1.5)
     const lw = Math.max(0.9, r * 1.0)
@@ -659,7 +668,7 @@
   }
 
   // Double star: short jutting line at 45° from the disk edge (Hipparcos convention)
-  function addDoubleJut(ctx, obj, pt, above) {
+  function addDoubleJut(ctx, obj, pt, above, multi = false) {
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
     const gap = 2
@@ -668,13 +677,29 @@
     // but stay clearly line-like around moderate FOV values such as 30°.
     const fovScale = Math.min(1, Math.pow(3 / Math.max(fov, 3), 0.25))
     const jut = Math.max(4.2, baseJut * fovScale)
-    ctx.globalAlpha = above ? 0.7 : 0.15
+    ctx.globalAlpha = 0.7
     ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
     ctx.lineWidth = 1.4
-    ctx.beginPath()
-    ctx.moveTo(pt.px + Math.SQRT1_2 * (r + gap), pt.py - Math.SQRT1_2 * (r + gap))
-    ctx.lineTo(pt.px + Math.SQRT1_2 * (r + gap + jut), pt.py - Math.SQRT1_2 * (r + gap + jut))
-    ctx.stroke()
+    const x0 = pt.px + Math.SQRT1_2 * (r + gap)
+    const y0 = pt.py - Math.SQRT1_2 * (r + gap)
+    const x1 = pt.px + Math.SQRT1_2 * (r + gap + jut)
+    const y1 = pt.py - Math.SQRT1_2 * (r + gap + jut)
+    if (multi) {
+      const off = 1.5 * Math.SQRT1_2
+      ctx.beginPath()
+      ctx.moveTo(x0 - off, y0 - off)
+      ctx.lineTo(x1 - off, y1 - off)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(x0 + off, y0 + off)
+      ctx.lineTo(x1 + off, y1 + off)
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.moveTo(x0, y0)
+      ctx.lineTo(x1, y1)
+      ctx.stroke()
+    }
     ctx.globalAlpha = 1
   }
 
@@ -1063,10 +1088,11 @@
         if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
         const above = aboveMap.get(obj.id) ?? false
         const isDouble = obj.type === 'double_star' || !!obj.dbl
+        const isMulti = (obj.type === 'double_star' && dsLetterCount(obj.pairs) > 2) || obj.dbl === 'm'
         const isVariable = Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1
         drawStar(ctx, obj, pt, above)
         if (isVariable) addVariableRing(ctx, obj, pt, above)
-        if (isDouble) addDoubleJut(ctx, obj, pt, above)
+        if (isDouble) addDoubleJut(ctx, obj, pt, above, isMulti)
         renderedPx.set(obj.id, { px: pt.px, py: pt.py })
         tally(isDouble ? 'double_star' : 'star')
       }

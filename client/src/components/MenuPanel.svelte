@@ -12,6 +12,26 @@
     pendingChanges,
   } from '../stores/ui.js'
   import { theme, toggleTheme } from '../stores/theme.js'
+  import NightModeIcon from '../icons/NightModeIcon.svelte'
+  import ConstellationLinesIcon from '../icons/ConstellationLinesIcon.svelte'
+  import ConstellationNamesIcon from '../icons/ConstellationNamesIcon.svelte'
+  import ConstellationBoundsIcon from '../icons/ConstellationBoundsIcon.svelte'
+  import DsoIcon from '../icons/DsoIcon.svelte'
+  import HorizonIcon from '../icons/HorizonIcon.svelte'
+  import SolarSystemIcon from '../icons/SolarSystemIcon.svelte'
+  import FinderViewIcon from '../icons/FinderViewIcon.svelte'
+  import FovCircleIcon from '../icons/FovCircleIcon.svelte'
+  import ObservationsIcon from '../icons/ObservationsIcon.svelte'
+  import TelescopeIcon from '../icons/TelescopeIcon.svelte'
+  import FinderQuizIcon from '../icons/FinderQuizIcon.svelte'
+  import ConstellationQuizIcon from '../icons/ConstellationQuizIcon.svelte'
+  import DsoQuizIcon from '../icons/DsoQuizIcon.svelte'
+  import PlanetQuizIcon from '../icons/PlanetQuizIcon.svelte'
+  import MoonQuizIcon from '../icons/MoonQuizIcon.svelte'
+  import RefreshIcon from '../icons/RefreshIcon.svelte'
+  import SyncIcon from '../icons/SyncIcon.svelte'
+  import InfoIcon from '../icons/InfoIcon.svelte'
+  import StrikeOverlayIcon from '../icons/StrikeOverlayIcon.svelte'
 
   export let open = false
 
@@ -31,21 +51,9 @@
       <!-- 1: Toggle color scheme -->
       <button class="grid-item" class:off={$theme !== 'nightly'} on:click={toggleTheme} aria-label="Toggle night mode">
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          </svg>
+          <NightModeIcon size="28" />
           {#if $theme !== 'nightly'}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">Night</span>
@@ -59,26 +67,9 @@
         aria-label="Toggle constellation lines"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
-            <circle cx="4" cy="6" r="2" fill="currentColor" stroke="none" />
-            <circle cx="20" cy="8" r="1.6" fill="currentColor" stroke="none" />
-            <circle cx="14" cy="19" r="1.6" fill="currentColor" stroke="none" />
-            <line x1="4" y1="6" x2="20" y2="8" stroke-linecap="round" />
-            <line x1="20" y1="8" x2="14" y2="19" stroke-linecap="round" />
-            <line x1="4" y1="6" x2="14" y2="19" stroke-linecap="round" />
-          </svg>
+          <ConstellationLinesIcon size="28" />
           {#if !$showConstellationLines}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">Const.<br />Lines (c)</span>
@@ -92,33 +83,9 @@
         aria-label="Toggle constellation names"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
-            <circle cx="4" cy="6" r="2" fill="currentColor" stroke="none" />
-            <circle cx="20" cy="8" r="1.6" fill="currentColor" stroke="none" />
-            <circle cx="14" cy="19" r="1.6" fill="currentColor" stroke="none" />
-            <line x1="8" y1="9" x2="13" y2="11" stroke-linecap="round" stroke-width="1.2" stroke-dasharray="1.5 1.5" />
-            <text
-              x="12"
-              y="6"
-              font-size="6"
-              text-anchor="middle"
-              fill="currentColor"
-              stroke="none"
-              style="font-style:italic">α</text
-            >
-          </svg>
+          <ConstellationNamesIcon size="28" />
           {#if !$showConstellationNames}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">Const.<br />Names (C)</span>
@@ -132,21 +99,9 @@
         aria-label="Toggle constellation boundaries"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2.2">
-            <polygon points="12,3 21,8 21,16 12,21 3,16 3,8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <ConstellationBoundsIcon size="28" />
           {#if !$showConstellationBoundaries}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">Const.<br />Bounds (b)</span>
@@ -160,22 +115,9 @@
         aria-label="Toggle deep sky objects"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
-            <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)" />
-            <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
-          </svg>
+          <DsoIcon size="28" />
           {#if !$showDsos}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">DSO (d)</span>
@@ -189,22 +131,9 @@
         aria-label="Toggle horizon"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <path d="M2 15 Q7 8 12 8 Q17 8 22 15" />
-            <line x1="2" y1="18" x2="22" y2="18" />
-          </svg>
+          <HorizonIcon size="28" />
           {#if !$showHorizon}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">Horizon (h)</span>
@@ -218,24 +147,9 @@
         aria-label="Toggle solar system"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-            <ellipse cx="12" cy="12" rx="9" ry="4" />
-            <circle cx="21" cy="12" r="1.5" fill="currentColor" stroke="none" />
-            <circle cx="3" cy="12" r="1" fill="currentColor" stroke="none" />
-          </svg>
+          <SolarSystemIcon size="28" />
           {#if !$showSolarSystem}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">Solar<br />System (s)</span>
@@ -249,26 +163,9 @@
         aria-label="Toggle finder view"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <circle cx="8" cy="14" r="4.5" />
-            <circle cx="16" cy="14" r="4.5" />
-            <path d="M8 9.5 L8 7" />
-            <path d="M16 9.5 L16 7" />
-            <path d="M8 7 Q12 5 16 7" />
-            <line x1="11" y1="14" x2="13" y2="14" stroke-width="1.2" />
-          </svg>
+          <FinderViewIcon size="28" />
           {#if !$finderViewActive}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">Finder<br />View (F)</span>
@@ -282,29 +179,9 @@
         aria-label="Toggle FOV circle"
       >
         <div class="icon-wrap">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-dasharray="3 2"
-            stroke-linecap="round"
-          >
-            <circle cx="12" cy="12" r="8" />
-            <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" style="stroke-dasharray:none" />
-          </svg>
+          <FovCircleIcon size="28" />
           {#if !$showFovCircle}
-            <svg class="strike" viewBox="0 0 24 24"
-              ><line
-                x1="3"
-                y1="3"
-                x2="21"
-                y2="21"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              /></svg
-            >
+            <span class="strike"><StrikeOverlayIcon /></span>
           {/if}
         </div>
         <span class="item-lbl">FOV<br />Circle</span>
@@ -320,12 +197,7 @@
         aria-label="Observations"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <rect x="4" y="2" width="14" height="20" rx="2" />
-            <line x1="8" y1="8" x2="16" y2="8" />
-            <line x1="8" y1="12" x2="16" y2="12" />
-            <line x1="8" y1="16" x2="13" y2="16" />
-          </svg>
+          <ObservationsIcon size="28" />
         </div>
         <span class="item-lbl">Observations (o)</span>
       </button>
@@ -340,13 +212,7 @@
         aria-label="Telescopes"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <rect x="2" y="9" width="15" height="6" rx="2" />
-            <line x1="17" y1="10" x2="22" y2="7" />
-            <line x1="17" y1="14" x2="22" y2="17" />
-            <line x1="9" y1="15" x2="7" y2="22" />
-            <line x1="9" y1="15" x2="11" y2="22" />
-          </svg>
+          <TelescopeIcon size="28" />
         </div>
         <span class="item-lbl">Telescopes (t)</span>
       </button>
@@ -354,15 +220,7 @@
       <!-- 11: Finder scope quiz -->
       <button class="grid-item" on:click={stub} aria-label="Finder scope quiz">
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-            <circle cx="10" cy="12" r="7" />
-            <line x1="10" y1="5" x2="10" y2="8" />
-            <line x1="10" y1="16" x2="10" y2="19" />
-            <line x1="3" y1="12" x2="6" y2="12" />
-            <line x1="14" y1="12" x2="17" y2="12" />
-            <path d="M19 4 Q21 4 21 6 Q21 7.5 19.5 7.5 L19.5 9" stroke-width="1.3" />
-            <circle cx="19.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
-          </svg>
+          <FinderQuizIcon size="28" />
         </div>
         <span class="item-lbl">Finder<br />Quiz</span>
       </button>
@@ -370,17 +228,7 @@
       <!-- 12: Constellation quiz -->
       <button class="grid-item" on:click={stub} aria-label="Constellation quiz">
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-            <circle cx="4" cy="8" r="1.8" fill="currentColor" stroke="none" />
-            <circle cx="13" cy="4" r="1.5" fill="currentColor" stroke="none" />
-            <circle cx="19" cy="10" r="1.5" fill="currentColor" stroke="none" />
-            <circle cx="14" cy="17" r="1.5" fill="currentColor" stroke="none" />
-            <line x1="4" y1="8" x2="13" y2="4" />
-            <line x1="13" y1="4" x2="19" y2="10" />
-            <line x1="19" y1="10" x2="14" y2="17" />
-            <path d="M4 19 Q5.5 17.5 7 18.5 Q8 19.5 7 20.5 L6.5 21.5" stroke-width="1.3" />
-            <circle cx="6.5" cy="22.5" r="0.75" fill="currentColor" stroke="none" />
-          </svg>
+          <ConstellationQuizIcon size="28" />
         </div>
         <span class="item-lbl">Const.<br />Quiz</span>
       </button>
@@ -388,12 +236,7 @@
       <!-- 13: Deep sky quiz -->
       <button class="grid-item" on:click={stub} aria-label="Deep sky quiz">
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-            <ellipse cx="11" cy="13" rx="8" ry="3.5" transform="rotate(-20 11 13)" />
-            <circle cx="11" cy="13" r="2" fill="currentColor" stroke="none" />
-            <path d="M19 3 Q21 3 21 5 Q21 6.5 19.5 6.5 L19.5 8" stroke-width="1.3" />
-            <circle cx="19.5" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
-          </svg>
+          <DsoQuizIcon size="28" />
         </div>
         <span class="item-lbl">DSO<br />Quiz</span>
       </button>
@@ -401,12 +244,7 @@
       <!-- 14: Find planet quiz -->
       <button class="grid-item" on:click={stub} aria-label="Find planet quiz">
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-            <circle cx="10" cy="14" r="5" />
-            <ellipse cx="10" cy="14" rx="9.5" ry="3" transform="rotate(-15 10 14)" />
-            <path d="M19 3 Q21 3 21 5 Q21 6.5 19.5 6.5 L19.5 8" stroke-width="1.3" />
-            <circle cx="19.5" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
-          </svg>
+          <PlanetQuizIcon size="28" />
         </div>
         <span class="item-lbl">Planet<br />Quiz</span>
       </button>
@@ -414,11 +252,7 @@
       <!-- 15: Moon quiz -->
       <button class="grid-item" on:click={stub} aria-label="Moon quiz">
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <path d="M18 13.5A7 7 0 1 1 10.5 6a5 5 0 0 0 7.5 7.5z" />
-            <path d="M19 3 Q21 3 21 5 Q21 6.5 19.5 6.5 L19.5 8" stroke-width="1.3" />
-            <circle cx="19.5" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
-          </svg>
+          <MoonQuizIcon size="28" />
         </div>
         <span class="item-lbl">Moon<br />Quiz</span>
       </button>
@@ -433,17 +267,7 @@
         aria-label="Update object data"
       >
         <div class="icon-wrap">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="1,4 1,10 7,10" />
-            <path d="M3.51 15a9 9 0 1 0 .49-4.07" />
-          </svg>
+          <RefreshIcon size="28" />
         </div>
         <span class="item-lbl">Update<br />Data (u)</span>
       </button>
@@ -458,18 +282,7 @@
         aria-label="Synchronize observations"
       >
         <div class="icon-wrap">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="23,4 23,10 17,10" />
-            <polyline points="1,20 1,14 7,14" />
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-          </svg>
+          <SyncIcon size="28" />
           {#if $pendingChanges > 0}
             <span class="badge">{$pendingChanges}</span>
           {/if}
@@ -487,11 +300,7 @@
         aria-label="About"
       >
         <div class="icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="16" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
+          <InfoIcon size="28" />
         </div>
         <span class="item-lbl">About (a)</span>
       </button>
@@ -552,17 +361,18 @@
     transition: opacity 150ms;
   }
 
-  .icon-wrap > svg:first-child {
-    width: 28px;
-    height: 28px;
-  }
-
   .strike {
     position: absolute;
     inset: 0;
     width: 28px;
     height: 28px;
     pointer-events: none;
+  }
+
+  .strike :global(svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
   }
 
   .grid-item.off .icon-wrap {

@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte'
+  import TickIcon from '../icons/TickIcon.svelte'
 
   export let checked = false
   export let label = ''
@@ -36,9 +37,7 @@
     on:keydown={onKeyDown}
   >
     {#if checked}
-      <svg viewBox="0 0 16 16" class="tick" aria-hidden="true">
-        <path d="M3.3 8.4 6.7 11.8 12.7 4.8" />
-      </svg>
+      <TickIcon size="0.8rem" aria-hidden="true" />
     {/if}
   </button>
   {#if label}
@@ -80,16 +79,6 @@
   .box.disabled {
     opacity: 0.45;
     cursor: not-allowed;
-  }
-
-  .tick {
-    width: 0.8rem;
-    height: 0.8rem;
-    stroke: currentColor;
-    stroke-width: 2;
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
   }
 
   .label {

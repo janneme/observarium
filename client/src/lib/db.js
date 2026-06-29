@@ -253,6 +253,15 @@ function _cloneSteps(steps) {
     .filter(Boolean)
 }
 
+export async function getObjectIdsWithFindingPaths() {
+  const all = (await getMeta('findingPaths')) || {}
+  return new Set(
+    Object.entries(all)
+      .filter(([, byStart]) => byStart && typeof byStart === 'object' && Object.keys(byStart).length > 0)
+      .map(([id]) => id),
+  )
+}
+
 export async function getFindingPathsForObject(objectId) {
   const all = (await getMeta('findingPaths')) || {}
   const byStart = all[objectId]

@@ -3,6 +3,8 @@
   import { selectedObject } from '../stores/selectedObject.js'
   import { searchViewActive } from '../stores/ui.js'
   import ObservationObjectSymbol from './ObservationObjectSymbol.svelte'
+  import HamburgerIcon from '../icons/HamburgerIcon.svelte'
+  import SearchIcon from '../icons/SearchIcon.svelte'
 
   export let time = new Date()
   export let menuOpen = false
@@ -44,10 +46,23 @@
     }
   })
 
+  function dsLetterCount(pairs) {
+    if (!Array.isArray(pairs)) return 0
+    const letters = new Set()
+    for (const p of pairs)
+      for (const c of String(p.comp || ''))
+        if (c >= 'A' && c <= 'Z') letters.add(c)
+    return letters.size
+  }
+
   function objectSymbolKind(obj) {
     if (!obj) return 'generic'
-    if (obj.type === 'double_star') return 'double_star'
-    if (obj.type === 'star') return 'star'
+    if (obj.type === 'double_star') return dsLetterCount(obj.pairs) > 2 ? 'double_star_multi' : 'double_star'
+    if (obj.type === 'star') {
+      if (obj.dbl === 'm') return 'double_star_multi'
+      if (obj.dbl) return 'double_star'
+      return 'star'
+    }
     if (obj.type === 'solar_system_body') return String(obj.name || '').toLowerCase() || 'generic'
 
     const type = String(obj.dsoType || '').toLowerCase()
@@ -167,25 +182,10 @@
 
     <div class="center-group">
       <button class="menu-btn" on:click={() => dispatch('menutoggle')} aria-label="Menu">
-        <svg width="22" height="16" viewBox="0 0 22 16" fill="none">
-          <line x1="1" y1="2" x2="21" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-          <line x1="1" y1="8" x2="21" y2="8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-          <line x1="1" y1="14" x2="21" y2="14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        </svg>
+        <HamburgerIcon />
       </button>
       <button class="search-btn" on:click={() => dispatch('searchtoggle')} aria-label="Search">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-        >
-          <circle cx="10.5" cy="10.5" r="6.5" />
-          <line x1="15.5" y1="15.5" x2="21" y2="21" />
-        </svg>
+        <SearchIcon />
       </button>
     </div>
 
