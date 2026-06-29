@@ -385,6 +385,60 @@ def _route_data_hash(path: str, method: str, _event: dict):
     return None
 
 
+def _finding_paths_key_for_user(username: str) -> str:
+    return f"finding-paths/{username}.json"
+
+
+def handle_get_finding_paths(event: dict) -> dict:
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    backend = storage_backend.get_backend()
+    key = _finding_paths_key_for_user(username)
+    try:
+        if not backend.exists(key):
+            return build_response(200, {})
+        data = backend.read_bytes(key)
+        raw = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+        return build_response(200, json.loads(raw))
+    except Exception:
+        return build_response(500, {"error": "Could not read finding paths"})
+
+
+def handle_save_finding_paths(event: dict) -> dict:
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    body = event.get("body") or ""
+    try:
+        data = json.loads(body) if isinstance(body, str) else body
+    except Exception:
+        return build_response(400, {"error": "Invalid JSON body"})
+
+    if not isinstance(data, dict):
+        return build_response(400, {"error": "Finding paths must be a JSON object"})
+
+    backend = storage_backend.get_backend()
+    key = _finding_paths_key_for_user(username)
+    try:
+        backend.write_bytes(key, json.dumps(data).encode("utf-8"))
+        return build_response(200, {"ok": True})
+    except Exception:
+        return build_response(500, {"error": "Could not save finding paths"})
+
+
+def _route_finding_paths(path: str, method: str, event: dict):
+    if path == "/finding-paths" and method == "GET":
+        return handle_get_finding_paths(event)
+    if path == "/finding-paths" and method == "POST":
+        return handle_save_finding_paths(event)
+    return None
+
+
 def _route_observations(path: str, method: str, event: dict):
     if path == "/observations" and method == "GET":
         return handle_get_observations(event)
@@ -413,6 +467,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
         _route_manifest,
         _route_data_hash,
         _route_observations,
+        _route_finding_paths,
     )
 
     for fn in route_funcs:

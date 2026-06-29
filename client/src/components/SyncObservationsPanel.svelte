@@ -1,24 +1,45 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte'
+  import LoginForm from './LoginForm.svelte'
   import {
     getAllObservations,
+    getAllFindingPaths,
     getPendingChangesCount,
     getPendingObservationDates,
     setPendingChangesCount,
     clearPendingObservationDates,
     replaceAllObservations,
+    replaceAllFindingPaths,
+    getFindingPathsChanges,
+    clearFindingPathsChanges,
   } from '../lib/db.js'
-  import { getObservations, saveObservations } from '../lib/api.js'
+  import { getObservations, saveObservations, getFindingPaths, saveFindingPaths } from '../lib/api.js'
   import { pendingChanges } from '../stores/ui.js'
 
   const dispatch = createEventDispatcher()
 
   let pendingCount = 0
   let pendingDates = []
+  let pendingFindingPathsCount = 0
   let loading = true
+
+  $: pendingSummary = [
+    pendingFindingPathsCount > 0
+      ? `${pendingFindingPathsCount} finding path${pendingFindingPathsCount === 1 ? '' : 's'}`
+      : null,
+    pendingCount > 0 ? `${pendingCount} observation${pendingCount === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ')
   let syncing = false
   let status = ''
   let errorMsg = ''
+  let authExpired = false
+
+  function onRelogin() {
+    authExpired = false
+    synchronize()
+  }
 
   function normalizeDate(dateText) {
     const d = new Date(`${dateText}T00:00:00`)
@@ -26,11 +47,49 @@
     return `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`
   }
 
+  function filterFinalPaths(allFp) {
+    const result = {}
+    for (const [objectId, byStart] of Object.entries(allFp || {})) {
+      const finalByStart = {}
+      for (const [startHip, path] of Object.entries(byStart || {})) {
+        const steps = path?.steps
+        if (Array.isArray(steps) && steps.length > 0 && steps[steps.length - 1]?.final === true) {
+          finalByStart[startHip] = path
+        }
+      }
+      if (Object.keys(finalByStart).length > 0) {
+        result[objectId] = finalByStart
+      }
+    }
+    return result
+  }
+
+  function countFinalPaths(allFp) {
+    let count = 0
+    for (const byStart of Object.values(allFp || {})) {
+      for (const path of Object.values(byStart || {})) {
+        const steps = path?.steps
+        if (Array.isArray(steps) && steps.length > 0 && steps[steps.length - 1]?.final === true) {
+          count++
+        }
+      }
+    }
+    return count
+  }
+
   async function loadState() {
     loading = true
-    const [count, dates] = await Promise.all([getPendingChangesCount(), getPendingObservationDates()])
+    const [count, dates, fpChanges, allFp] = await Promise.all([
+      getPendingChangesCount(),
+      getPendingObservationDates(),
+      getFindingPathsChanges(),
+      getAllFindingPaths(),
+    ])
     pendingCount = count
     pendingDates = dates
+    // null = key never written (migration): count only final paths as pending
+    pendingFindingPathsCount =
+      fpChanges != null ? fpChanges : countFinalPaths(allFp)
 
     // Fallback for older local state where dates were not tracked yet.
     if (pendingCount > 0 && pendingDates.length === 0) {
@@ -50,22 +109,41 @@
     status = ''
 
     try {
-      if (pendingCount > 0) {
-        const localObservations = await getAllObservations()
-        await saveObservations(localObservations)
-        await setPendingChangesCount(0)
-        await clearPendingObservationDates()
-        pendingChanges.set(0)
-        pendingCount = 0
-        pendingDates = []
+      if (pendingCount > 0 || pendingFindingPathsCount > 0) {
+        const [localObservations, localFindingPaths] = await Promise.all([
+          pendingCount > 0 ? getAllObservations() : Promise.resolve(null),
+          pendingFindingPathsCount > 0 ? getAllFindingPaths() : Promise.resolve(null),
+        ])
+        if (localObservations !== null) await saveObservations(localObservations)
+        if (localFindingPaths !== null) await saveFindingPaths(filterFinalPaths(localFindingPaths))
+        if (pendingCount > 0) {
+          await setPendingChangesCount(0)
+          await clearPendingObservationDates()
+          pendingChanges.set(0)
+          pendingCount = 0
+          pendingDates = []
+        }
+        if (pendingFindingPathsCount > 0) {
+          await clearFindingPathsChanges()
+          pendingChanges.set(0)
+          pendingFindingPathsCount = 0
+        }
       }
 
-      const serverObservations = await getObservations()
+      const [serverObservations, serverFindingPaths] = await Promise.all([
+        getObservations(),
+        getFindingPaths(),
+      ])
       await replaceAllObservations(Array.isArray(serverObservations) ? serverObservations : [])
+      await replaceAllFindingPaths(serverFindingPaths && typeof serverFindingPaths === 'object' ? serverFindingPaths : {})
       status = 'Synchronization completed.'
       dispatch('synced')
     } catch (err) {
-      errorMsg = err?.message || 'Synchronization failed.'
+      if (err?.authExpired) {
+        authExpired = true
+      } else {
+        errorMsg = err?.message || 'Synchronization failed.'
+      }
     } finally {
       syncing = false
     }
@@ -84,21 +162,22 @@
     {#if loading}
       <div class="hint">Loading...</div>
     {:else}
-      {#if errorMsg}
+      {#if authExpired}
+        <div class="session-expired-label">Session expired. Please log in again.</div>
+        <LoginForm submitLabel="Log In" on:loggedin={onRelogin} />
+      {:else if errorMsg}
         <div class="error-msg">{errorMsg}</div>
       {/if}
       {#if status}
         <div class="ok-msg">{status}</div>
       {/if}
 
-      {#if pendingCount <= 0}
+      {#if pendingCount <= 0 && pendingFindingPathsCount <= 0}
         <div class="hint">No local unsynchronized changes. You can still pull observations from server.</div>
       {:else}
-        <div class="summary">Pending changes: {pendingCount}</div>
-        <div class="label">Dates to synchronize:</div>
-        {#if pendingDates.length === 0}
-          <div class="hint small">No tracked dates found.</div>
-        {:else}
+        <div class="summary">Pending: {pendingSummary}</div>
+        {#if pendingDates.length > 0}
+          <div class="label">Observation dates:</div>
           <ul class="date-list">
             {#each pendingDates as d}
               <li>{normalizeDate(d)}</li>
@@ -109,9 +188,11 @@
 
       <div class="actions">
         <button class="btn ghost" type="button" on:click={() => dispatch('close')}>Back</button>
-        <button class="btn" type="button" on:click={synchronize} disabled={syncing}>
-          {syncing ? 'Synchronizing…' : 'Synchronize'}
-        </button>
+        {#if !authExpired}
+          <button class="btn" type="button" on:click={synchronize} disabled={syncing}>
+            {syncing ? 'Synchronizing…' : 'Synchronize'}
+          </button>
+        {/if}
       </div>
     {/if}
   </div>
@@ -215,6 +296,11 @@
   .hint.small {
     font-size: 0.8rem;
     opacity: 0.75;
+  }
+
+  .session-expired-label {
+    font-size: 0.85rem;
+    color: #ff9a9a;
   }
 
   .error-msg {

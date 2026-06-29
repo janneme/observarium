@@ -10,9 +10,11 @@
     getFindingPathsForObject,
     saveFindingPathForObject,
     deleteFindingPathForObject,
+    incrementFindingPathsChanges,
     getObjectsInArea,
     getSearchIndex,
   } from '../lib/db.js'
+  import { pendingChanges } from '../stores/ui.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { toggleTheme } from '../stores/theme.js'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
@@ -421,6 +423,11 @@
   async function savePath(startHip, path) {
     await saveFindingPathForObject(objectCtx.id, startHip, path)
     pathsByStart = { ...pathsByStart, [startHip]: path }
+    const steps = path?.steps
+    if (Array.isArray(steps) && steps.length > 0 && steps[steps.length - 1]?.final === true) {
+      await incrementFindingPathsChanges()
+      pendingChanges.update((n) => n + 1)
+    }
   }
 
   function applyPan(dx, dy, raC, decC, sizePx, fov) {
@@ -616,10 +623,19 @@
     const label = starsByHip.get(String(startHip))?.label || `HIP ${startHip}`
     confirmMessage = `Delete path from ${label}?`
     confirmAction = async () => {
+      const deletedSteps = pathsByStart[startHip]?.steps
+      const wasFinal =
+        Array.isArray(deletedSteps) &&
+        deletedSteps.length > 0 &&
+        deletedSteps[deletedSteps.length - 1]?.final === true
       await deleteFindingPathForObject(objectCtx.id, startHip)
       const next = { ...pathsByStart }
       delete next[startHip]
       pathsByStart = next
+      if (wasFinal) {
+        await incrementFindingPathsChanges()
+        pendingChanges.update((n) => n + 1)
+      }
       if (guideMode) {
         dispatch('close')
       } else {

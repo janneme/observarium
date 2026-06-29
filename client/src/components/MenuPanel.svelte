@@ -357,4 +357,9 @@
     padding: 0 3px;
     line-height: 1;
   }
+
+  :global([data-theme='nightly']) .badge {
+    background: #1a3a6e;
+    color: #ff4444;
+  }
 </style>

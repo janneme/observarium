@@ -1,13 +1,9 @@
 <script>
   import { push } from 'svelte-spa-router'
-  import CustomInput from '../components/CustomInput.svelte'
+  import LoginForm from '../components/LoginForm.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
-  import { login } from '../lib/api.js'
   import { runSync } from '../lib/datasync.js'
   import { keyboardActive } from '../stores/keyboard.js'
-
-  let username = ''
-  let password = ''
 
   const appVersion = import.meta.env.VITE_APP_VERSION_DATE || 'dev'
 
@@ -31,11 +27,7 @@
     return `${bytes} B`
   }
 
-  async function handleLoad() {
-    if (!hasToken && (!username || !password)) {
-      errorMsg = 'Enter username and password'
-      return
-    }
+  async function runDataSync() {
     phase = 'loading'
     errorMsg = ''
     objectsProgress = 0
@@ -43,28 +35,17 @@
     observationsDone = false
 
     try {
-      if (!hasToken) {
-        await login(username, password)
-      }
-
       const result = await runSync({
-        onObjectsProgress: (p) => {
-          objectsProgress = p
-        },
-        onImagesProgress: (p) => {
-          imagesProgress = p
-        },
-        onObservationsDone: () => {
-          observationsDone = true
-        },
+        onObjectsProgress: (p) => { objectsProgress = p },
+        onImagesProgress: (p) => { imagesProgress = p },
+        onObservationsDone: () => { observationsDone = true },
       })
       objectsSize = result.objectsSize
       imagesSize = result.imagesSize
       observationsSize = result.observationsSize
-
       phase = 'done'
     } catch (err) {
-      console.error('[WelcomeScreen] handleLoad failed:', err)
+      console.error('[WelcomeScreen] runDataSync failed:', err)
       phase = 'error'
       if (err.message && err.message.includes('401')) {
         hasToken = false
@@ -95,21 +76,19 @@
     {#if phase === 'idle' || phase === 'error'}
       <p class="welcome-text">Welcome. Load your observation data to get started.</p>
 
-      <div class="form">
-        {#if !hasToken}
-          <label for="username-input">Username</label>
-          <CustomInput id="username-input" bind:value={username} placeholder="username" />
-
-          <label for="password-input">Password</label>
-          <CustomInput id="password-input" bind:value={password} placeholder="password" mask={true} />
-        {/if}
-
+      {#if !hasToken}
+        <div class="form">
+          {#if errorMsg}
+            <div class="error-msg">{errorMsg}</div>
+          {/if}
+          <LoginForm submitLabel="Load Application Data" on:loggedin={runDataSync} />
+        </div>
+      {:else}
         {#if errorMsg}
           <div class="error-msg">{errorMsg}</div>
         {/if}
-      </div>
-
-      <button class="load-btn" on:click={handleLoad}>Load Application Data</button>
+        <button class="load-btn" on:click={runDataSync}>Load Application Data</button>
+      {/if}
     {/if}
 
     {#if phase === 'loading' || phase === 'done'}

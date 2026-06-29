@@ -273,6 +273,14 @@ export async function getFindingPathsForObject(objectId) {
   return out
 }
 
+export async function getAllFindingPaths() {
+  return (await getMeta('findingPaths')) || {}
+}
+
+export async function replaceAllFindingPaths(data) {
+  await setMeta('findingPaths', data && typeof data === 'object' ? data : {})
+}
+
 export async function saveFindingPathForObject(objectId, startHip, pathValue) {
   const all = (await getMeta('findingPaths')) || {}
   const key = String(startHip)
@@ -296,6 +304,21 @@ export async function deleteFindingPathForObject(objectId, startHip) {
   if (Object.keys(byStart).length === 0) delete next[objectId]
   else next[objectId] = byStart
   await setMeta('findingPaths', next)
+}
+
+export async function incrementFindingPathsChanges() {
+  const cur = await getMeta('findingPathsChanges')
+  await setMeta('findingPathsChanges', (Number.isFinite(Number(cur)) ? Number(cur) : 0) + 1)
+}
+
+export async function getFindingPathsChanges() {
+  const raw = await getMeta('findingPathsChanges')
+  if (raw == null) return null
+  return Number.isFinite(Number(raw)) ? Number(raw) : 0
+}
+
+export async function clearFindingPathsChanges() {
+  await setMeta('findingPathsChanges', 0)
 }
 
 export async function storeManifest(manifest) {

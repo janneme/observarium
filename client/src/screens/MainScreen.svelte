@@ -14,7 +14,7 @@
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
-  import { getObjectsInArea, getPendingChangesCount } from '../lib/db.js'
+  import { getObjectsInArea, getPendingChangesCount, getFindingPathsChanges } from '../lib/db.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { selectedObject } from '../stores/selectedObject.js'
@@ -480,7 +480,9 @@
   }
 
   onMount(() => {
-    getPendingChangesCount().then((n) => pendingChanges.set(n))
+    Promise.all([getPendingChangesCount(), getFindingPathsChanges()]).then(([obs, fp]) =>
+      pendingChanges.set((obs || 0) + (fp || 0)),
+    )
     window.addEventListener('keydown', handleKey)
     window.addEventListener('wheel', handleWheel, { passive: false })
     clockInterval = setInterval(() => {

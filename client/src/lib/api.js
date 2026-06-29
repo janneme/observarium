@@ -9,7 +9,11 @@ async function authFetch(path, opts = {}) {
   const headers = { ...(opts.headers || {}) }
   if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(`${SERVER_URL}${path}`, { ...opts, headers })
-  if (!res.ok) throw new Error(`${opts.method || 'GET'} ${path} failed: ${res.status}`)
+  if (!res.ok) {
+    const err = new Error(`${opts.method || 'GET'} ${path} failed: ${res.status}`)
+    if (res.status === 401) err.authExpired = true
+    throw err
+  }
   return res
 }
 
@@ -60,6 +64,20 @@ export async function saveObservations(observations) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(observations),
+  })
+  return res.json()
+}
+
+export async function getFindingPaths() {
+  const res = await authFetch('/finding-paths')
+  return res.json()
+}
+
+export async function saveFindingPaths(data) {
+  const res = await authFetch('/finding-paths', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
   })
   return res.json()
 }

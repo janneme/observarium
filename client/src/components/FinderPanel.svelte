@@ -63,7 +63,9 @@
     void checkPath()
   }
 
-  $: pathCount = Object.values(rawPaths).filter((p) => Array.isArray(p?.steps) && p.steps.length > 0).length
+  $: pathCount = Object.values(rawPaths).filter(
+    (p) => Array.isArray(p?.steps) && p.steps.length > 0 && p.steps[p.steps.length - 1]?.final === true,
+  ).length
 
   async function loadObjects() {
     const margin = FINDER_FOV * 2
@@ -91,7 +93,9 @@
       const byStart = paths && paths[checkId]
       const candidate = byStart && typeof byStart === 'object' ? byStart : {}
       rawPaths = candidate
-      hasPath = Object.values(candidate).some((p) => Array.isArray(p?.steps) && p.steps.length > 0)
+      hasPath = Object.values(candidate).some(
+        (p) => Array.isArray(p?.steps) && p.steps.length > 0 && p.steps[p.steps.length - 1]?.final === true,
+      )
     } catch {
       if (nonce !== pathCheckNonce) return
       hasPath = false
@@ -361,7 +365,10 @@
       }
     }
     guideOptions = Object.entries(rawPaths)
-      .filter(([, p]) => Array.isArray(p?.steps) && p.steps.length > 0)
+      .filter(
+        ([, p]) =>
+          Array.isArray(p?.steps) && p.steps.length > 0 && p.steps[p.steps.length - 1]?.final === true,
+      )
       .map(([startHip, path]) => ({
         startHip,
         label: hipLabels.get(String(startHip)) || `HIP ${startHip}`,
