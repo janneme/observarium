@@ -15,7 +15,6 @@
   let sessionExpired = false
 
   let availableSets = []
-  let chosenMag = null
   let currentMag = null
   let syncDate = null
 
@@ -44,6 +43,12 @@
 
   function handleKeydown(e) {
     if (e.key === 'Escape' && step !== 'updating') close()
+    if (step === 'picker' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const idx = parseInt(e.key, 10) - 1
+      if (!isNaN(idx) && idx >= 0 && idx < availableSets.length) {
+        handleUpdate(availableSets[idx].mag)
+      }
+    }
   }
 
   async function fetchManifest() {
@@ -66,7 +71,6 @@
   }
 
   async function handleUpdate(mag) {
-    chosenMag = mag
     step = 'updating'
     errorMsg = ''
     sessionExpired = false
@@ -89,8 +93,12 @@
       if (magChanged) {
         result = await runSync({
           mag,
-          onObjectsProgress: (p) => { objectsProgress = p },
-          onImagesProgress: (p) => { imagesProgress = p },
+          onObjectsProgress: (p) => {
+            objectsProgress = p
+          },
+          onImagesProgress: (p) => {
+            imagesProgress = p
+          },
         })
         objectsUpToDate = false
         imagesUpToDate = false
@@ -98,8 +106,12 @@
       } else {
         result = await runUpdateSync({
           mag,
-          onObjectsProgress: (p) => { objectsProgress = p },
-          onImagesProgress: (p) => { imagesProgress = p },
+          onObjectsProgress: (p) => {
+            objectsProgress = p
+          },
+          onImagesProgress: (p) => {
+            imagesProgress = p
+          },
         })
         objectsUpToDate = !!result.objectsUpToDate
         imagesUpToDate = !!result.imagesUpToDate
@@ -169,21 +181,16 @@
 
     {#if step === 'picker'}
       <p class="picker-label">
-        Select the option{#if currentMag != null && syncDate} (current data are up to magnitude {currentMag}, synchronized on {formatDate(syncDate)}){/if}:
+        Select the option{#if currentMag != null && syncDate}
+          (current data are up to magnitude {currentMag}, synchronized on {formatDate(syncDate)}){/if}:
       </p>
       <div class="picker">
-        {#each availableSets as set (set.mag)}
-          <button
-            class="pick-row"
-            on:click={() => handleUpdate(set.mag)}
-          >
-            <span class="pick-mag">Magnitude ≤ {set.mag}</span>
-            <span class="pick-size">{formatSize(set.total_size)}</span>
+        {#each availableSets as set, i (set.mag)}
+          <button class="pick-row" on:click={() => handleUpdate(set.mag)}>
+            <span class="pick-key">{i + 1}</span>
+            <strong>Up to magnitude {set.mag}</strong><span class="pick-size"> ({formatSize(set.total_size)})</span>
           </button>
         {/each}
-      </div>
-      <div class="actions">
-        <button class="action-btn" on:click={close}>Close</button>
       </div>
     {/if}
 
@@ -338,7 +345,9 @@
     color: inherit;
     cursor: pointer;
     font-size: 0.9rem;
-    transition: border-color 120ms, background 120ms;
+    transition:
+      border-color 120ms,
+      background 120ms;
     text-align: left;
   }
 
@@ -347,13 +356,24 @@
     background: rgba(127, 127, 127, 0.06);
   }
 
-  .pick-mag {
-    font-weight: 500;
-  }
-
   .pick-size {
     font-size: 0.8rem;
     opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pick-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.3em;
+    height: 1.3em;
+    font-size: 0.75rem;
+    border: 1px solid rgba(127, 127, 127, 0.35);
+    border-radius: 3px;
+    opacity: 0.65;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
     font-variant-numeric: tabular-nums;
   }
 

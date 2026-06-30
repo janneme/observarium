@@ -141,13 +141,19 @@
       <div class="hint">{noResultsHint}</div>
     {:else}
       {#each results as item (item.obj.id)}
-        <div class="result-row" on:click={async () => await accept(item)}>
+        <div
+          class="result-row"
+          role="button"
+          tabindex="0"
+          on:click={async () => await accept(item)}
+          on:keydown={async (e) => (e.key === 'Enter' || e.key === ' ') && (await accept(item))}
+        >
           <span class="result-label"
             >{#each item.spans as span}{#if span.hl}<span class="hl">{span.text}</span
                 >{:else}{span.text}{/if}{/each}{#if item.showCon && item.obj.constellation}{' '}({item.obj
                 .constellation}){/if}</span
           >
-          <div class="result-actions" on:click|stopPropagation>
+          <div class="result-actions" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
             {#if showDetailsAction}
               <button class="act-btn" on:click={() => details(item)} title="Details" aria-label="Details">ℹ</button>
             {/if}
@@ -296,7 +302,7 @@
     color: #fff;
   }
 
-/* Make CustomInput border visible on dark background */
+  /* Make CustomInput border visible on dark background */
   .search-overlay :global(.custom-input) {
     border-color: rgba(255, 255, 255, 0.18);
   }

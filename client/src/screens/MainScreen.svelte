@@ -14,7 +14,9 @@
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
+  import LoginScreen from './LoginScreen.svelte'
   import { getObjectsInArea, getPendingChangesCount, getFindingPathsChanges } from '../lib/db.js'
+  import { getTokenStatus } from '../lib/auth.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { selectedObject } from '../stores/selectedObject.js'
@@ -46,6 +48,8 @@
   let fov = 60
   let objects = []
   let loading = true
+  let viewportW = 0
+  let viewportH = 0
 
   const FOV_STEP = 0.2 // fractional FOV change per +/- keypress
   const PAN_STEP = 0.5 // fraction of FOV to pan per arrow keypress
@@ -75,6 +79,7 @@
   let showAbout = false
   let showSync = false
   let showObservationSync = false
+  let showObservationSyncLogin = false
   let showTelescopes = false
   let showObservations = false
   let showFindingPaths = false
@@ -90,15 +95,38 @@
     return Math.min(14, Math.ceil(Math.max(5, 5 + (9 * Math.log2(120 / f)) / Math.log2(60))))
   }
 
+  function adaptiveMagLimit(f) {
+    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(120 / f)) / Math.log2(60)))
+  }
+
+  function computeViewportMagRange(objs, magLimit, centerRa, centerDec, hFovDeg, vFovDeg) {
+    let min = Infinity,
+      max = -Infinity
+    const cosDec = Math.cos((centerDec * Math.PI) / 180)
+    for (const obj of objs) {
+      if (obj.type !== 'star' && obj.type !== 'double_star') continue
+      const m = Array.isArray(obj.mag) ? obj.mag[0] : obj.mag
+      if (m == null || m > magLimit) continue
+      const [ra, dec] = obj.pos
+      if (Math.abs(dec - centerDec) > vFovDeg / 2) continue
+      let dRa = Math.abs(ra - centerRa)
+      if (dRa > 180) dRa = 360 - dRa
+      if (dRa * cosDec > hFovDeg / 2) continue
+      if (m < min) min = m
+      if (m > max) max = m
+    }
+    return { min: min === Infinity ? null : min, max: max === -Infinity ? null : max }
+  }
+
   async function loadObjects() {
     if (fetching) return
     fetching = true
     const margin = fov * 1.5
-    objects = await getObjectsInArea(ra0 - margin, ra0 + margin, dec0 - margin, dec0 + margin, fovToMagLimit(fov))
+    objects = await getObjectsInArea(ra0 - margin, ra0 + margin, dec0 - margin, dec0 + margin, fovToMagLimit(minDimFov))
     loadRa0 = ra0
     loadDec0 = dec0
     loadMargin = margin
-    loadMagLimit = fovToMagLimit(fov)
+    loadMagLimit = fovToMagLimit(minDimFov)
     fetching = false
   }
 
@@ -123,7 +151,7 @@
       dRa > loadMargin * 0.5 ||
       dDec > loadMargin * 0.5 ||
       fov > loadMargin / 1.5 ||
-      fovToMagLimit(fov) > loadMagLimit
+      fovToMagLimit(minDimFov) > loadMagLimit
     ) {
       loadObjects()
     }
@@ -143,10 +171,6 @@
         ),
       ) / r
     )
-  }
-
-  function adaptiveMagLimit(fovDeg) {
-    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(120 / fovDeg)) / Math.log2(60)))
   }
 
   function applyPan(dx, dy, raC, decC, W, H, fovDeg) {
@@ -217,7 +241,7 @@
       tapY = clientY - rect.top
     const W = rect.width,
       H = rect.height
-    const magLim = adaptiveMagLimit(fov)
+    const magLim = adaptiveMagLimit(minDimFov)
     const dsoMagLim = 8 + 0.5 * (magLim - 5)
     let hits = []
     for (const obj of objects) {
@@ -313,8 +337,22 @@
     showObservations = true
   }
 
+  function openObservationSync() {
+    const { valid, nearExpiry } = getTokenStatus()
+    if (!valid || nearExpiry) {
+      showObservationSyncLogin = true
+    } else {
+      showObservationSync = true
+    }
+  }
+
   function handleKey(e) {
     if (e.key === 'Escape') {
+      if (showObservationSyncLogin) {
+        showObservationSyncLogin = false
+        e.preventDefault()
+        return
+      }
       if (showObservationSync) {
         showObservationSync = false
         e.preventDefault()
@@ -352,7 +390,7 @@
     if (get(finderViewActive)) return
 
     if (get(searchViewActive)) return
-    if (showObservations || showFindingPaths) return
+    if (showFindingPaths) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -363,6 +401,7 @@
     if (e.key === 'm') {
       searchViewActive.set(false)
       objectDetailsActive.set(false)
+      showObservations = false
       menuOpen = !menuOpen
       e.preventDefault()
       return
@@ -370,7 +409,7 @@
 
     if (e.key === 'S') {
       menuOpen = false
-      showObservationSync = true
+      openObservationSync()
       e.preventDefault()
       return
     }
@@ -381,6 +420,7 @@
     }
     if (e.key === 'f') {
       menuOpen = false
+      showObservations = false
       objectDetailsActive.set(false)
       searchViewActive.update((v) => !v)
       e.preventDefault()
@@ -418,6 +458,7 @@
       return
     }
     if (e.key === 'F') {
+      showObservations = false
       finderViewActive.update((v) => !v)
       e.preventDefault()
       return
@@ -505,7 +546,21 @@
     window.removeEventListener('wheel', handleWheel)
     clearInterval(clockInterval)
   })
+
+  $: minDimFov = viewportH > 0 ? (fov * Math.min(viewportW, viewportH)) / viewportH : fov
+  $: _vpRange = computeViewportMagRange(
+    objects,
+    Math.min(adaptiveMagLimit(minDimFov), parseFloat(localStorage.getItem('selectedMag') || '14')),
+    ra0,
+    dec0,
+    viewportH > 0 ? (fov * viewportW) / viewportH : fov,
+    fov,
+  )
+  $: displayMagMin = _vpRange.min
+  $: displayMagMax = _vpRange.max
 </script>
+
+<svelte:window bind:innerWidth={viewportW} bind:innerHeight={viewportH} />
 
 <div
   class="main-screen"
@@ -540,9 +595,13 @@
     {time}
     {menuOpen}
     finderMode={$finderViewActive}
+    fov={minDimFov}
+    magMin={displayMagMin}
+    magMax={displayMagMax}
     on:menutoggle={() => {
       searchViewActive.set(false)
       objectDetailsActive.set(false)
+      showObservations = false
       menuOpen = !menuOpen
     }}
     on:searchtoggle={() => {
@@ -576,7 +635,7 @@
       showObservations = true
     }}
     on:sync={() => {
-      showObservationSync = true
+      openObservationSync()
     }}
   />
 
@@ -615,6 +674,18 @@
     <TelescopesScreen
       onClose={() => {
         showTelescopes = false
+      }}
+    />
+  {/if}
+
+  {#if showObservationSyncLogin}
+    <LoginScreen
+      on:loggedin={() => {
+        showObservationSyncLogin = false
+        showObservationSync = true
+      }}
+      on:close={() => {
+        showObservationSyncLogin = false
       }}
     />
   {/if}

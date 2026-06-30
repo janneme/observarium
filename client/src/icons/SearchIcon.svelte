@@ -1,6 +1,7 @@
 <script>
   export let size = '18'
 </script>
+
 <svg
   viewBox="0 0 24 24"
   width={size}

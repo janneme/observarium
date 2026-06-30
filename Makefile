@@ -2,11 +2,15 @@
 AWS_PROFILE   ?= personal
 MAG           ?= 9
 
-.PHONY: help deploy deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test
+.PHONY: help deploy deploy-infra deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+
+deploy-infra: ## Init and apply Terraform only (no Lambda/data/client deploy)
+	cd infra && tofu init -upgrade
+	cd infra && tofu apply
 
 deploy: ## Apply Terraform, deploy Lambda, sync data, deploy client
 	@echo "==> OpenTofu init"
@@ -39,8 +43,9 @@ data-prep: ## Run the data preparation pipeline
 data-upload-local: ## Bundle and upload data to local storage backend
 	cd data_prep && STORAGE=local PYTHONPATH=.. uv run python data_upload.py $(if $(findstring command line,$(origin MAG)),--mag $(MAG),)
 
-data-upload-s3: ## Bundle and upload data to S3 (requires DATA_BUCKET)
-	cd data_prep && STORAGE=s3 DATA_BUCKET=$(DATA_BUCKET) PYTHONPATH=.. uv run python data_upload.py $(if $(findstring command line,$(origin MAG)),--mag $(MAG),)
+data-upload-s3: ## Bundle and upload data to S3 (DATA_BUCKET auto-detected from Terraform if unset)
+	@_bucket=$${DATA_BUCKET:-$$(cd infra && tofu output -raw data_bucket_name)}; \
+	cd data_prep && STORAGE=s3 DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python data_upload.py $(if $(findstring command line,$(origin MAG)),--mag $(MAG),)
 
 lint: ## Run ruff, pylint, eslint, prettier, and svelte-check on all packages
 	@printf '\033[1;36m==> Linting server\033[0m\n'

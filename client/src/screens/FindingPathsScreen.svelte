@@ -625,9 +625,7 @@
     confirmAction = async () => {
       const deletedSteps = pathsByStart[startHip]?.steps
       const wasFinal =
-        Array.isArray(deletedSteps) &&
-        deletedSteps.length > 0 &&
-        deletedSteps[deletedSteps.length - 1]?.final === true
+        Array.isArray(deletedSteps) && deletedSteps.length > 0 && deletedSteps[deletedSteps.length - 1]?.final === true
       await deleteFindingPathForObject(objectCtx.id, startHip)
       const next = { ...pathsByStart }
       delete next[startHip]
@@ -824,12 +822,21 @@
       {@const _gs = _gp?.steps || []}
       {@const _navP = stepTitleParts(_gs[activeStepIndex], activeStepIndex, _gp)}
       <div class="step-nav">
-        <button class="nav-btn" disabled={activeStepIndex === 0} on:click={() => selectStep(activeStepIndex - 1)}>‹</button>
+        <button class="nav-btn" disabled={activeStepIndex === 0} on:click={() => selectStep(activeStepIndex - 1)}
+          >‹</button
+        >
         <span class="step-nav-label">
           {activeStepIndex + 1}/{_gs.length}
-          <strong class="step-nav-name">{_navP.from}<span class="step-arrow">→</span>{_navP.to}{#if _navP.mx}<span class="step-mx">{_navP.mx}</span>{/if}</strong>
+          <strong class="step-nav-name"
+            >{_navP.from}<span class="step-arrow">→</span>{_navP.to}{#if _navP.mx}<span class="step-mx">{_navP.mx}</span
+              >{/if}</strong
+          >
         </span>
-        <button class="nav-btn" disabled={activeStepIndex === _gs.length - 1} on:click={() => selectStep(activeStepIndex + 1)}>›</button>
+        <button
+          class="nav-btn"
+          disabled={activeStepIndex === _gs.length - 1}
+          on:click={() => selectStep(activeStepIndex + 1)}>›</button
+        >
       </div>
     {/if}
   </div>
@@ -851,7 +858,8 @@
             {@const p = stepTitleParts(step, idx, recordingPath)}
             <div class="step-row" class:active={activeStepIndex === idx}>
               <button class="step-main" on:click={() => selectStep(idx)}>
-                {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span>{/if}
+                {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span
+                  >{/if}
               </button>
               {#if activeStepIndex === idx}
                 <div class="step-actions">
@@ -924,7 +932,9 @@
                 {@const p = stepTitleParts(step, idx, entry.path)}
                 <div class="step-row" class:active={activeStepIndex === idx}>
                   <button class="step-main" on:click={() => selectStep(idx)}>
-                    {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span>{/if}
+                    {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx"
+                        >{p.mx}</span
+                      >{/if}
                   </button>
                   {#if activeStepIndex === idx}
                     <div class="step-actions">

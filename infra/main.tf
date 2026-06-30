@@ -67,7 +67,8 @@ resource "aws_s3_bucket_cors_configuration" "data" {
       "http://127.0.0.1:6543"
     ]
     allowed_methods = ["GET"]
-    allowed_headers = ["Authorization", "Content-Type"]
+    allowed_headers = ["*"]
+    expose_headers  = ["Content-Length", "ETag"]
     max_age_seconds = 3600
   }
 }

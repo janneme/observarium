@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, onMount } from 'svelte'
   import CustomInput from './CustomInput.svelte'
   import { login } from '../lib/api.js'
 
@@ -11,6 +11,12 @@
   let password = ''
   let loading = false
   let errorMsg = ''
+  let usernameRef
+  let passwordRef
+
+  onMount(() => {
+    usernameRef.focus()
+  })
 
   async function handleSubmit() {
     if (!username || !password) {
@@ -32,10 +38,27 @@
 
 <div class="login-form">
   <label for="lf-username">Username</label>
-  <CustomInput id="lf-username" bind:value={username} placeholder="username" />
+  <CustomInput
+    id="lf-username"
+    bind:value={username}
+    bind:this={usernameRef}
+    outlined={true}
+    on:enter={handleSubmit}
+    on:tab={() => passwordRef.focus()}
+    on:shiftTab={() => passwordRef.focus()}
+  />
 
   <label for="lf-password">Password</label>
-  <CustomInput id="lf-password" bind:value={password} placeholder="password" mask={true} />
+  <CustomInput
+    id="lf-password"
+    bind:value={password}
+    bind:this={passwordRef}
+    outlined={true}
+    mask={true}
+    on:enter={handleSubmit}
+    on:tab={() => usernameRef.focus()}
+    on:shiftTab={() => usernameRef.focus()}
+  />
 
   {#if errorMsg}
     <div class="error-msg">{errorMsg}</div>

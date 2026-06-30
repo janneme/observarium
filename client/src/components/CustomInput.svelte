@@ -6,6 +6,7 @@
   export let placeholder = ''
   export let id = ''
   export let mask = false
+  export let outlined = false
 
   const dispatch = createEventDispatcher()
 
@@ -76,7 +77,15 @@
     el.blur()
   }
 
-  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter, shiftEnter }
+  function tab() {
+    dispatch('tab')
+  }
+
+  function shiftTab() {
+    dispatch('shiftTab')
+  }
+
+  const api = { insertChar, backspace, moveLeft, moveRight, moveUp, moveDown, enter, shiftEnter, tab, shiftTab }
 
   onDestroy(() => unregister(api))
 
@@ -87,6 +96,7 @@
   bind:this={el}
   tabindex="0"
   class="custom-input"
+  class:outlined
   on:focus={onFocus}
   on:blur={onBlur}
   role="textbox"
@@ -137,6 +147,13 @@
   }
   :global([data-theme='nightly']) .custom-input:focus {
     box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.25);
+  }
+  .custom-input.outlined {
+    border-color: rgba(127, 127, 127, 0.45);
+  }
+  .custom-input.outlined:focus {
+    border-color: rgba(127, 127, 127, 0.65);
+    box-shadow: 0 0 0 2px rgba(59, 99, 255, 0.25);
   }
   .placeholder {
     opacity: 0.5;

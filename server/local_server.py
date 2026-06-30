@@ -8,6 +8,7 @@ import argparse
 import json
 import mimetypes
 import os
+import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -139,8 +140,18 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
             result = lambda_handler(event, context=None)
             self._send_response_from_lambda(result)
         except Exception as e:
+            traceback.print_exc()
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
+            cors_origin = self._cors_origin()
+            if cors_origin:
+                self.send_header("Access-Control-Allow-Origin", cors_origin)
+                self.send_header(
+                    "Access-Control-Allow-Headers", "Authorization,Content-Type"
+                )
+                self.send_header(
+                    "Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS"
+                )
             self.end_headers()
             error_body = json.dumps({"error": f"Internal server error: {e!s}"})
             self.wfile.write(error_body.encode("utf-8"))

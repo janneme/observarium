@@ -1,6 +1,7 @@
 <script>
   export let size = '1em'
 </script>
+
 <svg
   viewBox="0 0 24 24"
   width={size}
@@ -18,5 +19,14 @@
     <circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" />
     <circle cx="21" cy="12" r="1" fill="currentColor" stroke="none" />
   </g>
-  <text x="12" y="13" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="currentColor" stroke="none">?</text>
+  <text
+    x="12"
+    y="13"
+    font-size="13"
+    font-weight="700"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    fill="currentColor"
+    stroke="none">?</text
+  >
 </svg>

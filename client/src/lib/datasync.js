@@ -46,7 +46,10 @@ export function objectIdFromDso(dso) {
   if (dso.m) return `dso_M${String(dso.m).padStart(3, '0')}`
   if (dso.ngc) return `dso_NGC${dso.ngc}`
   if (dso.ic) return `dso_IC${dso.ic}`
-  return null
+  if (dso.cald) return `dso_C${dso.cald}`
+  if (dso.name) return `dso_${dso.name.replace(/\s+/g, '_')}`
+  const [ra, dec] = dso.pos
+  return `dso_POS_${Math.round(ra * 1000)}_${Math.round(dec * 1000)}`
 }
 
 export function parseObjects(objectsJson) {
@@ -217,7 +220,7 @@ export async function runSync({ mag, onObjectsProgress, onImagesProgress, onObse
     objProg(bytesLoaded / totalBytes)
   }
 
-  await storeManifest(manifest)
+  await storeManifest(manifest, mag)
   const remoteDataHash = await getDataHash()
   if (remoteDataHash) await setMeta('dataHash', remoteDataHash)
   await setMeta('syncDate', new Date().toISOString())
@@ -350,7 +353,7 @@ export async function runUpdateSync({ mag, onObjectsProgress, onImagesProgress, 
   }
 
   if (!dataUpToDate && manifest) {
-    await storeManifest(manifest)
+    await storeManifest(manifest, mag)
     if (remoteDataHash) await setMeta('dataHash', remoteDataHash)
   }
   await setMeta('syncDate', new Date().toISOString())

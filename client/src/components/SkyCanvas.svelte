@@ -105,7 +105,7 @@
 
   function starRadius(mag) {
     const m = Array.isArray(mag) ? mag[0] : mag
-    const magLim = magLimitOverride ?? adaptiveMagLimit(fov)
+    const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
     const t = Math.max(0, Math.min(1, (magLim - m) / MAG_RANGE))
     const vmin = Math.min(W, H) / 100
     return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin
@@ -114,6 +114,9 @@
   // Log-linear interpolation: mag 5 at FOV_MAG5, mag 14 at FOV_MAG14.
   const FOV_MAG5 = 120 // FOV (°) where rendering depth floor is mag 5
   const FOV_MAG14 = 2 // FOV (°) where rendering depth ceiling is mag 14
+
+  // Use the shorter viewport dimension's FOV so rendering depth matches the TopBar display.
+  $: minDimFov = H > 0 ? (fov * Math.min(W, H)) / H : fov
 
   function adaptiveMagLimit(fovDeg) {
     return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
@@ -416,7 +419,7 @@
   function drawSolarSystem(ctx) {
     if (!solarSystemBodies.length) return
     const nightly = currentTheme === 'nightly'
-    const magLim = magLimitOverride ?? adaptiveMagLimit(fov)
+    const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
 
     for (const body of solarSystemBodies) {
       if (body.type !== 'sun' && body.type !== 'moon' && body.mag > magLim) continue
@@ -603,13 +606,11 @@
   function dsLetterCount(pairs) {
     if (!Array.isArray(pairs)) return 0
     const letters = new Set()
-    for (const p of pairs)
-      for (const c of String(p.comp || ''))
-        if (c >= 'A' && c <= 'Z') letters.add(c)
+    for (const p of pairs) for (const c of String(p.comp || '')) if (c >= 'A' && c <= 'Z') letters.add(c)
     return letters.size
   }
 
-  function drawStar(ctx, obj, pt, above) {
+  function drawStar(ctx, obj, pt) {
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
     ctx.globalAlpha = 0.92
@@ -652,7 +653,7 @@
   }
 
   // Variable star: solid ring around the disk (Hipparcos convention, amplitude ≥ 1 mag)
-  function addVariableRing(ctx, obj, pt, above) {
+  function addVariableRing(ctx, obj, pt) {
     const nightly = currentTheme === 'nightly'
     const r = starRadius(obj.mag ?? 5)
     ctx.globalAlpha = 0.7
@@ -1003,7 +1004,7 @@
     if (showConstellationNames) drawConstellationNames(ctx)
 
     const renderedPx = new Map()
-    const magLim = magLimitOverride ?? adaptiveMagLimit(fov)
+    const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
     // DSO limit: anchored at starMag=5→dsoMag=8, starMag=13→dsoMag=12 (linear in mag space).
     // DSOs are extended objects; their visual limit lags stars by 3 mags at naked-eye FOV,
     // converging to 1 mag below at large-aperture FOV.

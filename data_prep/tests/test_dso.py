@@ -150,7 +150,7 @@ class TestBuildDso:
 
 
 class TestSelectRows:
-    def test_messier_plus_top_non_messier(self, tmp_path: Path):
+    def test_messier_plus_non_messier_by_mag(self, tmp_path: Path):
         ngc = tmp_path / "ngc.csv"
         add = tmp_path / "add.csv"
         _write_openngc_csv(
@@ -234,12 +234,13 @@ class TestSelectRows:
             ],
         )
 
-        pipeline = DsoPipeline(tmp_path, tmp_path, non_messier_num=1)
+        pipeline = DsoPipeline(tmp_path, tmp_path, dso_mag_limit=11.2)
         rows = pipeline._select_rows([ngc, add], object_id=None)
         ids = [_catalogue_id(r) for r in rows]
         assert "M42" in ids
         assert "NGC224" in ids
-        assert "IC1" not in ids
+        assert "IC1" in ids    # mag 10.4 <= 11.2 → included
+        assert "IC2" not in ids  # mag 12.0 > 11.2 → excluded
 
     def test_object_filter(self, tmp_path: Path):
         csv_path = tmp_path / "ngc.csv"
@@ -266,12 +267,12 @@ class TestSelectRows:
                 },
             ],
         )
-        pipeline = DsoPipeline(tmp_path, tmp_path, non_messier_num=1)
+        pipeline = DsoPipeline(tmp_path, tmp_path)
         rows = pipeline._select_rows([csv_path], object_id="NGC224")
         assert len(rows) == 1
         assert _catalogue_id(rows[0]) == "NGC224"
 
-    def test_top_non_messier_filters_ineligible_before_cap(self, tmp_path: Path):
+    def test_non_messier_by_mag_filters_ineligible(self, tmp_path: Path):
         csv_path = tmp_path / "ngc.csv"
         _write_openngc_csv(
             csv_path,
@@ -310,7 +311,7 @@ class TestSelectRows:
                 },
             ],
         )
-        pipeline = DsoPipeline(tmp_path, tmp_path, non_messier_num=1)
-        rows = pipeline._top_non_messier(pipeline._read_rows([csv_path]))
+        pipeline = DsoPipeline(tmp_path, tmp_path)
+        rows = pipeline._non_messier_by_mag(pipeline._read_rows([csv_path]))
         assert len(rows) == 1
         assert _catalogue_id(rows[0]) == "NGC9003"

@@ -81,8 +81,10 @@ DSO_ADDENDUM_URL: str = (
 )
 DSO_ADDENDUM_FILENAME: str = "openngc_addendum.csv"
 
-#: Number of brightest non-Messier DSOs to include.
-NON_MESSIER_NUM: int = 250
+#: Magnitude ceiling for non-Messier DSOs written to dso.json.
+#: Matches the 0.8 * mag formula used by the upload script's per-set filter,
+#: applied at the highest available star magnitude (GAIA_DEFAULT_MAX_MAG = 14).
+DSO_MAX_MAG: float = round(0.8 * GAIA_DEFAULT_MAX_MAG, 1)
 
 # ---------------------------------------------------------------------------
 # Constellations (Stellarium modern IAU skyculture)

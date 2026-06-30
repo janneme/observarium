@@ -11,8 +11,8 @@ from config import (
     DSO_ADDENDUM_URL,
     DSO_MAIN_FILENAME,
     DSO_MAIN_URL,
+    DSO_MAX_MAG,
     EUROPE_MIN_DEC,
-    NON_MESSIER_NUM,
 )
 from downloader import Downloader
 
@@ -269,12 +269,12 @@ class DsoPipeline:
         sources_dir: Path,
         output_dir: Path,
         cache_dir: Path | None = None,
-        non_messier_num: int = NON_MESSIER_NUM,
+        dso_mag_limit: float = DSO_MAX_MAG,
         debug: bool = False,
     ) -> None:
         self._sources_dir = sources_dir
         self._output_dir = output_dir
-        self._non_messier_num = non_messier_num
+        self._dso_mag_limit = dso_mag_limit
         cache = cache_dir or sources_dir
         self._downloader = Downloader(cache, debug=debug)
 
@@ -316,11 +316,11 @@ class DsoPipeline:
             return [r for r in rows if _catalogue_id(r).upper() == wanted]
 
         messier = [r for r in rows if _messier_id(r.get("M", ""))]
-        non_messier = self._top_non_messier(rows)
+        non_messier = self._non_messier_by_mag(rows)
         return messier + non_messier
 
-    def _top_non_messier(self, rows: list[dict[str, str]]) -> list[dict[str, str]]:
-        ranked: list[tuple[float, dict[str, str]]] = []
+    def _non_messier_by_mag(self, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+        result: list[dict[str, str]] = []
         for row in rows:
             if _messier_id(row.get("M", "")):
                 continue
@@ -334,11 +334,10 @@ class DsoPipeline:
             if ra is None or dec is None or dec < EUROPE_MIN_DEC:
                 continue
             mag = _rank_mag(row)
-            if mag is None:
+            if mag is None or mag > self._dso_mag_limit:
                 continue
-            ranked.append((mag, row))
-        ranked.sort(key=lambda item: item[0])
-        return [row for _, row in ranked[: self._non_messier_num]]
+            result.append(row)
+        return result
 
     def _read_rows(self, csv_paths: list[Path]) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []

@@ -42,7 +42,6 @@
 {#if open}
   <div class="menu-panel" on:pointerdown|stopPropagation>
     <div class="menu-sections">
-
       <!-- Section 1: Constellation toggles -->
       <div class="section-row">
         <button
@@ -250,7 +249,6 @@
           <span class="item-lbl">About (a)</span>
         </button>
       </div>
-
     </div>
   </div>
 {/if}

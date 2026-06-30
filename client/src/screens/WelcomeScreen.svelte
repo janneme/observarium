@@ -16,7 +16,6 @@
   let errorMsg = ''
 
   let availableSets = []
-  let chosenMag = null
   let currentMag = null
   let syncDate = null
 
@@ -58,7 +57,6 @@
   }
 
   async function handleDownload(mag) {
-    chosenMag = mag
     step = 'downloading'
     errorMsg = ''
     objectsProgress = 0
@@ -74,9 +72,15 @@
     try {
       const result = await runSync({
         mag,
-        onObjectsProgress: (p) => { objectsProgress = p },
-        onImagesProgress: (p) => { imagesProgress = p },
-        onObservationsDone: () => { observationsDone = true },
+        onObjectsProgress: (p) => {
+          objectsProgress = p
+        },
+        onImagesProgress: (p) => {
+          imagesProgress = p
+        },
+        onObservationsDone: () => {
+          observationsDone = true
+        },
       })
       objectsSize = result.objectsSize
       imagesSize = result.imagesSize
@@ -138,14 +142,12 @@
 
     {#if step === 'picker'}
       <p class="welcome-text">
-        Select the option{#if currentMag != null && syncDate} (current data are up to magnitude {currentMag}, synchronized on {formatDate(syncDate)}){/if}:
+        Select the option{#if currentMag != null && syncDate}
+          (current data are up to magnitude {currentMag}, synchronized on {formatDate(syncDate)}){/if}:
       </p>
       <div class="picker">
         {#each availableSets as set (set.mag)}
-          <button
-            class="pick-row"
-            on:click={() => handleDownload(set.mag)}
-          >
+          <button class="pick-row" on:click={() => handleDownload(set.mag)}>
             <span class="pick-mag">Magnitude ≤ {set.mag}</span>
             <span class="pick-size">{formatSize(set.total_size)}</span>
           </button>
@@ -286,7 +288,9 @@
     color: var(--fg);
     cursor: pointer;
     font-size: 0.9rem;
-    transition: border-color 120ms, background 120ms;
+    transition:
+      border-color 120ms,
+      background 120ms;
     text-align: left;
   }
 

@@ -1,6 +1,7 @@
 <script>
   export let size = '1em'
 </script>
+
 <svg
   viewBox="0 0 24 24"
   width={size}
@@ -27,5 +28,14 @@
     <!-- Galaxy (bottom-right) -->
     <ellipse cx="18" cy="18" rx="4.5" ry="1.8" stroke="currentColor" />
   </g>
-  <text x="12" y="13" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="currentColor" stroke="none">?</text>
+  <text
+    x="12"
+    y="13"
+    font-size="13"
+    font-weight="700"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    fill="currentColor"
+    stroke="none">?</text
+  >
 </svg>

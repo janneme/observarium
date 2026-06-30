@@ -13,6 +13,9 @@
   export let time = new Date()
   export let menuOpen = false
   export let finderMode = false
+  export let fov = null
+  export let magMin = null
+  export let magMax = null
 
   let linkedDs = null
 
@@ -32,6 +35,18 @@
 
   let battery = null
   let batteryLevel = null
+  let isFullscreen = false
+  let fullscreenSupported = false
+
+  function onFullscreenChange() {
+    isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement)
+  }
+
+  function enterFullscreen() {
+    const el = document.documentElement
+    const fn = el.requestFullscreen ?? el.webkitRequestFullscreen
+    fn?.call(el).catch(() => {})
+  }
 
   function formatDate(d) {
     const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]
@@ -47,6 +62,9 @@
   }
 
   onMount(async () => {
+    fullscreenSupported = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled)
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange)
     try {
       battery = await navigator.getBattery()
       onBatteryUpdate()
@@ -58,6 +76,8 @@
   })
 
   onDestroy(() => {
+    document.removeEventListener('fullscreenchange', onFullscreenChange)
+    document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
     if (battery) {
       battery.removeEventListener('levelchange', onBatteryUpdate)
       battery.removeEventListener('chargingchange', onBatteryUpdate)
@@ -67,9 +87,7 @@
   function dsLetterCount(pairs) {
     if (!Array.isArray(pairs)) return 0
     const letters = new Set()
-    for (const p of pairs)
-      for (const c of String(p.comp || ''))
-        if (c >= 'A' && c <= 'Z') letters.add(c)
+    for (const p of pairs) for (const c of String(p.comp || '')) if (c >= 'A' && c <= 'Z') letters.add(c)
     return letters.size
   }
 
@@ -98,6 +116,17 @@
 
   function battFillW(level) {
     return Math.max(0, Math.round((13 * level) / 100))
+  }
+
+  $: isToday = time.toDateString() === new Date().toDateString()
+
+  function formatFov(f) {
+    if (f >= 1) return `${parseFloat(f.toPrecision(2))}°`
+    return `${parseFloat((f * 60).toPrecision(2))}′`
+  }
+
+  function formatMag(m) {
+    return m.toFixed(1)
   }
 
   function greekFromBayer(bayer) {
@@ -152,6 +181,7 @@
     if (obj?.hd != null) return `HD ${obj.hd}`
     if (obj?.sao != null) return `SAO ${obj.sao}`
     if (obj?.flam != null && obj?.constellation) return `${obj.flam} ${obj.constellation}`
+    if (String(obj?.id || '').startsWith('star_t2_')) return 'Unnamed'
     return String(obj?.id || 'Star')
   }
 
@@ -177,6 +207,7 @@
       return name ? name[0].toUpperCase() + name.slice(1) : 'Solar object'
     }
     if (obj.name) return obj.name
+    if (id.startsWith('star_t2_')) return 'Unnamed'
     return id.replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2')
   }
 
@@ -246,7 +277,11 @@
     if (obj.type === 'dso') {
       const catLabel = primaryCatalogueLabel(obj)
       const rawName = String(obj.name || '').trim()
-      const normalizedName = rawName.split(',').map((s) => s.trim()).filter(Boolean).join(', ')
+      const normalizedName = rawName
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(', ')
       const hasName = normalizedName && normalizedName.toLowerCase() !== catLabel.toLowerCase()
       const sizeStr = dsoSizeStr(obj)
       const magStr = obj.mag != null ? `mag. ${Array.isArray(obj.mag) ? obj.mag[0] : obj.mag}` : null
@@ -262,17 +297,41 @@
 
 <div class="top-bar" on:pointerdown|stopPropagation>
   <div class="row1">
-    <button class="datetime-btn" on:click={() => dispatch('timepick')}>
-      <span class="dt-date">{formatDate(time)}</span>
-      <span class="dt-sep"> </span>
-      <span class="dt-time">{formatTime(time)}</span>
-    </button>
+    <div class="left-group">
+      <button class="datetime-btn" on:click={() => dispatch('timepick')}>
+        {#if isToday}
+          <span class="dt-time">{formatTime(time)}</span>
+        {:else}
+          <span class="dt-date">{formatDate(time)}</span>
+        {/if}
+      </button>
+      {#if batteryLevel !== null}
+        <span class="batt-group">
+          <svg class="batt-icon" width="18" height="10" viewBox="0 0 18 10">
+            <rect x="0.5" y="0.5" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1" fill="none" />
+            <rect x="14.5" y="2.5" width="2.5" height="5" rx="1" fill="currentColor" />
+            <rect x="1.5" y="1.5" width={battFillW(batteryLevel)} height="7" rx="1" fill="currentColor" />
+          </svg>
+          <span class="batt-pct">{batteryLevel}%</span>
+        </span>
+      {/if}
+    </div>
 
     <div class="center-group">
-      <button class="toggle-btn" class:active={$searchViewActive} on:click={() => dispatch('searchtoggle')} aria-label="Search">
+      <button
+        class="toggle-btn"
+        class:active={$searchViewActive}
+        on:click={() => dispatch('searchtoggle')}
+        aria-label="Search"
+      >
         <SearchIcon />
       </button>
-      <button class="toggle-btn" class:active={$finderViewActive} on:click={() => finderViewActive.update((v) => !v)} aria-label="Finder view">
+      <button
+        class="toggle-btn"
+        class:active={$finderViewActive}
+        on:click={() => finderViewActive.update((v) => !v)}
+        aria-label="Finder view"
+      >
         <FinderViewIcon />
       </button>
       <button class="toggle-btn" class:active={$theme === 'nightly'} on:click={toggleTheme} aria-label="Night mode">
@@ -281,18 +340,21 @@
       <button class="menu-btn" on:click={() => dispatch('menutoggle')} aria-label="Menu">
         <HamburgerIcon />
       </button>
+      {#if fullscreenSupported && !isFullscreen}
+        <button class="toggle-btn fs-btn" on:click={enterFullscreen} aria-label="Enter fullscreen">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <path d="M1 5V1h4M10 1h4v4M14 10v4h-4M5 14H1v-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      {/if}
     </div>
 
-    <div class="battery-area">
-      {#if batteryLevel !== null}
-        <svg class="batt-icon" width="18" height="10" viewBox="0 0 18 10">
-          <rect x="0.5" y="0.5" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1" fill="none" />
-          <rect x="14.5" y="2.5" width="2.5" height="5" rx="1" fill="currentColor" />
-          <rect x="1.5" y="1.5" width={battFillW(batteryLevel)} height="7" rx="1" fill="currentColor" />
-        </svg>
-        <span class="batt-pct">{batteryLevel}%</span>
-      {:else}
-        <span class="batt-unknown">—</span>
+    <div class="right-info">
+      {#if fov != null}
+        <span>{formatFov(fov)}</span>
+      {/if}
+      {#if magMin != null && magMax != null}
+        <span>, m. {formatMag(magMin)}–{formatMag(magMax)}</span>
       {/if}
     </div>
   </div>
@@ -306,6 +368,7 @@
       on:keydown={(e) => e.key === 'Enter' && dispatch('objectdetails')}
     >
       <span class="obj-icon"><ObservationObjectSymbol kind={objectSymbolKind($selectedObject)} /></span>
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
       <span class="obj-name">{@html selectedObjLabel($selectedObject, linkedDs)}</span>
     </div>
   {/if}
@@ -318,10 +381,8 @@
     left: 0;
     right: 0;
     z-index: 10;
-    background: var(--surface-bg);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     color: var(--surface-fg);
+    pointer-events: none;
   }
 
   .row1 {
@@ -330,6 +391,16 @@
     align-items: center;
     height: 2.75rem;
     padding: 0 0.6rem;
+    background: var(--surface-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .left-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   .datetime-btn {
@@ -339,7 +410,6 @@
     padding: 0;
     display: flex;
     align-items: baseline;
-    gap: 0;
     font-size: 0.82rem;
     cursor: pointer;
     text-align: left;
@@ -347,9 +417,6 @@
 
   .dt-date {
     opacity: 0.6;
-  }
-  .dt-sep {
-    width: 0.4em;
   }
   .dt-time {
     font-variant-numeric: tabular-nums;
@@ -388,38 +455,54 @@
     opacity: 1;
   }
 
-  .battery-area {
-    display: flex;
+  .fs-btn {
+    opacity: 0.55;
+  }
+
+  .batt-group {
+    display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 0.3rem;
-    font-size: 0.78rem;
+    gap: 3px;
     opacity: 0.7;
   }
 
   .batt-icon {
     flex-shrink: 0;
   }
+
   .batt-pct {
-    font-variant-numeric: tabular-nums;
+    font-size: 0.7rem;
+    line-height: 1;
   }
-  .batt-unknown {
-    opacity: 0.4;
+
+  .right-info {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    font-size: 0.78rem;
+    opacity: 0.7;
+    white-space: nowrap;
   }
 
   .row2 {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.1rem;
     height: 2rem;
-    padding: 0 0.75rem;
-    border-top: 1px solid rgba(127, 127, 127, 0.12);
+    padding: 0 0.6rem 0 0.35rem;
+    background: var(--surface-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 0 0 8px 0;
     font-size: 0.82rem;
     cursor: pointer;
+    pointer-events: auto;
+    max-width: calc(100vw - 1rem);
   }
 
   .row2:hover {
-    background: rgba(127, 127, 127, 0.06);
+    background: var(--surface-bg);
+    filter: brightness(1.08);
   }
 
   .obj-icon {
@@ -428,7 +511,6 @@
     flex-shrink: 0;
   }
   .obj-name {
-    flex: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

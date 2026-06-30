@@ -393,6 +393,7 @@
       const name = id.slice(6).replace(/_/g, ' ').trim()
       if (name) return name[0].toUpperCase() + name.slice(1)
     }
+    if (id.startsWith('star_t2_')) return 'Unnamed'
     return id.replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2') || '—'
   }
 
@@ -767,9 +768,6 @@
     text-align: right;
   }
 
-  .moon-section {
-  }
-
   .moon-row {
     display: flex;
     align-items: center;
@@ -816,9 +814,6 @@
 
   .spect-sep {
     opacity: 0.5;
-  }
-
-  .note-section {
   }
 
   .note-text {

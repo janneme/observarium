@@ -43,15 +43,15 @@ def human_size(n: int) -> str:
     return f"{size:.2f}PB"
 
 
-def _filter_dso_by_mag(dso_grouped: dict, mag: int) -> dict:
-    """Remove non-Messier DSOs whose magnitude exceeds `mag`."""
+def _filter_dso_by_mag(dso_grouped: dict, mag_limit: float) -> dict:
+    """Remove non-Messier DSOs whose magnitude exceeds `mag_limit`."""
     filtered: dict = {}
     for constellation, objects in dso_grouped.items():
         kept = [
             obj for obj in objects
             if "m" in obj  # Messier objects always included
             or obj.get("mag") is None  # no magnitude data → include
-            or obj["mag"] <= mag
+            or obj["mag"] <= mag_limit
         ]
         if kept:
             filtered[constellation] = kept
@@ -82,7 +82,7 @@ def _collect_json(mag: int | None = None) -> dict:
             except Exception:
                 data = fh.read().decode("utf-8")
         if name == "dso.json" and mag is not None and isinstance(data, dict):
-            data = _filter_dso_by_mag(data, mag)
+            data = _filter_dso_by_mag(data, 0.8 * mag)
         out[p.stem] = data
     return out
 

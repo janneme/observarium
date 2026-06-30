@@ -256,7 +256,7 @@
         return
       }
       if (e.key.length === 1) {
-        const match = guideOptions.find(opt => opt.label.toLowerCase().startsWith(e.key.toLowerCase()))
+        const match = guideOptions.find((opt) => opt.label.toLowerCase().startsWith(e.key.toLowerCase()))
         if (match) pickGuide(match.startHip)
         e.preventDefault()
         e.stopPropagation()
@@ -365,10 +365,7 @@
       }
     }
     guideOptions = Object.entries(rawPaths)
-      .filter(
-        ([, p]) =>
-          Array.isArray(p?.steps) && p.steps.length > 0 && p.steps[p.steps.length - 1]?.final === true,
-      )
+      .filter(([, p]) => Array.isArray(p?.steps) && p.steps.length > 0 && p.steps[p.steps.length - 1]?.final === true)
       .map(([startHip, path]) => ({
         startHip,
         label: hipLabels.get(String(startHip)) || `HIP ${startHip}`,
@@ -386,9 +383,7 @@
   function dsLetterCount(pairs) {
     if (!Array.isArray(pairs)) return 0
     const letters = new Set()
-    for (const p of pairs)
-      for (const c of String(p.comp || ''))
-        if (c >= 'A' && c <= 'Z') letters.add(c)
+    for (const p of pairs) for (const c of String(p.comp || '')) if (c >= 'A' && c <= 'Z') letters.add(c)
     return letters.size
   }
 
@@ -586,7 +581,9 @@
       <button class="finder-btn" on:click={switchToMain}>Switch to normal view</button>
       <button class="finder-btn" on:click={openSearch}>Find object</button>
       {#if hasPath}
-        <button class="finder-btn" on:click={openGuidePicker}>Paths{' '}<span class="guide-btn-count">({pathCount})</span></button>
+        <button class="finder-btn" on:click={openGuidePicker}
+          >Paths{' '}<span class="guide-btn-count">({pathCount})</span></button
+        >
       {/if}
       {#if $selectedObject}
         <button class="finder-btn" on:click={recordPath}>Add finding path</button>
@@ -601,7 +598,9 @@
       <div class="guide-picker-list">
         {#each guideOptions as opt}
           <button class="finder-btn" on:click={() => pickGuide(opt.startHip)}>
-            <strong>{opt.label}</strong>{' '}<span class="opt-steps">({opt.stepCount} {opt.stepCount === 1 ? 'step' : 'steps'})</span>
+            <strong>{opt.label}</strong>{' '}<span class="opt-steps"
+              >({opt.stepCount} {opt.stepCount === 1 ? 'step' : 'steps'})</span
+            >
           </button>
         {/each}
       </div>

@@ -96,9 +96,7 @@
   function dsLetterCount(pairs) {
     if (!Array.isArray(pairs)) return 0
     const letters = new Set()
-    for (const p of pairs)
-      for (const c of String(p.comp || ''))
-        if (c >= 'A' && c <= 'Z') letters.add(c)
+    for (const p of pairs) for (const c of String(p.comp || '')) if (c >= 'A' && c <= 'Z') letters.add(c)
     return letters.size
   }
 
@@ -769,9 +767,7 @@
                   on:click={(e) => onAddObjectClick(obs.date, e)}
                   title="Add object"
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" />
-                  </svg>
+                  <PlusIcon size="1rem" aria-hidden="true" />
                 </button>
               </div>
 
@@ -833,11 +829,7 @@
                             on:click={(e) => onObjectEditClick(obs.date, entry, e)}
                             title="Edit"
                           >
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <path
-                                d="M4 20h4l10-10-4-4L4 16v4Zm12.7-12.7 1.3-1.3a1 1 0 0 1 1.4 0l.9.9a1 1 0 0 1 0 1.4L19 9.6l-2.3-2.3Z"
-                              />
-                            </svg>
+                            <EditIcon size="1rem" aria-hidden="true" />
                           </button>
                           <button
                             class="icon-btn danger"
@@ -845,12 +837,7 @@
                             on:click={(e) => onObjectDeleteClick(obs.date, entry, e)}
                             title="Delete"
                           >
-                            <svg viewBox="0 0 32 32" aria-hidden="true">
-                              <rect x="12" y="12" width="2" height="12" />
-                              <rect x="18" y="12" width="2" height="12" />
-                              <path d="M4,6V8H6V28a2,2,0,0,0,2,2H24a2,2,0,0,0,2-2V8h2V6ZM8,28V8H24V28Z" />
-                              <rect x="12" y="2" width="8" height="2" />
-                            </svg>
+                            <DeleteIcon size="1rem" aria-hidden="true" />
                           </button>
                         </span>
                       </div>

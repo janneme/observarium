@@ -128,6 +128,10 @@ export function handleKeyDown(e) {
     } else if (e.key === 'ArrowDown') {
       cur.moveDown()
       label = 'DOWN'
+    } else if (e.key === 'Tab') {
+      if (e.shiftKey && typeof cur.shiftTab === 'function') cur.shiftTab()
+      else if (typeof cur.tab === 'function') cur.tab()
+      label = 'TAB'
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       cur.insertChar(e.key)
       label = e.key === ' ' ? 'SPACE' : e.key

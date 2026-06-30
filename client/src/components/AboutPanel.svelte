@@ -66,8 +66,6 @@
       <dd>{valBytes('imagesBytes')}</dd>
       <dt>User data</dt>
       <dd>{valBytes('userDataBytes')}</dd>
-      <dt>Total local (estimated)</dt>
-      <dd>{valBytes('totalEstimatedBytes')}</dd>
     </dl>
 
     <h3 class="section-head">Objects</h3>

@@ -1,6 +1,7 @@
 <script>
   export let size = '1em'
 </script>
+
 <svg viewBox="0 0 32 32" width={size} height={size} fill="currentColor" {...$$restProps}>
   <rect x="12" y="12" width="2" height="12" />
   <rect x="18" y="12" width="2" height="12" />

@@ -18,10 +18,10 @@ from pathlib import Path
 from asteroids import SolarSystemPipeline
 from config import (
     ASTEROID_MAX_MAGNITUDE,
+    DSO_MAX_MAG,
     EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
     MIN_MOON_ITEM_SIZE,
-    NON_MESSIER_NUM,
 )
 from constellations import ConstellationPipeline
 from dso import DsoPipeline
@@ -97,12 +97,12 @@ def parse_args() -> argparse.Namespace:
         help='Fetch a named group of related data (e.g. "stars").',
     )
     parser.add_argument(
-        "--non-messier-num",
-        type=int,
-        default=NON_MESSIER_NUM,
-        metavar="INT",
-        dest="non_messier_num",
-        help="Number of brightest non-Messier DSOs to include (default: %(default)s).",
+        "--dso-max-mag",
+        type=float,
+        default=DSO_MAX_MAG,
+        metavar="FLOAT",
+        dest="dso_max_mag",
+        help="Magnitude ceiling for non-Messier DSOs in dso.json (default: %(default)s).",
     )
     parser.add_argument(
         "--debug",
@@ -272,7 +272,7 @@ def _build_runners(
             _SOURCES_DIR,
             _OUTPUT_DIR,
             cache_dir=_CACHE_DIR,
-            non_messier_num=args.non_messier_num,
+            dso_mag_limit=args.dso_max_mag,
             debug=args.debug,
         ).run(object_id=args.object),
         "constellations": lambda: ConstellationPipeline(

@@ -133,14 +133,18 @@ def handle_images_hash() -> dict:
 
 
 def handle_manifest(mag: int | None = None) -> dict:
-    """Read manifest.json; inject presigned URLs for `mag` set only when mag is given."""
+    """Read manifest.json; inject presigned URLs for `mag` set when mag is given."""
     backend = storage_backend.get_backend()
     manifest = json.loads(backend.read_bytes("manifest.json"))
     if mag is not None:
         for s in manifest.get("sets", []):
             if s.get("mag") == mag:
-                s["stars_t1"]["url"] = backend.generate_presigned_get(s["stars_t1"]["filename"])
-                s["objects"]["url"] = backend.generate_presigned_get(s["objects"]["filename"])
+                s["stars_t1"]["url"] = backend.generate_presigned_get(
+                    s["stars_t1"]["filename"]
+                )
+                s["objects"]["url"] = backend.generate_presigned_get(
+                    s["objects"]["filename"]
+                )
                 for chunk in s.get("t2_chunks", []):
                     chunk["url"] = backend.generate_presigned_get(chunk["filename"])
                 break
@@ -216,7 +220,10 @@ def _get_username_from_event(event: dict) -> str:
     token = _get_bearer_token_from_event(event)
     if not token:
         raise PermissionError("Authorization required")
-    claims = verify_jwt(token)
+    try:
+        claims = verify_jwt(token)
+    except Exception as exc:
+        raise PermissionError("Invalid token") from exc
     sub = claims.get("sub")
     if not sub:
         raise PermissionError("Invalid token: missing sub")
@@ -234,9 +241,9 @@ def handle_get_observations(event: dict) -> dict:
     except PermissionError:
         return build_response(401, {"error": "Authorization required"})
 
-    backend = storage_backend.get_backend()
     key = _observations_key_for_user(username)
     try:
+        backend = storage_backend.get_backend()
         if not backend.exists(key):
             return build_response(200, [])
         data = backend.read_bytes(key)
@@ -244,6 +251,7 @@ def handle_get_observations(event: dict) -> dict:
         arr = json.loads(raw)
         return build_response(200, arr)
     except Exception:
+        traceback.print_exc()
         return build_response(500, {"error": "Could not read observations"})
 
 
@@ -263,12 +271,13 @@ def handle_save_observations(event: dict) -> dict:
     if not isinstance(data, list):
         return build_response(400, {"error": "Observations must be a JSON array"})
 
-    backend = storage_backend.get_backend()
     key = _observations_key_for_user(username)
     try:
+        backend = storage_backend.get_backend()
         backend.write_bytes(key, json.dumps(data).encode("utf-8"))
         return build_response(200, {"ok": True})
     except Exception:
+        traceback.print_exc()
         return build_response(500, {"error": "Could not save observations"})
 
 
@@ -279,15 +288,16 @@ def handle_delete_observation(event: dict, date: str) -> dict:
     except PermissionError:
         return build_response(401, {"error": "Authorization required"})
 
-    backend = storage_backend.get_backend()
     key = _observations_key_for_user(username)
     try:
+        backend = storage_backend.get_backend()
         if not backend.exists(key):
             return build_response(404, {"error": "Not found"})
         data = backend.read_bytes(key)
         raw = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
         arr = json.loads(raw)
     except Exception:
+        traceback.print_exc()
         return build_response(500, {"error": "Could not read observations"})
 
     # Filter out entries with matching date
@@ -296,6 +306,7 @@ def handle_delete_observation(event: dict, date: str) -> dict:
         backend.write_bytes(key, json.dumps(new_arr).encode("utf-8"))
         return build_response(200, {"ok": True})
     except Exception:
+        traceback.print_exc()
         return build_response(500, {"error": "Could not save observations"})
 
 
@@ -393,24 +404,27 @@ def _finding_paths_key_for_user(username: str) -> str:
 
 
 def handle_get_finding_paths(event: dict) -> dict:
+    """Return the stored finding paths for the authenticated user."""
     try:
         username = _get_username_from_event(event)
     except PermissionError:
         return build_response(401, {"error": "Authorization required"})
 
-    backend = storage_backend.get_backend()
     key = _finding_paths_key_for_user(username)
     try:
+        backend = storage_backend.get_backend()
         if not backend.exists(key):
             return build_response(200, {})
         data = backend.read_bytes(key)
         raw = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
         return build_response(200, json.loads(raw))
     except Exception:
+        traceback.print_exc()
         return build_response(500, {"error": "Could not read finding paths"})
 
 
 def handle_save_finding_paths(event: dict) -> dict:
+    """Persist the finding paths object for the authenticated user."""
     try:
         username = _get_username_from_event(event)
     except PermissionError:
@@ -425,12 +439,13 @@ def handle_save_finding_paths(event: dict) -> dict:
     if not isinstance(data, dict):
         return build_response(400, {"error": "Finding paths must be a JSON object"})
 
-    backend = storage_backend.get_backend()
     key = _finding_paths_key_for_user(username)
     try:
+        backend = storage_backend.get_backend()
         backend.write_bytes(key, json.dumps(data).encode("utf-8"))
         return build_response(200, {"ok": True})
     except Exception:
+        traceback.print_exc()
         return build_response(500, {"error": "Could not save finding paths"})
 
 

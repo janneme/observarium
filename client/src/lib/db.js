@@ -2,7 +2,7 @@ import { openDB as idbOpenDB } from 'idb'
 import { SEARCH_ALIASES } from './customObjects.js'
 
 const DB_NAME = 'observarium'
-const DB_VERSION = 3
+const DB_VERSION = 5
 
 const RA_BUCKET = 5
 const DEC_BUCKET = 5
@@ -59,6 +59,12 @@ async function getDB() {
           // Stale star records from the objects store must be removed; they will
           // be reloaded as CSV blobs on next data download.
           transaction.objectStore('objects').clear()
+        }
+        if (oldVersion < 5) {
+          // Guard needed: DB may already be at version 4 without this store.
+          if (!db.objectStoreNames.contains('stars_named')) {
+            db.createObjectStore('stars_named', { keyPath: 'id' })
+          }
         }
       },
       // Another connection (e.g. another tab) is trying to upgrade the DB.
@@ -160,8 +166,7 @@ function _parseT2Csv(csv) {
     const colour = COLOR_PALETTE[parseInt(c[4], 10)] || COLOR_PALETTE[7]
     const hip = c[5] ? parseInt(c[5], 10) : null
     const hd = c[6] ? parseInt(c[6], 10) : null
-    const id = hip ? `star_HIP${hip}` : hd ? `star_HD${hd}` : null
-    if (!id) continue
+    const id = hip ? `star_HIP${hip}` : hd ? `star_HD${hd}` : `star_t2_${c[1]}_${c[2]}`
     const star = {
       id,
       type: 'star',
@@ -176,6 +181,33 @@ function _parseT2Csv(csv) {
     if (c[8]) star.dist = parseFloat(c[8])
     if (c[9]) star.pm_ra = parseFloat(c[9])
     if (c[10]) star.pm_dec = parseFloat(c[10])
+    stars.push(star)
+  }
+  return stars
+}
+
+// Like _parseT2Csv but skips stars without HIP/HD — used to populate stars_named.
+function _parseT2CsvNamedOnly(csv) {
+  const lines = csv.split('\n')
+  const stars = []
+  for (const line of lines) {
+    if (!line) continue
+    const c = line.split(',')
+    if (!c[5] && !c[6]) continue
+    const hip = c[5] ? parseInt(c[5], 10) : null
+    const hd = c[6] ? parseInt(c[6], 10) : null
+    const id = hip ? `star_HIP${hip}` : `star_HD${hd}`
+    const star = {
+      id,
+      type: 'star',
+      pos: [parseFloat(c[1]), parseFloat(c[2])],
+      mag: _parseMag(c[3]),
+      clr: COLOR_PALETTE[parseInt(c[4], 10)] || COLOR_PALETTE[7],
+      zone: parseInt(c[0], 10),
+    }
+    if (hip) star.hip = hip
+    if (hd) star.hd = hd
+    if (c[7]) star.spect = c[7]
     stars.push(star)
   }
   return stars
@@ -201,8 +233,15 @@ export async function storeTier1Blob(csvText) {
 export async function bulkPutZoneT2Blobs(items) {
   // items: Array<{zone: number, csv: string}>
   const db = await getDB()
-  const tx = db.transaction('zones_t2', 'readwrite')
-  await Promise.all(items.map((item) => tx.store.put(item)))
+  const hasNamed = db.objectStoreNames.contains('stars_named')
+  const stores = hasNamed ? ['zones_t2', 'stars_named'] : ['zones_t2']
+  const tx = db.transaction(stores, 'readwrite')
+  const puts = items.map((item) => tx.objectStore('zones_t2').put(item))
+  if (hasNamed) {
+    const namedStars = items.flatMap((item) => _parseT2CsvNamedOnly(item.csv))
+    namedStars.forEach((s) => puts.push(tx.objectStore('stars_named').put(s)))
+  }
+  await Promise.all(puts)
   await tx.done
 }
 
@@ -221,9 +260,7 @@ export async function hasData() {
   }
   const selectedMag = localStorage.getItem('selectedMag')
   const mag = selectedMag ? parseInt(selectedMag, 10) : null
-  const activeSet = mag != null
-    ? manifest.sets?.find((s) => s.mag === mag)
-    : manifest.sets?.[0]
+  const activeSet = mag != null ? manifest.sets?.find((s) => s.mag === mag) : manifest.sets?.[0]
   if (!activeSet) return false
   const completed = await getCompletedChunks()
   return activeSet.t2_chunks.every((c) => completed.has(c.filename)) && !!(await getMeta('stars_t1'))
@@ -231,9 +268,12 @@ export async function hasData() {
 
 export async function clearAllStarAndObjectData() {
   const db = await getDB()
-  const tx = db.transaction(['zones_t2', 'objects'], 'readwrite')
+  const hasNamed = db.objectStoreNames.contains('stars_named')
+  const stores = hasNamed ? ['zones_t2', 'objects', 'stars_named'] : ['zones_t2', 'objects']
+  const tx = db.transaction(stores, 'readwrite')
   await tx.objectStore('zones_t2').clear()
   await tx.objectStore('objects').clear()
+  if (hasNamed) await tx.objectStore('stars_named').clear()
   await tx.done
   await db.delete('meta', 'stars_t1')
   _tier1Cache = null
@@ -339,7 +379,7 @@ export async function clearFindingPathsChanges() {
   await setMeta('findingPathsChanges', 0)
 }
 
-export async function storeManifest(manifest) {
+export async function storeManifest(manifest, chosenMag) {
   const stored = {
     sets: manifest.sets.map((set) => ({
       mag: set.mag,
@@ -350,7 +390,7 @@ export async function storeManifest(manifest) {
     })),
   }
   await setMeta('dataManifest', stored)
-  const activeSet = manifest.sets?.[0]
+  const activeSet = (chosenMag != null ? manifest.sets?.find((s) => s.mag === chosenMag) : null) ?? manifest.sets?.[0]
   if (activeSet?.stats) {
     await setMeta('catalogueStats', activeSet.stats)
   }
@@ -484,46 +524,26 @@ function _countDsosFromMeta(objCounts) {
 
 export async function getAboutStats() {
   const db = await getDB()
-  const [
-    observations,
-    starStats,
-    objCounts,
-    findingPaths,
-    starsT1,
-    constellations,
-    solarSystem,
-    moonFeatures,
-    manifest,
-  ] = await Promise.all([
+  const [observations, starStats, objCounts, findingPaths, manifest] = await Promise.all([
     db.getAll('observations'),
     getMeta('catalogueStats'),
     getMeta('catalogueObjectCounts'),
     getMeta('findingPaths'),
-    getMeta('stars_t1'),
-    getMeta('constellations'),
-    getMeta('solar_system'),
-    getMeta('moon_features'),
     getMeta('dataManifest'),
   ])
 
-  const [objectsBytes, zonesBytes, imagesBytes, observationsBytes] = await Promise.all([
-    _storeBytes(db, 'objects'),
-    _storeBytes(db, 'zones_t2'),
+  const [imagesBytes, observationsBytes] = await Promise.all([
     _storeBytes(db, 'images'),
     _storeBytes(db, 'observations'),
   ])
 
-  const objectMetaBytes =
-    _roughBytes(starsT1) +
-    _roughBytes(starStats) +
-    _roughBytes(objCounts) +
-    _roughBytes(constellations) +
-    _roughBytes(solarSystem) +
-    _roughBytes(moonFeatures) +
-    _roughBytes(manifest)
   const findingPathsBytes = _roughBytes(findingPaths)
 
-  const estimate = await navigator.storage?.estimate?.()
+  const selectedMag = Number(localStorage.getItem('selectedMag')) || null
+  const activeSet =
+    (selectedMag != null ? manifest?.sets?.find((s) => s.mag === selectedMag) : null) ?? manifest?.sets?.[0]
+  const objectDataBytes = activeSet?.total_size ?? null
+
   const starsCount =
     (Number(starStats?.stars_t1) || 0) +
     (Number(starStats?.stars_t2) || 0) +
@@ -532,10 +552,9 @@ export async function getAboutStats() {
   const dsoCount = _countDsosFromMeta(objCounts)
 
   return {
-    objectDataBytes: objectsBytes + zonesBytes + objectMetaBytes,
+    objectDataBytes,
     imagesBytes,
     userDataBytes: observationsBytes + findingPathsBytes,
-    totalEstimatedBytes: estimate?.usage ?? null,
     starsCount,
     dsoCount,
     findingPathsCount: _countFindingPaths(findingPaths),
@@ -687,13 +706,16 @@ export async function getObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_lim
 // Search index
 // --------------------------------------------------------------------------
 
-// Returns all Tier-1 stars (already in-memory) plus every record from the
-// objects store (DSOs, double stars).  Used by SearchPanel to build its index.
+// Returns T1 stars, DSOs/double-stars, and named T2 stars (those with HIP/HD).
+// Used by SearchPanel to build its index.
 export async function getSearchIndex() {
   await _ensureTier1Loaded()
   const db = await getDB()
-  const stored = await db.getAll('objects')
-  const all = [..._tier1Cache, ...stored]
+  const [stored, namedT2] = await Promise.all([
+    db.getAll('objects'),
+    db.objectStoreNames.contains('stars_named') ? db.getAll('stars_named') : Promise.resolve([]),
+  ])
+  const all = [..._tier1Cache, ...stored, ...namedT2]
   return all.map((obj) => {
     const aliases = SEARCH_ALIASES[obj.id]
     return aliases ? { ...obj, aliases } : obj

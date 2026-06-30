@@ -1,6 +1,5 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte'
-  import LoginForm from './LoginForm.svelte'
   import {
     getAllObservations,
     getAllFindingPaths,
@@ -34,12 +33,6 @@
   let syncing = false
   let status = ''
   let errorMsg = ''
-  let authExpired = false
-
-  function onRelogin() {
-    authExpired = false
-    synchronize()
-  }
 
   function normalizeDate(dateText) {
     const d = new Date(`${dateText}T00:00:00`)
@@ -88,8 +81,7 @@
     pendingCount = count
     pendingDates = dates
     // null = key never written (migration): count only final paths as pending
-    pendingFindingPathsCount =
-      fpChanges != null ? fpChanges : countFinalPaths(allFp)
+    pendingFindingPathsCount = fpChanges != null ? fpChanges : countFinalPaths(allFp)
 
     // Fallback for older local state where dates were not tracked yet.
     if (pendingCount > 0 && pendingDates.length === 0) {
@@ -130,26 +122,23 @@
         }
       }
 
-      const [serverObservations, serverFindingPaths] = await Promise.all([
-        getObservations(),
-        getFindingPaths(),
-      ])
+      const [serverObservations, serverFindingPaths] = await Promise.all([getObservations(), getFindingPaths()])
       await replaceAllObservations(Array.isArray(serverObservations) ? serverObservations : [])
-      await replaceAllFindingPaths(serverFindingPaths && typeof serverFindingPaths === 'object' ? serverFindingPaths : {})
+      await replaceAllFindingPaths(
+        serverFindingPaths && typeof serverFindingPaths === 'object' ? serverFindingPaths : {},
+      )
       status = 'Synchronization completed.'
       dispatch('synced')
     } catch (err) {
-      if (err?.authExpired) {
-        authExpired = true
-      } else {
-        errorMsg = err?.message || 'Synchronization failed.'
-      }
+      errorMsg = err?.message || 'Synchronization failed.'
     } finally {
       syncing = false
     }
   }
 
-  onMount(loadState)
+  onMount(() => {
+    loadState()
+  })
 </script>
 
 <div class="overlay" on:pointerdown|stopPropagation>
@@ -162,10 +151,7 @@
     {#if loading}
       <div class="hint">Loading...</div>
     {:else}
-      {#if authExpired}
-        <div class="session-expired-label">Session expired. Please log in again.</div>
-        <LoginForm submitLabel="Log In" on:loggedin={onRelogin} />
-      {:else if errorMsg}
+      {#if errorMsg}
         <div class="error-msg">{errorMsg}</div>
       {/if}
       {#if status}
@@ -173,7 +159,7 @@
       {/if}
 
       {#if pendingCount <= 0 && pendingFindingPathsCount <= 0}
-        <div class="hint">No local unsynchronized changes. You can still pull observations from server.</div>
+        <div class="hint">Up to date.</div>
       {:else}
         <div class="summary">Pending: {pendingSummary}</div>
         {#if pendingDates.length > 0}
@@ -187,12 +173,9 @@
       {/if}
 
       <div class="actions">
-        <button class="btn ghost" type="button" on:click={() => dispatch('close')}>Back</button>
-        {#if !authExpired}
-          <button class="btn" type="button" on:click={synchronize} disabled={syncing}>
-            {syncing ? 'Synchronizing…' : 'Synchronize'}
-          </button>
-        {/if}
+        <button class="btn" type="button" on:click={synchronize} disabled={syncing}>
+          {syncing ? 'Synchronizing…' : 'Synchronize'}
+        </button>
       </div>
     {/if}
   </div>
@@ -284,23 +267,9 @@
     cursor: default;
   }
 
-  .ghost {
-    background: transparent;
-  }
-
   .hint {
     color: rgba(255, 255, 255, 0.72);
     font-size: 0.85rem;
-  }
-
-  .hint.small {
-    font-size: 0.8rem;
-    opacity: 0.75;
-  }
-
-  .session-expired-label {
-    font-size: 0.85rem;
-    color: #ff9a9a;
   }
 
   .error-msg {
