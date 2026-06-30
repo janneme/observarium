@@ -219,8 +219,26 @@ export async function hasData() {
     const count = await db.count('objects')
     return count > 0
   }
+  const selectedMag = localStorage.getItem('selectedMag')
+  const mag = selectedMag ? parseInt(selectedMag, 10) : null
+  const activeSet = mag != null
+    ? manifest.sets?.find((s) => s.mag === mag)
+    : manifest.sets?.[0]
+  if (!activeSet) return false
   const completed = await getCompletedChunks()
-  return manifest.t2_chunks.every((c) => completed.has(c.filename)) && !!(await getMeta('stars_t1'))
+  return activeSet.t2_chunks.every((c) => completed.has(c.filename)) && !!(await getMeta('stars_t1'))
+}
+
+export async function clearAllStarAndObjectData() {
+  const db = await getDB()
+  const tx = db.transaction(['zones_t2', 'objects'], 'readwrite')
+  await tx.objectStore('zones_t2').clear()
+  await tx.objectStore('objects').clear()
+  await tx.done
+  await db.delete('meta', 'stars_t1')
+  _tier1Cache = null
+  await setMeta('completedChunks', [])
+  await db.delete('meta', 'dataManifest')
 }
 
 export async function getMeta(key) {
@@ -323,14 +341,18 @@ export async function clearFindingPathsChanges() {
 
 export async function storeManifest(manifest) {
   const stored = {
-    version: manifest.version,
-    stars_t1: { filename: manifest.stars_t1.filename, hash: manifest.stars_t1.hash, size: manifest.stars_t1.size },
-    objects: { filename: manifest.objects.filename, hash: manifest.objects.hash, size: manifest.objects.size },
-    t2_chunks: manifest.t2_chunks.map(({ filename, hash, size, zones }) => ({ filename, hash, size, zones })),
+    sets: manifest.sets.map((set) => ({
+      mag: set.mag,
+      total_size: set.total_size,
+      stars_t1: { filename: set.stars_t1.filename, hash: set.stars_t1.hash, size: set.stars_t1.size },
+      objects: { filename: set.objects.filename, hash: set.objects.hash, size: set.objects.size },
+      t2_chunks: set.t2_chunks.map(({ filename, hash, size, zones }) => ({ filename, hash, size, zones })),
+    })),
   }
   await setMeta('dataManifest', stored)
-  if (manifest.stats) {
-    await setMeta('catalogueStats', manifest.stats)
+  const activeSet = manifest.sets?.[0]
+  if (activeSet?.stats) {
+    await setMeta('catalogueStats', activeSet.stats)
   }
 }
 

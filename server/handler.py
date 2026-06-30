@@ -132,18 +132,18 @@ def handle_images_hash() -> dict:
         return {"hash": None}
 
 
-def handle_manifest() -> dict:
-    """Read manifest.json and augment with pre-signed download URLs."""
+def handle_manifest(mag: int | None = None) -> dict:
+    """Read manifest.json; inject presigned URLs for `mag` set only when mag is given."""
     backend = storage_backend.get_backend()
     manifest = json.loads(backend.read_bytes("manifest.json"))
-    manifest["stars_t1"]["url"] = backend.generate_presigned_get(
-        manifest["stars_t1"]["filename"]
-    )
-    manifest["objects"]["url"] = backend.generate_presigned_get(
-        manifest["objects"]["filename"]
-    )
-    for chunk in manifest.get("t2_chunks", []):
-        chunk["url"] = backend.generate_presigned_get(chunk["filename"])
+    if mag is not None:
+        for s in manifest.get("sets", []):
+            if s.get("mag") == mag:
+                s["stars_t1"]["url"] = backend.generate_presigned_get(s["stars_t1"]["filename"])
+                s["objects"]["url"] = backend.generate_presigned_get(s["objects"]["filename"])
+                for chunk in s.get("t2_chunks", []):
+                    chunk["url"] = backend.generate_presigned_get(chunk["filename"])
+                break
     return manifest
 
 
@@ -367,7 +367,10 @@ def _route_manifest(path: str, method: str, event: dict):
             print(f"[auth] token rejected: {exc}")
             return build_response(401, {"error": "Invalid token"})
         try:
-            out = handle_manifest()
+            params = event.get("queryStringParameters") or {}
+            mag_str = params.get("mag")
+            mag = int(mag_str) if mag_str is not None else None
+            out = handle_manifest(mag=mag)
             return build_response(200, out)
         except Exception:
             traceback.print_exc()

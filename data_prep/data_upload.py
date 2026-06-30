@@ -1,16 +1,16 @@
 """Bundle objects and images and sync to storage backend.
 
 Usage:
-  MAG=9 STORAGE=local python3 data_prep/data_upload.py
+  python3 data_prep/data_upload.py            # upload all locally prepared magnitude sets
+  python3 data_prep/data_upload.py --mag 12   # upload only magnitude 12
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
-import os
 import sys
 import zipfile
-from datetime import date
 from pathlib import Path
 
 # Ensure repo root on sys.path so python_lib is importable
@@ -43,6 +43,21 @@ def human_size(n: int) -> str:
     return f"{size:.2f}PB"
 
 
+def _filter_dso_by_mag(dso_grouped: dict, mag: int) -> dict:
+    """Remove non-Messier DSOs whose magnitude exceeds `mag`."""
+    filtered: dict = {}
+    for constellation, objects in dso_grouped.items():
+        kept = [
+            obj for obj in objects
+            if "m" in obj  # Messier objects always included
+            or obj.get("mag") is None  # no magnitude data → include
+            or obj["mag"] <= mag
+        ]
+        if kept:
+            filtered[constellation] = kept
+    return filtered
+
+
 def _collect_json(mag: int | None = None) -> dict:
     out: dict = {}
     for p in sorted(DATA_OUT.glob("*.json")):
@@ -63,9 +78,12 @@ def _collect_json(mag: int | None = None) -> dict:
             continue
         with p.open("rb") as fh:
             try:
-                out[p.stem] = json.load(fh)
+                data = json.load(fh)
             except Exception:
-                out[p.stem] = fh.read().decode("utf-8")
+                data = fh.read().decode("utf-8")
+        if name == "dso.json" and mag is not None and isinstance(data, dict):
+            data = _filter_dso_by_mag(data, mag)
+        out[p.stem] = data
     return out
 
 
@@ -128,7 +146,7 @@ def _write_chunk_zip(target: Path, zone_data: dict[int, str]) -> None:
 
 
 def _pack_t2_chunks(
-    t2_path: Path, out_dir: Path
+    t2_path: Path, out_dir: Path, mag: int
 ) -> tuple[list[tuple[str, list[int]]], dict]:
     """Bin-pack zones from T2 CSV into chunk ZIPs. Returns (chunks, stats).
 
@@ -165,7 +183,7 @@ def _pack_t2_chunks(
         zone_csv = "\n".join(zone_lines)
         zone_estimated = len(zone_csv.encode("utf-8")) / COMPRESS_RATIO
         if current_zones and current_estimated + zone_estimated > TARGET_CHUNK_BYTES:
-            chunk_name = f"t2_{chunk_idx:03d}.zip"
+            chunk_name = f"t2_{chunk_idx:03d}_mag{mag}.zip"
             _write_chunk_zip(out_dir / chunk_name, current_zone_data)
             chunks.append((chunk_name, list(current_zones)))
             chunk_idx += 1
@@ -177,7 +195,7 @@ def _pack_t2_chunks(
         current_zone_data[zone_num] = zone_csv
 
     if current_zones:
-        chunk_name = f"t2_{chunk_idx:03d}.zip"
+        chunk_name = f"t2_{chunk_idx:03d}_mag{mag}.zip"
         _write_chunk_zip(out_dir / chunk_name, current_zone_data)
         chunks.append((chunk_name, list(current_zones)))
 
@@ -223,45 +241,61 @@ def _sync_file(
     print(f"{key}: {count} {count_label}, {human_size(size)} -> {target} ({action})")
 
 
-def main() -> int:
-    mag_env = os.environ.get("MAG") or os.environ.get("mag")
-    mag = int(mag_env) if mag_env and mag_env.isdigit() else None
-    TMP_DIR.mkdir(exist_ok=True)
+def _detect_mags() -> list[int]:
+    """Return sorted list of magnitude values with locally prepared output files."""
+    mags: set[int] = set()
+    for p in DATA_OUT.glob("stars_t1.m*.csv"):
+        try:
+            m = int(p.stem.split(".m")[1])
+            mags.add(m)
+        except (IndexError, ValueError):
+            pass
+    return sorted(mags)
 
+
+def _upload_one_mag(mag: int, storage: backend.Backend) -> dict:
+    """Build, upload, and return the manifest set entry for one magnitude."""
     objects = _collect_json(mag=mag)
     t1_path = _find_csv(mag, "stars_t1")
     t2_path = _find_csv(mag, "stars_t2")
 
-    objects_zip = TMP_DIR / "objects.zip"
-    stars_t1_zip = TMP_DIR / "stars_t1.zip"
-    images_zip = TMP_DIR / "images.zip"
+    objects_zip = TMP_DIR / f"objects_mag{mag}.zip"
+    stars_t1_zip = TMP_DIR / f"stars_t1_mag{mag}.zip"
 
-    print("Building objects.zip...")
+    print(f"\n--- Magnitude {mag} ---")
+
+    print(f"  Building {objects_zip.name}...")
     _write_objects_zip(objects, objects_zip)
 
-    print("Building stars_t1.zip...")
-    t1_stats = {"stars": 0, "variable": 0, "double": 0}
+    t1_stats: dict = {"stars": 0, "variable": 0, "double": 0}
     if t1_path:
         t1_stats = _count_t1_stats(t1_path)
         _write_stars_t1_zip(t1_path, stars_t1_zip)
     else:
-        print("  WARNING: stars_t1 CSV not found, skipped")
+        print(f"  WARNING: stars_t1 CSV not found for mag {mag}, skipped")
 
-    print("Packing T2 chunks...")
     t2_chunks: list[tuple[str, list[int]]] = []
-    t2_stats = {"stars": 0, "variable": 0}
+    t2_stats: dict = {"stars": 0, "variable": 0}
     if t2_path:
-        t2_chunks, t2_stats = _pack_t2_chunks(t2_path, TMP_DIR)
-        print(f"  {len(t2_chunks)} chunks produced")
+        t2_chunks, t2_stats = _pack_t2_chunks(t2_path, TMP_DIR, mag)
+        print(f"  {len(t2_chunks)} T2 chunks produced")
     else:
-        print("  WARNING: stars_t2 CSV not found, no T2 chunks")
+        print(f"  WARNING: stars_t2 CSV not found for mag {mag}, no T2 chunks")
 
-    print("Building images.zip...")
-    _write_images_zip(images_zip)
+    total_size = 0
+    if stars_t1_zip.exists():
+        total_size += stars_t1_zip.stat().st_size
+        _sync_file(stars_t1_zip, stars_t1_zip.name, "T1 stars", t1_stats["stars"], storage)
+    total_size += objects_zip.stat().st_size
+    _sync_file(objects_zip, objects_zip.name, "sources", len(objects), storage)
+    for name, zones in t2_chunks:
+        chunk_path = TMP_DIR / name
+        total_size += chunk_path.stat().st_size
+        _sync_file(chunk_path, name, "T2 zones", len(zones), storage)
 
-    print("Generating manifest...")
-    manifest = {
-        "version": date.today().isoformat(),
+    set_entry: dict = {
+        "mag": mag,
+        "total_size": total_size,
         "stats": {
             "stars_t1": t1_stats["stars"],
             "variable_t1": t1_stats["variable"],
@@ -270,12 +304,12 @@ def main() -> int:
             "variable_t2": t2_stats["variable"],
         },
         "stars_t1": {
-            "filename": "stars_t1.zip",
+            "filename": stars_t1_zip.name,
             "hash": "sha256:" + _sha256(stars_t1_zip) if stars_t1_zip.exists() else "",
             "size": stars_t1_zip.stat().st_size if stars_t1_zip.exists() else 0,
         },
         "objects": {
-            "filename": "objects.zip",
+            "filename": objects_zip.name,
             "hash": "sha256:" + _sha256(objects_zip),
             "size": objects_zip.stat().st_size,
         },
@@ -289,24 +323,51 @@ def main() -> int:
             for name, zones in t2_chunks
         ],
     }
+    return set_entry
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Upload data bundles to storage backend.")
+    parser.add_argument("--mag", type=int, default=None, help="Upload only this magnitude set.")
+    args = parser.parse_args()
+
+    TMP_DIR.mkdir(exist_ok=True)
+
+    if args.mag is not None:
+        mags = [args.mag]
+    else:
+        mags = _detect_mags()
+        if not mags:
+            print("ERROR: No locally prepared magnitude sets found in output/", file=sys.stderr)
+            return 1
+        print(f"Detected magnitude sets: {mags}")
+
+    storage = backend.get_backend()
+
+    # Upload images once, independent of magnitude
+    images_zip = TMP_DIR / "images.zip"
+    num_images = sum(1 for p in IMAGES_DIR.rglob("*") if p.is_file()) if IMAGES_DIR.exists() else 0
+    print("\nBuilding images.zip...")
+    _write_images_zip(images_zip)
+    _sync_file(images_zip, "images.zip", "images", num_images, storage)
+
+    sets = []
+    for mag in mags:
+        set_entry = _upload_one_mag(mag, storage)
+        sets.append(set_entry)
+
+    print("\nGenerating manifest...")
+    manifest = {"sets": sets}
     manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
     manifest_path = TMP_DIR / "manifest.json"
     manifest_hash_path = TMP_DIR / "manifest.hash"
     manifest_path.write_bytes(manifest_bytes)
     manifest_hash_path.write_text(hashlib.sha256(manifest_bytes).hexdigest())
 
-    storage = backend.get_backend()
-    num_sources = len(objects)
-    num_images = sum(1 for p in IMAGES_DIR.rglob("*") if p.is_file()) if IMAGES_DIR.exists() else 0
-
-    _sync_file(objects_zip, "objects.zip", "sources", num_sources, storage)
-    if stars_t1_zip.exists():
-        _sync_file(stars_t1_zip, "stars_t1.zip", "T1 stars", 0, storage)
-    for name, zones in t2_chunks:
-        _sync_file(TMP_DIR / name, name, "T2 zones", len(zones), storage)
-    _sync_file(manifest_path, "manifest.json", "entries", 0, storage)
+    _sync_file(manifest_path, "manifest.json", "entries", len(sets), storage)
     _sync_file(manifest_hash_path, "manifest.hash", "hash", 0, storage)
-    _sync_file(images_zip, "images.zip", "images", num_images, storage)
+
+    print(f"\nDone. Uploaded {len(sets)} magnitude set(s): {[s['mag'] for s in sets]}")
     return 0
 
 

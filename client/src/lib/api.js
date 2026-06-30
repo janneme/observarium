@@ -31,8 +31,9 @@ export async function login(username, password) {
   sessionStorage.setItem('token', data.access_token)
 }
 
-export async function getManifest() {
-  const res = await authFetch('/manifest')
+export async function getManifest(mag) {
+  const path = mag != null ? `/manifest?mag=${mag}` : '/manifest'
+  const res = await authFetch(path)
   return res.json()
 }
 

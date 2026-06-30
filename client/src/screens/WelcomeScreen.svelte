@@ -1,22 +1,28 @@
 <script>
+  import { onMount } from 'svelte'
   import { push } from 'svelte-spa-router'
   import LoginForm from '../components/LoginForm.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
-  import { runSync } from '../lib/datasync.js'
+  import { runSync, clearAllStarAndObjectData } from '../lib/datasync.js'
+  import { getManifest } from '../lib/api.js'
+  import { getTokenStatus } from '../lib/auth.js'
+  import { getMeta } from '../lib/db.js'
   import { keyboardActive } from '../stores/keyboard.js'
 
   const appVersion = import.meta.env.VITE_APP_VERSION_DATE || 'dev'
 
-  let hasToken = !!sessionStorage.getItem('token')
-
-  let phase = 'idle' // idle | loading | done | error
+  // step machine: login | picker | downloading | done | error
+  let step = 'login'
   let errorMsg = ''
 
-  // Per-phase progress: each is 0..1
+  let availableSets = []
+  let chosenMag = null
+  let currentMag = null
+  let syncDate = null
+
   let objectsProgress = 0
   let imagesProgress = 0
   let observationsDone = false
-
   let objectsSize = 0
   let imagesSize = 0
   let observationsSize = 0
@@ -27,15 +33,47 @@
     return `${bytes} B`
   }
 
-  async function runDataSync() {
-    phase = 'loading'
+  function formatDate(isoStr) {
+    if (!isoStr) return ''
+    return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  async function fetchManifest() {
+    try {
+      const [manifest, storedSyncDate] = await Promise.all([getManifest(), getMeta('syncDate')])
+      availableSets = manifest.sets || []
+      const savedMag = localStorage.getItem('selectedMag')
+      currentMag = savedMag ? parseInt(savedMag, 10) : null
+      syncDate = storedSyncDate ?? null
+      step = 'picker'
+    } catch (err) {
+      console.error('[WelcomeScreen] fetchManifest failed:', err)
+      step = 'error'
+      errorMsg = err.message || String(err)
+    }
+  }
+
+  async function handleLoggedIn() {
+    await fetchManifest()
+  }
+
+  async function handleDownload(mag) {
+    chosenMag = mag
+    step = 'downloading'
     errorMsg = ''
     objectsProgress = 0
     imagesProgress = 0
     observationsDone = false
 
+    const prevMag = localStorage.getItem('selectedMag')
+    const prevMagNum = prevMag ? parseInt(prevMag, 10) : null
+    if (prevMagNum !== null && prevMagNum !== mag) {
+      await clearAllStarAndObjectData()
+    }
+
     try {
       const result = await runSync({
+        mag,
         onObjectsProgress: (p) => { objectsProgress = p },
         onImagesProgress: (p) => { imagesProgress = p },
         onObservationsDone: () => { observationsDone = true },
@@ -43,12 +81,12 @@
       objectsSize = result.objectsSize
       imagesSize = result.imagesSize
       observationsSize = result.observationsSize
-      phase = 'done'
+      localStorage.setItem('selectedMag', String(mag))
+      step = 'done'
     } catch (err) {
-      console.error('[WelcomeScreen] runDataSync failed:', err)
-      phase = 'error'
-      if (err.message && err.message.includes('401')) {
-        hasToken = false
+      console.error('[WelcomeScreen] runSync failed:', err)
+      step = 'error'
+      if (err.authExpired) {
         sessionStorage.removeItem('token')
         errorMsg = 'Session expired. Please log in again.'
       } else {
@@ -57,9 +95,27 @@
     }
   }
 
+  function handleRetry() {
+    const { valid, nearExpiry } = getTokenStatus()
+    if (!valid || nearExpiry) {
+      step = 'login'
+    } else {
+      fetchManifest()
+    }
+  }
+
   async function handleContinue() {
     await push('/main')
   }
+
+  onMount(() => {
+    const { valid, nearExpiry } = getTokenStatus()
+    if (!valid || nearExpiry) {
+      step = 'login'
+    } else {
+      fetchManifest()
+    }
+  })
 </script>
 
 <div class="welcome-screen">
@@ -73,25 +129,31 @@
       test your knowledge with quizzes.
     </p>
 
-    {#if phase === 'idle' || phase === 'error'}
-      <p class="welcome-text">Welcome. Load your observation data to get started.</p>
-
-      {#if !hasToken}
-        <div class="form">
-          {#if errorMsg}
-            <div class="error-msg">{errorMsg}</div>
-          {/if}
-          <LoginForm submitLabel="Load Application Data" on:loggedin={runDataSync} />
-        </div>
-      {:else}
-        {#if errorMsg}
-          <div class="error-msg">{errorMsg}</div>
-        {/if}
-        <button class="load-btn" on:click={runDataSync}>Load Application Data</button>
-      {/if}
+    {#if step === 'login'}
+      <p class="welcome-text">Welcome. Please log in to continue.</p>
+      <div class="form">
+        <LoginForm submitLabel="Log In" on:loggedin={handleLoggedIn} />
+      </div>
     {/if}
 
-    {#if phase === 'loading' || phase === 'done'}
+    {#if step === 'picker'}
+      <p class="welcome-text">
+        Select the option{#if currentMag != null && syncDate} (current data are up to magnitude {currentMag}, synchronized on {formatDate(syncDate)}){/if}:
+      </p>
+      <div class="picker">
+        {#each availableSets as set (set.mag)}
+          <button
+            class="pick-row"
+            on:click={() => handleDownload(set.mag)}
+          >
+            <span class="pick-mag">Magnitude ≤ {set.mag}</span>
+            <span class="pick-size">{formatSize(set.total_size)}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if step === 'downloading' || step === 'done'}
       <div class="phases">
         <div class="phase-row">
           <span class="phase-label">Objects</span>
@@ -99,7 +161,7 @@
             <div class="progress-bar" style="width: {Math.round(objectsProgress * 100)}%"></div>
           </div>
           <span class="phase-pct"
-            >{Math.round(objectsProgress * 100)}%{phase === 'done' && objectsSize
+            >{Math.round(objectsProgress * 100)}%{step === 'done' && objectsSize
               ? ` (${formatSize(objectsSize)})`
               : ''}</span
           >
@@ -111,7 +173,7 @@
             <div class="progress-bar" style="width: {Math.round(imagesProgress * 100)}%"></div>
           </div>
           <span class="phase-pct"
-            >{Math.round(imagesProgress * 100)}%{phase === 'done' && imagesSize
+            >{Math.round(imagesProgress * 100)}%{step === 'done' && imagesSize
               ? ` (${formatSize(imagesSize)})`
               : ''}</span
           >
@@ -123,18 +185,23 @@
             <div class="progress-bar" style="width: {observationsDone ? 100 : 0}%"></div>
           </div>
           <span class="phase-pct"
-            >{observationsDone ? '100' : '0'}%{phase === 'done' && observationsSize
+            >{observationsDone ? '100' : '0'}%{step === 'done' && observationsSize
               ? ` (${formatSize(observationsSize)})`
               : ''}</span
           >
         </div>
       </div>
 
-      {#if phase === 'loading'}
+      {#if step === 'downloading'}
         <div class="loading-hint">Loading…</div>
       {:else}
         <button class="load-btn" on:click={handleContinue}>Continue</button>
       {/if}
+    {/if}
+
+    {#if step === 'error'}
+      <div class="error-msg">{errorMsg}</div>
+      <button class="load-btn" on:click={handleRetry}>Retry</button>
     {/if}
   </div>
 
@@ -201,16 +268,48 @@
     gap: 0.5rem;
   }
 
-  label {
+  .picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .pick-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(127, 127, 127, 0.2);
+    background: none;
+    color: var(--fg);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: border-color 120ms, background 120ms;
+    text-align: left;
+  }
+
+  .pick-row:hover {
+    border-color: rgba(127, 127, 127, 0.55);
+    background: rgba(127, 127, 127, 0.06);
+  }
+
+  .pick-mag {
+    font-weight: 500;
+  }
+
+  .pick-size {
     font-size: 0.8rem;
-    opacity: 0.7;
-    margin-bottom: -0.25rem;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
   }
 
   .error-msg {
     font-size: 0.85rem;
     color: var(--accent);
     padding: 0.25rem 0;
+    margin-bottom: 0.5rem;
   }
 
   .load-btn {
@@ -223,10 +322,16 @@
     background: none;
     color: var(--fg);
     transition: opacity 120ms ease;
+    width: 100%;
   }
 
   .load-btn:hover {
     opacity: 0.8;
+  }
+
+  .load-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .phases {

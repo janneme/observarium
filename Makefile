@@ -2,11 +2,11 @@
 AWS_PROFILE   ?= personal
 MAG           ?= 9
 
-.PHONY: help deploy deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload lint test
+.PHONY: help deploy deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test
 
 help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	  awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 
 deploy: ## Apply Terraform, deploy Lambda, sync data, deploy client
 	@echo "==> OpenTofu init"
@@ -17,7 +17,7 @@ deploy: ## Apply Terraform, deploy Lambda, sync data, deploy client
 	$(MAKE) deploy-lambda
 	@echo "==> Sync data to S3"
 	@DATA_BUCKET=$$(cd infra && tofu output -raw data_bucket_name); \
-	$(MAKE) data-upload STORAGE=s3 MAG=$(MAG) DATA_BUCKET=$$DATA_BUCKET
+	$(MAKE) data-upload-s3 DATA_BUCKET=$$DATA_BUCKET
 	@echo "==> Deploy client to S3"
 	$(MAKE) deploy-client
 	@echo "==> Deployment endpoints"
@@ -36,9 +36,11 @@ dev-client: ## Start the Vite dev server for the Svelte client
 data-prep: ## Run the data preparation pipeline
 	cd data_prep && uv run python main.py $(ARGS)
 
-data-upload: ## Detect changed data files, re-zip and upload to storage backend
-	@echo "Running data upload (STORAGE=$(STORAGE) MAG=$(MAG))"
-	cd data_prep && MAG=$(MAG) STORAGE=$(STORAGE) DATA_BUCKET=$(DATA_BUCKET) PYTHONPATH=.. uv run python data_upload.py
+data-upload-local: ## Bundle and upload data to local storage backend
+	cd data_prep && STORAGE=local PYTHONPATH=.. uv run python data_upload.py $(if $(findstring command line,$(origin MAG)),--mag $(MAG),)
+
+data-upload-s3: ## Bundle and upload data to S3 (requires DATA_BUCKET)
+	cd data_prep && STORAGE=s3 DATA_BUCKET=$(DATA_BUCKET) PYTHONPATH=.. uv run python data_upload.py $(if $(findstring command line,$(origin MAG)),--mag $(MAG),)
 
 lint: ## Run ruff, pylint, eslint, prettier, and svelte-check on all packages
 	@printf '\033[1;36m==> Linting server\033[0m\n'

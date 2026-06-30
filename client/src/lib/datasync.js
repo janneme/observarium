@@ -15,6 +15,7 @@ import {
   getCompletedChunks,
   markChunkComplete,
   clearCompletedChunks,
+  clearAllStarAndObjectData,
 } from './db.js'
 
 async function fetchWithProgress(url, onProgress) {
@@ -126,12 +127,12 @@ async function ingestChunk(url, filename, onProgress) {
   await markChunkComplete(filename)
 }
 
-function getChangedChunkFilenames(manifest, storedManifest) {
-  if (!storedManifest || !Array.isArray(storedManifest.t2_chunks)) {
-    return manifest.t2_chunks.map((chunk) => chunk.filename)
+function getChangedChunkFilenames(activeSet, storedSet) {
+  if (!storedSet || !Array.isArray(storedSet.t2_chunks)) {
+    return activeSet.t2_chunks.map((chunk) => chunk.filename)
   }
-  const oldByName = new Map(storedManifest.t2_chunks.map((chunk) => [chunk.filename, chunk.hash]))
-  return manifest.t2_chunks
+  const oldByName = new Map(storedSet.t2_chunks.map((chunk) => [chunk.filename, chunk.hash]))
+  return activeSet.t2_chunks
     .filter((chunk) => oldByName.get(chunk.filename) !== chunk.hash)
     .map((chunk) => chunk.filename)
 }
@@ -183,30 +184,33 @@ async function maybeRefreshImages(onImagesProgress) {
  *
  * Returns { objectsSize, imagesSize, observationsSize } in bytes.
  */
-export async function runSync({ onObjectsProgress, onImagesProgress, onObservationsDone } = {}) {
+export async function runSync({ mag, onObjectsProgress, onImagesProgress, onObservationsDone } = {}) {
   const objProg = onObjectsProgress || (() => {})
   const imgProg = onImagesProgress || (() => {})
   const obsDone = onObservationsDone || (() => {})
 
   await clearCompletedChunks()
 
-  // Objects
-  const manifest = await getManifest()
+  // Fetch manifest with URLs for the chosen magnitude set
+  const manifest = await getManifest(mag)
+  const activeSet = manifest.sets?.find((s) => s.mag === mag) ?? manifest.sets?.[0]
+  if (!activeSet) throw new Error('No data set found in manifest')
+
   const completedChunks = await getCompletedChunks()
-  const pendingChunks = manifest.t2_chunks.filter((c) => !completedChunks.has(c.filename))
+  const pendingChunks = activeSet.t2_chunks.filter((c) => !completedChunks.has(c.filename))
   const t2Total = pendingChunks.reduce((s, c) => s + c.size, 0)
-  const totalBytes = manifest.stars_t1.size + manifest.objects.size + t2Total
+  const totalBytes = activeSet.stars_t1.size + activeSet.objects.size + t2Total
   let bytesLoaded = 0
 
-  await ingestT1(manifest.stars_t1.url)
-  bytesLoaded += manifest.stars_t1.size
+  await ingestT1(activeSet.stars_t1.url)
+  bytesLoaded += activeSet.stars_t1.size
   objProg(bytesLoaded / totalBytes)
 
-  await ingestObjects(manifest.objects.url)
-  bytesLoaded += manifest.objects.size
+  await ingestObjects(activeSet.objects.url)
+  bytesLoaded += activeSet.objects.size
   objProg(bytesLoaded / totalBytes)
 
-  for (const chunk of manifest.t2_chunks) {
+  for (const chunk of activeSet.t2_chunks) {
     if (completedChunks.has(chunk.filename)) continue
     await ingestChunk(chunk.url, chunk.filename, (p) => objProg((bytesLoaded + chunk.size * p) / totalBytes))
     bytesLoaded += chunk.size
@@ -214,7 +218,9 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
   }
 
   await storeManifest(manifest)
-  if (manifest.version) await setMeta('dataHash', manifest.version)
+  const remoteDataHash = await getDataHash()
+  if (remoteDataHash) await setMeta('dataHash', remoteDataHash)
+  await setMeta('syncDate', new Date().toISOString())
   objProg(1)
 
   // Images
@@ -240,19 +246,23 @@ export async function runSync({ onObjectsProgress, onImagesProgress, onObservati
  * - Refreshes images only when object-data hash changed.
  * - Does not overwrite observations during update-data flow.
  */
-export async function runUpdateSync({ onObjectsProgress, onImagesProgress, onObservationsDone } = {}) {
+export async function runUpdateSync({ mag, onObjectsProgress, onImagesProgress, onObservationsDone } = {}) {
   const objProg = onObjectsProgress || (() => {})
   const imgProg = onImagesProgress || (() => {})
   const obsDone = onObservationsDone || (() => {})
 
-  const [remoteDataHash, remoteImagesHash, storedManifest, localImagesHash, localImagesCount] = await Promise.all([
-    getDataHash(),
-    getImagesHash(),
-    getStoredManifest(),
-    getMeta('imagesHash'),
-    getImagesCount(),
-  ])
-  const dataUpToDate = !!(storedManifest?.version && storedManifest.version === remoteDataHash)
+  const [remoteDataHash, remoteImagesHash, storedManifest, localDataHash, localImagesHash, localImagesCount] =
+    await Promise.all([
+      getDataHash(),
+      getImagesHash(),
+      getStoredManifest(),
+      getMeta('dataHash'),
+      getMeta('imagesHash'),
+      getImagesCount(),
+    ])
+
+  const storedSet = storedManifest?.sets?.find((s) => s.mag === mag) ?? storedManifest?.sets?.[0]
+  const dataUpToDate = !!(localDataHash && localDataHash === remoteDataHash && storedSet != null)
   const hasLocalImages = localImagesCount > 0
   const imagesUpToDate = !!(
     remoteImagesHash &&
@@ -274,15 +284,24 @@ export async function runUpdateSync({ onObjectsProgress, onImagesProgress, onObs
     }
   }
 
-  let manifest = storedManifest
-  if (!dataUpToDate) manifest = await getManifest()
-  if (!manifest) throw new Error('Missing local manifest for update check')
+  // Fetch manifest with URLs for the chosen magnitude set
+  let manifest = null
+  let activeSet = null
+  if (!dataUpToDate) {
+    manifest = await getManifest(mag)
+    activeSet = manifest.sets?.find((s) => s.mag === mag) ?? manifest.sets?.[0]
+  }
+  if (!activeSet && storedSet) {
+    // data is up-to-date, only images need refresh — use stored set for size tracking
+    activeSet = storedSet
+  }
+  if (!activeSet) throw new Error('Missing manifest set for update check')
 
-  const starsChanged = !storedManifest || storedManifest.stars_t1?.hash !== manifest.stars_t1.hash
-  const objectsZipChanged = !storedManifest || storedManifest.objects?.hash !== manifest.objects.hash
-  const changedChunkFilenames = getChangedChunkFilenames(manifest, storedManifest)
+  const starsChanged = !storedSet || storedSet.stars_t1?.hash !== activeSet.stars_t1.hash
+  const objectsZipChanged = !storedSet || storedSet.objects?.hash !== activeSet.objects.hash
+  const changedChunkFilenames = getChangedChunkFilenames(activeSet, storedSet)
   const changedChunkSet = new Set(changedChunkFilenames)
-  const changedChunks = manifest.t2_chunks.filter((chunk) => changedChunkSet.has(chunk.filename))
+  const changedChunks = activeSet.t2_chunks.filter((chunk) => changedChunkSet.has(chunk.filename))
   const objectDataChanged = starsChanged || objectsZipChanged || changedChunks.length > 0
 
   if (!objectDataChanged && imagesUpToDate) {
@@ -305,8 +324,8 @@ export async function runUpdateSync({ onObjectsProgress, onImagesProgress, onObs
   }
 
   const totalBytes =
-    (starsChanged ? manifest.stars_t1.size : 0) +
-    (objectsZipChanged ? manifest.objects.size : 0) +
+    (starsChanged ? activeSet.stars_t1.size : 0) +
+    (objectsZipChanged ? activeSet.objects.size : 0) +
     changedChunks.reduce((s, chunk) => s + chunk.size, 0)
 
   let bytesLoaded = 0
@@ -314,13 +333,13 @@ export async function runUpdateSync({ onObjectsProgress, onImagesProgress, onObs
     objProg(1)
   } else {
     if (starsChanged) {
-      await ingestT1(manifest.stars_t1.url)
-      bytesLoaded += manifest.stars_t1.size
+      await ingestT1(activeSet.stars_t1.url)
+      bytesLoaded += activeSet.stars_t1.size
       objProg(bytesLoaded / totalBytes)
     }
     if (objectsZipChanged) {
-      await ingestObjects(manifest.objects.url)
-      bytesLoaded += manifest.objects.size
+      await ingestObjects(activeSet.objects.url)
+      bytesLoaded += activeSet.objects.size
       objProg(bytesLoaded / totalBytes)
     }
     for (const chunk of changedChunks) {
@@ -330,10 +349,11 @@ export async function runUpdateSync({ onObjectsProgress, onImagesProgress, onObs
     }
   }
 
-  if (!dataUpToDate) {
+  if (!dataUpToDate && manifest) {
     await storeManifest(manifest)
     if (remoteDataHash) await setMeta('dataHash', remoteDataHash)
   }
+  await setMeta('syncDate', new Date().toISOString())
   objProg(1)
 
   let imagesSize = 0
@@ -354,3 +374,5 @@ export async function runUpdateSync({ onObjectsProgress, onImagesProgress, onObs
     upToDate: false,
   }
 }
+
+export { clearAllStarAndObjectData }

@@ -1,17 +1,26 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte'
   import { push } from 'svelte-spa-router'
-  import { runUpdateSync } from '../lib/datasync.js'
+  import LoginForm from './LoginForm.svelte'
+  import { runSync, runUpdateSync, clearAllStarAndObjectData } from '../lib/datasync.js'
+  import { getManifest } from '../lib/api.js'
+  import { getTokenStatus } from '../lib/auth.js'
+  import { getMeta } from '../lib/db.js'
 
   const dispatch = createEventDispatcher()
 
-  let phase = 'loading' // loading | done | error
+  // step machine: login | picker | updating | done | error
+  let step = 'login'
   let errorMsg = ''
   let sessionExpired = false
 
+  let availableSets = []
+  let chosenMag = null
+  let currentMag = null
+  let syncDate = null
+
   let objectsProgress = 0
   let imagesProgress = 0
-
   let objectsSize = 0
   let imagesSize = 0
   let objectsUpToDate = false
@@ -24,16 +33,41 @@
     return `${bytes} B`
   }
 
+  function formatDate(isoStr) {
+    if (!isoStr) return ''
+    return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   function close() {
     dispatch('close')
   }
 
   function handleKeydown(e) {
-    if (e.key === 'Escape' && phase !== 'loading') close()
+    if (e.key === 'Escape' && step !== 'updating') close()
   }
 
-  async function startSync() {
-    phase = 'loading'
+  async function fetchManifest() {
+    try {
+      const [manifest, storedSyncDate] = await Promise.all([getManifest(), getMeta('syncDate')])
+      availableSets = manifest.sets || []
+      const savedMag = localStorage.getItem('selectedMag')
+      currentMag = savedMag ? parseInt(savedMag, 10) : null
+      syncDate = storedSyncDate ?? null
+      step = 'picker'
+    } catch (err) {
+      console.error('[DataSyncPanel] fetchManifest failed:', err)
+      step = 'error'
+      errorMsg = err.message || String(err)
+    }
+  }
+
+  async function handleLoggedIn() {
+    await fetchManifest()
+  }
+
+  async function handleUpdate(mag) {
+    chosenMag = mag
+    step = 'updating'
     errorMsg = ''
     sessionExpired = false
     objectsProgress = 0
@@ -42,26 +76,44 @@
     imagesUpToDate = false
     upToDate = false
 
+    const prevMag = localStorage.getItem('selectedMag')
+    const prevMagNum = prevMag ? parseInt(prevMag, 10) : null
+    const magChanged = prevMagNum !== null && prevMagNum !== mag
+
+    if (magChanged) {
+      await clearAllStarAndObjectData()
+    }
+
     try {
-      const result = await runUpdateSync({
-        onObjectsProgress: (p) => {
-          objectsProgress = p
-        },
-        onImagesProgress: (p) => {
-          imagesProgress = p
-        },
-      })
+      let result
+      if (magChanged) {
+        result = await runSync({
+          mag,
+          onObjectsProgress: (p) => { objectsProgress = p },
+          onImagesProgress: (p) => { imagesProgress = p },
+        })
+        objectsUpToDate = false
+        imagesUpToDate = false
+        upToDate = false
+      } else {
+        result = await runUpdateSync({
+          mag,
+          onObjectsProgress: (p) => { objectsProgress = p },
+          onImagesProgress: (p) => { imagesProgress = p },
+        })
+        objectsUpToDate = !!result.objectsUpToDate
+        imagesUpToDate = !!result.imagesUpToDate
+        upToDate = !!result.upToDate
+      }
       objectsSize = result.objectsSize
       imagesSize = result.imagesSize
-      objectsUpToDate = !!result.objectsUpToDate
-      imagesUpToDate = !!result.imagesUpToDate
-      upToDate = !!result.upToDate
-      phase = 'done'
+      localStorage.setItem('selectedMag', String(mag))
+      step = 'done'
       dispatch('synced')
     } catch (err) {
       console.error('[DataSyncPanel] sync failed:', err)
-      phase = 'error'
-      if (err.message && err.message.includes('401')) {
+      step = 'error'
+      if (err.authExpired) {
         sessionStorage.removeItem('token')
         sessionExpired = true
         errorMsg = 'Session expired. Please log in again.'
@@ -71,7 +123,23 @@
     }
   }
 
-  onMount(startSync)
+  function handleRetry() {
+    const { valid, nearExpiry } = getTokenStatus()
+    if (!valid || nearExpiry) {
+      step = 'login'
+    } else {
+      fetchManifest()
+    }
+  }
+
+  onMount(() => {
+    const { valid, nearExpiry } = getTokenStatus()
+    if (!valid || nearExpiry) {
+      step = 'login'
+    } else {
+      fetchManifest()
+    }
+  })
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -79,7 +147,7 @@
 <div
   class="backdrop"
   on:pointerdown|self={() => {
-    if (phase !== 'loading') close()
+    if (step !== 'updating') close()
   }}
   role="button"
   tabindex="-1"
@@ -89,56 +157,84 @@
 <div class="panel" role="dialog" aria-modal="true" aria-label="Update Data" on:pointerdown|stopPropagation>
   <div class="header">
     <span class="title">Update Data</span>
-    {#if phase !== 'loading'}
+    {#if step !== 'updating'}
       <button class="close-btn" on:click={close} aria-label="Close">✕</button>
     {/if}
   </div>
 
   <div class="body">
-    <div class="phases">
-      <div class="phase-row">
-        <span class="phase-label">Objects</span>
-        {#if phase === 'done' && objectsUpToDate}
-          <span class="phase-up-to-date">Up to date</span>
-        {:else}
-          <div class="progress-track">
-            <div class="progress-bar" style="width: {Math.round(objectsProgress * 100)}%"></div>
-          </div>
-          <span class="phase-pct"
-            >{Math.round(objectsProgress * 100)}%{phase === 'done' && objectsSize
-              ? ` (${formatSize(objectsSize)})`
-              : ''}</span
+    {#if step === 'login'}
+      <LoginForm submitLabel="Log In" on:loggedin={handleLoggedIn} />
+    {/if}
+
+    {#if step === 'picker'}
+      <p class="picker-label">
+        Select the option{#if currentMag != null && syncDate} (current data are up to magnitude {currentMag}, synchronized on {formatDate(syncDate)}){/if}:
+      </p>
+      <div class="picker">
+        {#each availableSets as set (set.mag)}
+          <button
+            class="pick-row"
+            on:click={() => handleUpdate(set.mag)}
           >
-        {/if}
+            <span class="pick-mag">Magnitude ≤ {set.mag}</span>
+            <span class="pick-size">{formatSize(set.total_size)}</span>
+          </button>
+        {/each}
       </div>
+      <div class="actions">
+        <button class="action-btn" on:click={close}>Close</button>
+      </div>
+    {/if}
 
-      <div class="phase-row">
-        <span class="phase-label">Images</span>
-        {#if phase === 'done' && imagesUpToDate}
+    {#if step === 'updating' || step === 'done'}
+      <div class="phases">
+        <div class="phase-row">
+          <span class="phase-label">Objects</span>
+          {#if step === 'done' && objectsUpToDate}
+            <span class="phase-up-to-date">Up to date</span>
+          {:else}
+            <div class="progress-track">
+              <div class="progress-bar" style="width: {Math.round(objectsProgress * 100)}%"></div>
+            </div>
+            <span class="phase-pct"
+              >{Math.round(objectsProgress * 100)}%{step === 'done' && objectsSize
+                ? ` (${formatSize(objectsSize)})`
+                : ''}</span
+            >
+          {/if}
+        </div>
+
+        <div class="phase-row">
+          <span class="phase-label">Images</span>
+          {#if step === 'done' && imagesUpToDate}
+            <span class="phase-up-to-date">Up to date</span>
+          {:else}
+            <div class="progress-track">
+              <div class="progress-bar" style="width: {Math.round(imagesProgress * 100)}%"></div>
+            </div>
+            <span class="phase-pct"
+              >{Math.round(imagesProgress * 100)}%{step === 'done' && imagesSize
+                ? ` (${formatSize(imagesSize)})`
+                : ''}</span
+            >
+          {/if}
+        </div>
+
+        <div class="phase-row">
+          <span class="phase-label">Observations</span>
           <span class="phase-up-to-date">Up to date</span>
-        {:else}
-          <div class="progress-track">
-            <div class="progress-bar" style="width: {Math.round(imagesProgress * 100)}%"></div>
-          </div>
-          <span class="phase-pct"
-            >{Math.round(imagesProgress * 100)}%{phase === 'done' && imagesSize
-              ? ` (${formatSize(imagesSize)})`
-              : ''}</span
-          >
-        {/if}
+        </div>
       </div>
 
-      <div class="phase-row">
-        <span class="phase-label">Observations</span>
-        <span class="phase-up-to-date">Up to date</span>
-      </div>
-    </div>
+      {#if step === 'updating'}
+        <p class="status-msg">Updating…</p>
+      {:else}
+        <p class="status-msg success">{upToDate ? 'Everything is up to date.' : 'Data updated successfully.'}</p>
+      {/if}
+    {/if}
 
-    {#if phase === 'loading'}
-      <p class="status-msg">Updating…</p>
-    {:else if phase === 'done'}
-      <p class="status-msg success">{upToDate ? 'Everything is up to date.' : 'Data updated successfully.'}</p>
-    {:else if phase === 'error'}
+    {#if step === 'error'}
       <p class="error-msg">{errorMsg}</p>
       <div class="actions">
         {#if sessionExpired}
@@ -150,7 +246,7 @@
             }}>Log in</button
           >
         {:else}
-          <button class="action-btn primary" on:click={startSync}>Retry</button>
+          <button class="action-btn primary" on:click={handleRetry}>Retry</button>
           <button class="action-btn" on:click={close}>Close</button>
         {/if}
       </div>
@@ -216,6 +312,49 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+  }
+
+  .picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .picker-label {
+    margin: 0;
+    font-size: 0.85rem;
+    opacity: 0.7;
+    line-height: 1.4;
+  }
+
+  .pick-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(127, 127, 127, 0.2);
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: border-color 120ms, background 120ms;
+    text-align: left;
+  }
+
+  .pick-row:hover {
+    border-color: rgba(127, 127, 127, 0.55);
+    background: rgba(127, 127, 127, 0.06);
+  }
+
+  .pick-mag {
+    font-weight: 500;
+  }
+
+  .pick-size {
+    font-size: 0.8rem;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
   }
 
   .phases {
@@ -302,6 +441,10 @@
   }
   .action-btn:hover {
     opacity: 0.8;
+  }
+  .action-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .action-btn.primary {
