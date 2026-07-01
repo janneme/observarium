@@ -719,3 +719,56 @@ Both details inputs are multiline text inputs, expandable as we type.
 The text is entered using the in-app keyboard.
 
 After pressing the "Save" button we are sent to the previous context.
+
+## 5.17 Finding Paths List
+
+A full-screen overlay (menu item "Finding Paths", keyboard shortcut "p", positioned between
+"Observations" and "Telescopes" in the menu).
+
+The screen header shows a back arrow, the title "Finding Paths", and an add icon on the right.
+
+### 5.17.1 Filter bar
+
+Two chip-based filter inputs labelled **target** and **start**:
+
+- Typing in either input opens a dropdown with suggestions.  
+  Clicking a suggestion adds a chip with a small × to remove it.
+- The **target** input suggests only objects for which at least one finding path exists.
+- The **start** input suggests only stars used as a path-start star in at least one finding path.
+- Suggestions are generated independently — the chip value in one input does not filter the
+  suggestion list in the other.
+- When both chips are active, the table is filtered by their intersection (AND).
+
+### 5.17.2 Finding paths table
+
+Columns: **Target** and **Start**.
+
+Each row shows one target–start-star combination.  For targets with multiple start-star paths,
+each path occupies a separate row in the Start column within the same target cell.
+
+Target column: OBJECT_TYPE_SYMBOL **TARGET_OBJECT_CAT_NUMBER** (CONSTELLATION_ABBREVIATION)
+
+Start column: **STAR_NAME_OR_CAT_NUMBER** (CONSTELLATION_ABBREVIATION)  OPTIONAL_DRAFT_ICON – N steps  DELETE_ICON
+
+- Sorted by TARGET_OBJECT_CAT_NUMBER using natural sort (M 2 before M 10); scrollable.
+- `(CONSTELLATION_ABBREVIATION)` is omitted when the identifier already encodes the constellation
+  (e.g. "sigma Ori", "6 Tau"); shown otherwise (e.g. "HIP 12345").
+- TARGET_OBJECT_CAT_NUMBER and STAR_NAME_OR_CAT_NUMBER are **bold**; all other text is normal weight.
+- **Draft icon** (superscript, smaller than the delete icon): shown when the path is a draft,
+  i.e. "Set Final" has not been pressed — the last recorded step does not yet have `final=true`.
+  Draft paths do not show "– N steps".
+- **N steps**: for complete (non-draft) paths, N equals the total number of recorded steps.
+- **Delete icon**: tapping shows a confirmation dialog; on confirm the path is deleted.
+  If it was the last path for the object, the target row disappears.
+- Tapping **STAR_NAME_OR_CAT_NUMBER** opens the finding path definition screen (§5.12) for that
+  target and start star. Back returns to this screen with filters intact.
+- Tapping **TARGET_OBJECT_CAT_NUMBER** opens Object Details (§5.16). Back returns to this screen
+  with filters intact.
+
+### 5.17.3 Adding a new finding path
+
+Tapping the add icon opens a target-selection panel (same SearchPanel component used for
+start-star selection in §5.12, here restricted to objects with catalog numbers). After the user
+picks a target, the app opens the finding path definition screen (§5.12) for that target with
+the start-star selection step shown immediately. Back from that screen returns to this screen
+with filters intact.

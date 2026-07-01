@@ -1324,7 +1324,7 @@ Technical notes:
 
 ---
 
-### Step 34: Guide to Find the Object (5.3.1 + 5.3.2)
+### Step 34: Guide to Find the Object (5.3.1 + 5.3.2) ✅
 
 **README refs:** §5.3.1, §5.3.2  
 **Deliverable:** Step-through guide mode overlaid on the Finder View; Record
@@ -1341,6 +1341,46 @@ Technical notes:
 - Final step: draw a small target circle at the object's projected position.
 - Next/Previous buttons update `currentStepIndex` and re-render the arrow.
 - "Record" button (5.3.2): `router.push('/finding-paths/' + selectedObjectId)`.
+
+---
+
+### Step 34b: Finding Paths List Screen (5.17) ✅
+
+**README refs:** §5.17, §5.17.1, §5.17.2, §5.17.3  
+**Deliverable:** New full-screen overlay accessible from the menu ("p") between
+"Observations" and "Telescopes", showing a filterable table of all defined finding
+paths with add, view, and delete actions.
+
+Technical notes:
+
+- New Svelte screen component (e.g. `FindingPathsListScreen.svelte`). Registered in
+  `MainScreen` with the same overlay pattern used by `ObservationsScreen`. Menu item
+  keyboard shortcut "p"; position between "Observations" and "Telescopes".
+- Read all finding paths on mount via `getAllFindingPaths()` (returns the full
+  `findingPaths` meta object). Build a flat list of `{ objectId, startHip }` pairs for
+  the table; resolve labels via the search index.
+- **Filter chips** — reuse the same chip/SearchPanel pattern as object search:
+  - Target filter: `SearchPanel` with `resultFilter` limited to objects present in the
+    finding paths data. Chip stores `objectId`.
+  - Start filter: `SearchPanel` with `resultFilter` limited to stars whose HIP number
+    appears as a start key in any finding path. Chip stores `startHip`.
+  - Suggestion lists are built independently (the active chip in one filter does not
+    narrow the other). The table applies both chips as an AND intersection.
+- **Table** — sorted with natural sort on the catalog number string (split on digit
+  boundaries, compare numeric parts numerically). Group rows by `objectId` so that
+  multiple start paths for the same object are rendered under one target cell.
+  - Draft detection: `path.steps?.length && path.steps[path.steps.length - 1]?.final`
+    evaluates to `true` for a complete path; any other state = draft.
+  - Step count for non-draft paths: `path.steps.length`.
+- **Tap target label** — dispatch to About/Object Details (same navigation used
+  elsewhere). Preserve filter state in a Svelte store or pass as props on return.
+- **Tap start-star label** — open `FindingPathsScreen` with `contextObject` and
+  `initialStartHip` set. On back, restore filter state.
+- **Delete** — `ConfirmDialog` → `deleteFindingPathForObject(objectId, startHip)`;
+  rebuild the flat list after deletion.
+- **ADD flow** — tapping the add icon opens a `SearchPanel` restricted to objects
+  with catalog numbers (not just stars). On selection, navigate to
+  `FindingPathsScreen` with `contextObject` and `initialSelectStart=true`.
 
 ---
 

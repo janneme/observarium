@@ -24,6 +24,7 @@
   export let zIndex = 9
   export let resultFilter = null
   export let onAcceptObject = null
+  export let title = null
 
   let query = ''
   let results = []
@@ -106,6 +107,9 @@
 </script>
 
 <div class="search-overlay" style={`top:${topOffset}; z-index:${zIndex};`} on:pointerdown|stopPropagation>
+  {#if title}
+    <div class="search-title">{title}</div>
+  {/if}
   <div class="search-bar">
     <div class="input-wrap">
       <CustomInput
@@ -190,6 +194,14 @@
     --fg: #e0e0e0;
     --bg: #0a0a0a;
     --key-bg: rgba(255, 255, 255, 0.08);
+  }
+
+  .search-title {
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem 0.25rem;
+    font-size: 0.8rem;
+    opacity: 0.6;
+    letter-spacing: 0.02em;
   }
 
   .search-bar {

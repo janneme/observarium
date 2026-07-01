@@ -18,6 +18,7 @@
   import SolarSystemIcon from '../icons/SolarSystemIcon.svelte'
   import FovCircleIcon from '../icons/FovCircleIcon.svelte'
   import ObservationsIcon from '../icons/ObservationsIcon.svelte'
+  import FindingPathsIcon from '../icons/FindingPathsIcon.svelte'
   import TelescopeIcon from '../icons/TelescopeIcon.svelte'
   import ConstellationQuizIcon from '../icons/ConstellationQuizIcon.svelte'
   import DsoQuizIcon from '../icons/DsoQuizIcon.svelte'
@@ -150,6 +151,20 @@
             <ObservationsIcon size="28" />
           </div>
           <span class="item-lbl">Observations (o)</span>
+        </button>
+
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('findingpathslist')
+            close()
+          }}
+          aria-label="Finding Paths"
+        >
+          <div class="icon-wrap">
+            <FindingPathsIcon size="28" />
+          </div>
+          <span class="item-lbl">Finding Paths (p)</span>
         </button>
 
         <button

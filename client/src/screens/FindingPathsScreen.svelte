@@ -22,6 +22,7 @@
   export let contextObject = null
   export let initialSelectStart = false
   export let initialStartHip = null
+  export let initialEditHip = null
   export let lat = 48.2
   export let lon = 16.37
   export let time = new Date()
@@ -250,10 +251,17 @@
         }
       }
     }
+    if (initialEditHip != null) {
+      expandedStartHip = String(initialEditHip)
+    }
     await loadFinderObjects()
   }
 
-  $: pathEntryList = pathEntries()
+  $: {
+    pathsByStart
+    starsByHip
+    pathEntryList = pathEntries()
+  }
   $: recordingPath = recordingStartHip ? pathsByStart[recordingStartHip] || null : null
   $: recordingStartLabel = recordingStartHip
     ? starsByHip.get(String(recordingStartHip))?.label || `HIP ${recordingStartHip}`

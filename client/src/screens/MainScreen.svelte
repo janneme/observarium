@@ -11,6 +11,7 @@
   import LoupePanel from '../components/LoupePanel.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
   import FindingPathsScreen from './FindingPathsScreen.svelte'
+  import FindingPathsListScreen from './FindingPathsListScreen.svelte'
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
@@ -87,7 +88,13 @@
   let findingPathsFromFinder = false
   let findingPathsStateVersion = 0
   let findingPathsStartHip = null
+  let findingPathsEditHip = null
   let returnToObservationsFromObjectDetails = false
+  let showFindingPathsList = false
+  let findingPathsListTargetChip = null
+  let findingPathsListStartChip = null
+  let returnToFindingPathsListFromFinder = false
+  let returnToFindingPathsListFromAbout = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -337,6 +344,11 @@
     showObservations = true
   }
 
+  $: if (!$objectDetailsActive && returnToFindingPathsListFromAbout) {
+    returnToFindingPathsListFromAbout = false
+    showFindingPathsList = true
+  }
+
   function openObservationSync() {
     const { valid, nearExpiry } = getTokenStatus()
     if (!valid || nearExpiry) {
@@ -358,9 +370,22 @@
         e.preventDefault()
         return
       }
+      if (showFindingPathsList) {
+        showFindingPathsList = false
+        e.preventDefault()
+        return
+      }
       if (showFindingPaths) {
         showFindingPaths = false
         findingPathsObject = null
+        findingPathsFromFinder = false
+        findingPathsStartHip = null
+        findingPathsEditHip = null
+        findingPathsStateVersion += 1
+        if (returnToFindingPathsListFromFinder) {
+          returnToFindingPathsListFromFinder = false
+          showFindingPathsList = true
+        }
         e.preventDefault()
         return
       }
@@ -386,10 +411,17 @@
       }
     }
 
+    if (e.key === 'n') {
+      toggleTheme()
+      e.preventDefault()
+      return
+    }
+
     // Finder has its own keymap; do not let global shortcuts interfere.
     if (get(finderViewActive)) return
 
     if (get(searchViewActive)) return
+    if (showFindingPathsList) return
     if (showFindingPaths) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
@@ -452,11 +484,6 @@
       e.preventDefault()
       return
     }
-    if (e.key === 'n') {
-      toggleTheme()
-      e.preventDefault()
-      return
-    }
     if (e.key === 'F') {
       showObservations = false
       finderViewActive.update((v) => !v)
@@ -466,6 +493,12 @@
     if (e.key === 'o') {
       menuOpen = false
       showObservations = true
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'p') {
+      menuOpen = false
+      showFindingPathsList = true
       e.preventDefault()
       return
     }
@@ -634,6 +667,9 @@
     on:observations={() => {
       showObservations = true
     }}
+    on:findingpathslist={() => {
+      showFindingPathsList = true
+    }}
     on:sync={() => {
       openObservationSync()
     }}
@@ -753,11 +789,46 @@
     />
   {/if}
 
+  {#if showFindingPathsList}
+    <FindingPathsListScreen
+      initialTargetChip={findingPathsListTargetChip}
+      initialStartChip={findingPathsListStartChip}
+      {lat}
+      {lon}
+      time={skyTime}
+      on:close={() => {
+        showFindingPathsList = false
+        findingPathsListTargetChip = null
+        findingPathsListStartChip = null
+      }}
+      on:openpath={(e) => {
+        findingPathsListTargetChip = e.detail.targetChip
+        findingPathsListStartChip = e.detail.startChip
+        showFindingPathsList = false
+        findingPathsObject = e.detail.contextObject
+        findingPathsFromFinder = e.detail.initialSelectStart
+        findingPathsStartHip = e.detail.initialStartHip
+        findingPathsEditHip = e.detail.initialEditHip ?? null
+        returnToFindingPathsListFromFinder = true
+        showFindingPaths = true
+      }}
+      on:openabout={(e) => {
+        findingPathsListTargetChip = e.detail.targetChip
+        findingPathsListStartChip = e.detail.startChip
+        showFindingPathsList = false
+        selectedObject.set(e.detail.obj)
+        objectDetailsActive.set(true)
+        returnToFindingPathsListFromAbout = true
+      }}
+    />
+  {/if}
+
   {#if showFindingPaths}
     <FindingPathsScreen
       contextObject={findingPathsObject}
       initialSelectStart={findingPathsFromFinder}
       initialStartHip={findingPathsStartHip}
+      initialEditHip={findingPathsEditHip}
       {lat}
       {lon}
       time={skyTime}
@@ -766,7 +837,12 @@
         findingPathsObject = null
         findingPathsFromFinder = false
         findingPathsStartHip = null
+        findingPathsEditHip = null
         findingPathsStateVersion += 1
+        if (returnToFindingPathsListFromFinder) {
+          returnToFindingPathsListFromFinder = false
+          showFindingPathsList = true
+        }
       }}
     />
   {/if}
