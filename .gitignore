@@ -6,6 +6,7 @@ data_prep/tmp/
 
 # Local storage artifacts
 storage/
+!python_lib/storage/
 
 # Python
 __pycache__/
