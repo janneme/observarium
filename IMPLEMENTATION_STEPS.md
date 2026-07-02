@@ -1384,7 +1384,132 @@ Technical notes:
 
 ---
 
-## Phase 7 — Quizzes
+## Phase 7 — Visual Range
+
+### Step 34c: Visual Range — Plan Generator ✅
+
+**Plan doc:** `VISUAL_RANGE.md`  
+**Deliverable:** Pure plan-generation function `generatePlan()` in
+`client/src/lib/visualRangePlan.js`. Takes `{ getObjectsInArea, dsos, startStar,
+telescope, eyepiece, initialMag }` and returns either a fully pre-computed
+measurement plan `{ ok: true, steps }` or a structured failure `{ ok: false, reason }`.
+
+Technical notes:
+
+- **Exports:** `INITIAL_STAR_MAX_MAG = 4.0`, `INITIAL_MAG_MIN = 7.0`,
+  `INITIAL_MAG_MAX = 11.0`, `INITIAL_MAG_STEP = 0.5`,
+  `INITIAL_MAG_RANGE_START_FACTOR = 0.7`.
+- **Internal constants:** `MEASURE_STEP = 0.5`, `STEP_MAG_TOLERANCE = 0.2`,
+  `MAX_INITIAL_STEPS = 3`, `MAX_MOVE_STEPS = 3`,
+  `MOVE_STARS_MIN_MAG_DIFF = 1.5`, `MAX_MAG_DIFF = 6.0`,
+  `CLOSE_NEIGHBOURHOOD_REL_RADIUS = 0.02`, `DSO_MAX_SB = 24.0`,
+  `BFS_BEAM_WIDTH = 30`, `PLAN_SEARCH_RADIUS_FACTOR = 2.5`.
+- **Spatial indexes:** two independent indexes over the fetched star array.
+  Coarse 5°×5° zones (matching `db.js` zone IDs) for guide-path BFS and
+  brightness-range checks. Fine 0.1°×0.1° zones for isolation queries at
+  radius ≈0.033° where scanning full coarse zones would be prohibitively slow
+  in dense fields.
+- **Phase 0 — pre-processing:**
+  - Fetch all stars within `PLAN_SEARCH_RADIUS_FACTOR × FOV_diameter` of the
+    start star up to the plan ceiling magnitude + tolerance.
+  - DSO exclusion: mark galaxies, emission/reflection/bright nebulae, planetary
+    nebulae, supernova remnants, and globular clusters as significant when their
+    mean surface brightness `SB = mag + 2.5 × log₁₀(π × (a_arcmin×30) ×
+    (b_arcmin×30)) < DSO_MAX_SB` (24.0 mag/arcsec²).
+  - Candidate pre-filtering per magnitude band: reject variable stars, stars
+    with an extremely red or blue spectral colour (`CLR_BLUEST = '#92b5ff'`,
+    `CLR_REDDEST = '#ff8f6b'`), stars with a brighter neighbour within
+    `CLOSE_NEIGHBOURHOOD_REL_RADIUS × FOV_diameter`, and stars whose position
+    overlaps a significant DSO footprint.
+- **Phase 1 — find initial measurement location:** enumerate all pairs of
+  initial-magnitude candidates within 2× FOV radius; sort pair midpoints by
+  angular distance from start star; for each, verify `MAX_MAG_DIFF` constraint
+  and call `findGuidePath(startStar.pos, midpoint, MAX_INITIAL_STEPS, …)`.
+- **Phase 2 — build step chain:** for each subsequent magnitude band, first try
+  staying at the current centre (no moves required); otherwise enumerate nearby
+  candidate pairs sorted by distance and call
+  `findGuidePath(currentCentre, …, MAX_MOVE_STEPS, …)`. Stop when no reachable
+  pair exists or the plan ceiling is reached.
+- **`findGuidePath`:** beam-limited BFS over telescope positions snapped to a
+  `fovRadius / 4` grid. At each position, enumerates candidate guide-star pairs
+  where both stars lie within `guideInnerR = fovRadius × 0.85` of the current
+  centre (85% inset margin ensures guide stars are visually interior to the FOV,
+  not at the edge), for distance multipliers k ∈ {1, 2, 3} with
+  `dist(S, E) × k ≤ 2 × FOV_diameter`. Beam capped at `BFS_BEAM_WIDTH = 30`
+  states closest to target. Returns the first path reaching within `fovRadius / 2`
+  of the target, or `null` on failure.
+- **Candidate selection per step:** chooses the faintest (C1) and
+  second-faintest (C2) qualifying candidates within FOV radius. Next step's
+  magnitude band is derived from C2's actual magnitude, so the chain remains
+  valid if only C2 was observed.
+- **Tests:** `client/test/lib/visualRangePlan.test.js` (Vitest, Node environment).
+  Two telescope configs (6″ f/5, 12″ f/4) × five start stars (Vega HIP 91262,
+  Mizar HIP 65378, Arcturus HIP 69673, Mirach HIP 5447, Betelgeuse HIP 27989).
+  Star data loaded from `data_prep/output/stars_t1.m*.csv` / `stars_t2.m*.csv`
+  and `dso.json` via Node `fs` — no IndexedDB. Catalogue depth gating: depth m9
+  or absent → skip all; m12 → 6″ only; m14 → both telescopes. Run with
+  `make test-telescope-range` or as part of `make test`.
+
+---
+
+### Step 34d: Visual Range — UI Screens + Integration ✅
+
+**Plan doc:** `VISUAL_RANGE.md`  
+**Deliverable:** Two-screen Visual Range UI (`VisualRangeSetupScreen`,
+`VisualRangeMeasureScreen`) with menu integration, `SkyCanvas` overlay support,
+and observation-log integration.
+
+Technical notes:
+
+- **`VisualRangeSetupScreen.svelte`** (z-index 12):
+  - Star picker reuses `SearchPanel` with a `resultFilter` limiting results to
+    `type === 'star'` and `mag ≤ INITIAL_STAR_MAX_MAG` (4.0).
+  - Initial magnitude options computed per-telescope as a pill range from
+    `ceil(INITIAL_MAG_RANGE_START_FACTOR × theoreticalMax / 0.5) × 0.5` to
+    `floor(theoreticalMax / 0.5) × 0.5`, where
+    `theoreticalMax = 2.1 + 5 × log₁₀(diameter_mm)`. Invalid selected magnitude
+    is cleared automatically when the telescope changes.
+  - All selections (star, telescopeId, eyepieceId, initialMag) are persisted to
+    `localStorage` under `observarium.visualRange.setup` and restored on mount
+    after telescopes/eyepieces are loaded from IndexedDB.
+  - "Begin" calls `generatePlan()`; shows an inline error paragraph if
+    `ok: false`; transitions to `VisualRangeMeasureScreen` on success.
+- **`VisualRangeMeasureScreen.svelte`** (z-index 13):
+  - Circular sky view: `SkyCanvas` in `finderMode`, with `showDsos`,
+    `showSolarSystem`, `showConstellationLines`, `showConstellationNames`, and
+    `showConstellationBoundaries` all `false`. Double-star types mapped to plain
+    star. `magLimitOverride` set to the current step's faintest candidate
+    magnitude + 0.5 so stars beyond the target visibility level are suppressed.
+  - `overlayArrows` prop on `SkyCanvas` (array): each entry is either a guide
+    arrow `{ fromRa, fromDec, toRa, toDec, label? }` (drawn as a labelled line
+    with arrowhead) or a candidate marker `{ markerRa, markerDec }` (drawn as a
+    target circle). In the `move` phase the array contains guide arrows; in the
+    `test` phase it contains a single marker at the candidate star.
+  - **State machine:** `phase ∈ { move, test, result }` × `stepIndex` ×
+    `moveIndex` × `candidateSlot`. The starting telescope position of each step
+    is pre-computed as `_stepStarts[]` by sequentially applying each step's
+    moves from `startStar.pos`.
+  - **History stack:** `saveHistory()` / `goBack()` support the Previous button
+    in both `move` and `test` phases, restoring full state.
+  - **"Add to observation":** appends a formatted note
+    `Visual range (TELESCOPE, EYEPIECE): mag M.M at HH:MM near STAR (CONSTELLATION)`
+    to `obs.notes` (never pushes to `obs.objects`). Auto-creates today's
+    observation if none exists. Button disabled after first use; shows
+    confirmation text inline.
+- **`RangeIcon.svelte`:** SVG icon for the Visual Range menu entry.
+- **Menu integration** (`MenuPanel.svelte`, `MainScreen.svelte`): "Visual Range"
+  item with keyboard shortcut `r`, positioned between "Finding Paths" and
+  "Telescopes". Keyboard handler wired in `MainScreen`.
+- **`SkyCanvas.svelte` modifications:** new `overlayArrows` prop (array of
+  guide-arrow or marker objects). Guide arrows project celestial coordinates to
+  canvas pixels, draw a line with an arrowhead, and optionally render a text label
+  (distance multiplier). Markers draw a target circle at the candidate position.
+- **`vite.config.mjs`:** test environment set to `'node'` so the plan generator
+  test suite can access Node `fs` to read CSV star fixtures directly.
+
+---
+
+## Phase 8 — Quizzes
 
 ### Step 35: Quiz framework
 
