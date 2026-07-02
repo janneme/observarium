@@ -19,6 +19,7 @@
   import FovCircleIcon from '../icons/FovCircleIcon.svelte'
   import ObservationsIcon from '../icons/ObservationsIcon.svelte'
   import FindingPathsIcon from '../icons/FindingPathsIcon.svelte'
+  import RangeIcon from '../icons/RangeIcon.svelte'
   import TelescopeIcon from '../icons/TelescopeIcon.svelte'
   import ConstellationQuizIcon from '../icons/ConstellationQuizIcon.svelte'
   import DsoQuizIcon from '../icons/DsoQuizIcon.svelte'
@@ -165,6 +166,20 @@
             <FindingPathsIcon size="28" />
           </div>
           <span class="item-lbl">Finding Paths (p)</span>
+        </button>
+
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('visualrange')
+            close()
+          }}
+          aria-label="Visual Range"
+        >
+          <div class="icon-wrap">
+            <RangeIcon size="28" />
+          </div>
+          <span class="item-lbl">Visual Range (r)</span>
         </button>
 
         <button

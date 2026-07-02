@@ -14,6 +14,7 @@
   import FindingPathsListScreen from './FindingPathsListScreen.svelte'
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
+  import VisualRangeSetupScreen from './VisualRangeSetupScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
   import { getObjectsInArea, getPendingChangesCount, getFindingPathsChanges } from '../lib/db.js'
@@ -92,6 +93,7 @@
   let returnToObservationsFromObjectDetails = false
   let showFindingPathsList = false
   let findingPathsListTargetChip = null
+  let showVisualRange = false
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
   let returnToFindingPathsListFromAbout = false
@@ -423,6 +425,7 @@
     if (get(searchViewActive)) return
     if (showFindingPathsList) return
     if (showFindingPaths) return
+    if (showVisualRange) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -499,6 +502,12 @@
     if (e.key === 'p') {
       menuOpen = false
       showFindingPathsList = true
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'r') {
+      menuOpen = false
+      showVisualRange = true
       e.preventDefault()
       return
     }
@@ -669,6 +678,9 @@
     }}
     on:findingpathslist={() => {
       showFindingPathsList = true
+    }}
+    on:visualrange={() => {
+      showVisualRange = true
     }}
     on:sync={() => {
       openObservationSync()
@@ -844,6 +856,15 @@
           showFindingPathsList = true
         }
       }}
+    />
+  {/if}
+
+  {#if showVisualRange}
+    <VisualRangeSetupScreen
+      {lat}
+      {lon}
+      time={skyTime}
+      on:close={() => { showVisualRange = false }}
     />
   {/if}
 

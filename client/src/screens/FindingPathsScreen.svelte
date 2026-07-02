@@ -1308,8 +1308,8 @@
   }
 
   .mini.set {
-    border-color: rgba(100, 200, 130, 0.6);
-    color: #9dda9d;
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .add-step {

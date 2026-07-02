@@ -1022,12 +1022,35 @@
     // Pass 0: overlay arrows (behind DSOs and stars)
     if (overlayArrows.length) {
       const nightly = currentTheme === 'nightly'
-      const arrowColor = nightly ? 'rgba(204,68,0,0.55)' : 'rgba(255,255,255,0.45)'
-      const labelColor = nightly ? 'rgba(204,68,0,0.65)' : 'rgba(255,255,255,0.55)'
+      const arrowColor = nightly ? 'rgba(204,0,0,0.55)' : 'rgba(255,255,255,0.45)'
+      const labelColor = nightly ? 'rgba(204,0,0,0.65)' : 'rgba(255,255,255,0.55)'
       ctx.save()
       ctx.strokeStyle = arrowColor
       ctx.lineWidth = 1.5
       for (const arr of overlayArrows) {
+        if (arr.markerRa != null && arr.markerDec != null) {
+          const pt = projectToPixel(arr.markerRa, arr.markerDec, ra0, dec0, W, H, fov, rotation)
+          if (!pt) continue
+          const { px, py } = pt
+          const markerColor = currentTheme === 'nightly' ? 'rgba(0,0,220,0.85)' : 'rgba(0,200,255,0.85)'
+          ctx.save()
+          ctx.strokeStyle = markerColor
+          ctx.lineWidth = 1.5
+          const arm = 10
+          const gap = 5
+          ctx.beginPath()
+          ctx.moveTo(px - arm - gap, py)
+          ctx.lineTo(px - gap, py)
+          ctx.moveTo(px + gap, py)
+          ctx.lineTo(px + arm + gap, py)
+          ctx.moveTo(px, py - arm - gap)
+          ctx.lineTo(px, py - gap)
+          ctx.moveTo(px, py + gap)
+          ctx.lineTo(px, py + arm + gap)
+          ctx.stroke()
+          ctx.restore()
+          continue
+        }
         const from = projectToPixel(arr.fromRa, arr.fromDec, ra0, dec0, W, H, fov, rotation)
         const to = projectToPixel(arr.toRa, arr.toDec, ra0, dec0, W, H, fov, rotation)
         if (!from || !to) continue
@@ -1037,11 +1060,24 @@
         if (len < 2) continue
         const ux = dx / len
         const uy = dy / len
-        // shorten line end so chevron tip sits exactly at toRa/toDec
-        const tipX = to.px
-        const tipY = to.py
+        const STAR_GAP = Math.max(4, Math.min(W, H) * 0.015)
+        const startX = from.px + ux * STAR_GAP
+        const startY = from.py + uy * STAR_GAP
+        const _cR = Math.min(W, H) / 2
+        const _cx = W / 2
+        const _cy = H / 2
+        const _dtoX = to.px - _cx
+        const _dtoY = to.py - _cy
+        let tipX, tipY
+        if (Math.hypot(_dtoX, _dtoY) <= _cR * 0.95) {
+          tipX = to.px - ux * STAR_GAP
+          tipY = to.py - uy * STAR_GAP
+        } else {
+          tipX = _cx + ux * _cR * 0.95
+          tipY = _cy + uy * _cR * 0.95
+        }
         ctx.beginPath()
-        ctx.moveTo(from.px, from.py)
+        ctx.moveTo(startX, startY)
         ctx.lineTo(tipX, tipY)
         ctx.stroke()
         // open chevron head
@@ -1056,8 +1092,8 @@
           ctx.font = '11px sans-serif'
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
-          const mx = (from.px + tipX) / 2
-          const my = (from.py + tipY) / 2
+          const mx = (startX + tipX) / 2
+          const my = (startY + tipY) / 2
           ctx.fillText(arr.label, mx - uy * 11, my + ux * 11)
         }
       }

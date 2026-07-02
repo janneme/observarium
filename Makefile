@@ -2,7 +2,7 @@
 AWS_PROFILE   ?= personal
 MAG           ?= 9
 
-.PHONY: help deploy deploy-infra deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test
+.PHONY: help deploy deploy-infra deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test test-visual-range
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -55,11 +55,16 @@ lint: ## Run ruff, pylint, eslint, prettier, and svelte-check on all packages
 	@printf '\033[1;36m==> Linting client\033[0m\n'
 	$(MAKE) -C client lint
 
-test: ## Run server and data-prep test suites (from repo root)
+test: ## Run server, data-prep, and client test suites (from repo root)
 	@printf '\033[1;36m==> Running server tests\033[0m\n'
 	cd server && PYTHONPATH=$(CURDIR) uv run pytest -q
 	@printf '\033[1;36m==> Running data_prep tests\033[0m\n'
 	cd data_prep && uv run pytest -q
+	@printf '\033[1;36m==> Running client tests\033[0m\n'
+	cd client && npx vitest run
+
+test-visual-range: ## Run visual range plan unit tests with verbose output
+	cd client && npx vitest run --reporter=verbose test/lib/visualRangePlan.test.js
 
 deploy-lambda: ## Build Lambda zip (linux/x86_64 wheels) and update the function code
 	@echo "==> Building Lambda package"
