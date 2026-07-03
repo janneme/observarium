@@ -41,6 +41,7 @@
   export let targetMarker = null
   export let targetMarkerColor = 'rgba(120,0,255,0.9)'
   export let lineFallbackByHip = null
+  export let constellationLineColorOverride = null
 
   let canvas
   let W = 0,
@@ -90,6 +91,7 @@
     targetMarker
     targetMarkerColor
     lineFallbackByHip
+    constellationLineColorOverride
     dirty = true
   }
 
@@ -887,7 +889,8 @@
     for (const obj of objects) {
       if (obj.hip) hipMap.set(obj.hip, obj.pos)
     }
-    ctx.strokeStyle = nightly ? 'rgba(136,0,0,0.55)' : 'rgba(100,120,220,0.5)'
+    const defaultLineColor = nightly ? 'rgba(136,0,0,0.55)' : 'rgba(100,120,220,0.5)'
+    ctx.strokeStyle = constellationLineColorOverride || defaultLineColor
     ctx.lineWidth = 1
     ctx.setLineDash([])
     for (const con of Object.values(constellations)) {

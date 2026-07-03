@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte'
+  import { theme } from '../stores/theme.js'
   import SkyCanvas from '../components/SkyCanvas.svelte'
   import QuizSetup from '../components/QuizSetup.svelte'
   import QuizProgress from '../components/QuizProgress.svelte'
@@ -493,6 +494,7 @@
           targetMarker={Array.isArray(renderedTargetStar?.pos) ? renderedTargetStar.pos : null}
           targetMarkerColor="rgba(120,0,255,0.9)"
           {lineFallbackByHip}
+          constellationLineColorOverride={revealLines && $theme !== 'nightly' ? 'rgba(255,0,255,0.85)' : null}
           magLimitOverride={qRenderMag}
           {lat}
           {lon}
