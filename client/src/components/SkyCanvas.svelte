@@ -1015,9 +1015,10 @@
     const pt = projectToPixel(targetMarker[0], targetMarker[1], ra0, dec0, W, H, fov, rotation)
     if (!pt || !isOnScreen(pt.px, pt.py, W, H, 40)) return
 
-    const lineHalf = 10
-    const gap = 3
-    ctx.strokeStyle = targetMarkerColor
+    const lineHalf = 15
+    const gap = 4.5
+    const markerColor = currentTheme === 'nightly' ? targetMarkerColor : 'rgba(140,255,140,0.92)'
+    ctx.strokeStyle = markerColor
     ctx.lineWidth = 2
     ctx.setLineDash([])
 

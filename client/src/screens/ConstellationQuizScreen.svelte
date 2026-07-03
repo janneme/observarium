@@ -489,6 +489,7 @@
           dec0={qDec0}
           fov={qFov}
           objects={qObjects}
+          starRadiusScale={2}
           targetMarker={Array.isArray(renderedTargetStar?.pos) ? renderedTargetStar.pos : null}
           targetMarkerColor="rgba(120,0,255,0.9)"
           {lineFallbackByHip}
