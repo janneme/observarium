@@ -8,6 +8,7 @@
   import { doSearch } from '../lib/search.js'
   import { getSearchIndex, getObjectIdsWithFindingPaths } from '../lib/db.js'
   import FindingPathsIcon from '../icons/FindingPathsIcon.svelte'
+  import InfoIcon from '../icons/InfoIcon.svelte'
 
   const dispatch = createEventDispatcher()
 
@@ -104,6 +105,27 @@
   function findingPaths(item) {
     dispatch('findingpaths', { object: item.obj })
   }
+
+  function splitDsoLabel(display) {
+    const raw = String(display || '')
+    const cut = raw.indexOf(' – ')
+    if (cut < 0) return null
+    return {
+      left: raw.slice(0, cut),
+      right: raw.slice(cut + 3),
+    }
+  }
+
+  function splitCatalogAndConst(leftPart) {
+    const raw = String(leftPart || '').trim()
+    if (!raw) return { cat: '', constSuffix: '' }
+    const m = raw.match(/^(.*?)(\s*\([^)]+\))$/)
+    if (!m) return { cat: raw, constSuffix: '' }
+    return {
+      cat: m[1].trim(),
+      constSuffix: m[2],
+    }
+  }
 </script>
 
 <div class="search-overlay" style={`top:${topOffset}; z-index:${zIndex};`} on:pointerdown|stopPropagation>
@@ -152,18 +174,34 @@
           on:click={async () => await accept(item)}
           on:keydown={async (e) => (e.key === 'Enter' || e.key === ' ') && (await accept(item))}
         >
-          <span class="result-label"
-            >{#each item.spans as span}{#if span.hl}<span class="hl">{span.text}</span
-                >{:else}{span.text}{/if}{/each}{#if item.showCon && item.obj.constellation}{' '}({item.obj
-                .constellation}){/if}</span
-          >
+          <span class="result-label">
+            {#if item.obj.type === 'dso' && splitDsoLabel(item.display)}
+              {@const d = splitDsoLabel(item.display)}
+              {@const left = splitCatalogAndConst(d.left)}
+              <strong>{left.cat}</strong>{left.constSuffix}
+              {' – '}
+              <strong>{d.right}</strong>
+            {:else if item.obj.type === 'dso'}
+              {@const left = splitCatalogAndConst(item.display)}
+              <strong>{left.cat}</strong>{left.constSuffix}
+            {:else}
+              {#each item.spans as span}
+                {#if span.hl}<span class="hl">{span.text}</span>{:else}{span.text}{/if}
+              {/each}
+              {#if item.showCon && item.obj.constellation}
+                {' '}({item.obj.constellation})
+              {/if}
+            {/if}
+          </span>
           <div class="result-actions" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
             {#if showDetailsAction}
-              <button class="act-btn" on:click={() => details(item)} title="Details" aria-label="Details">ℹ</button>
+              <button class="act-btn details-btn" on:click={() => details(item)} title="Details" aria-label="Details">
+                <InfoIcon size="1.2rem" />
+              </button>
             {/if}
             {#if showFindingPathsAction && objectIdsWithPaths.has(item.obj.id)}
               <button
-                class="act-btn"
+                class="act-btn paths-btn"
                 on:click={() => findingPaths(item)}
                 title="Finding Paths"
                 aria-label="Finding Paths"
@@ -298,8 +336,8 @@
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.6);
-    font-size: 1.7rem;
-    width: 2.4rem;
+    padding: 0;
+    width: 2.2rem;
     height: 2rem;
     overflow: visible;
     display: flex;
@@ -316,9 +354,21 @@
   }
 
   .act-btn :global(svg) {
-    width: 28px;
-    height: 28px;
+    width: 1.2rem;
+    height: 1.2rem;
+    min-width: 1.2rem;
+    min-height: 1.2rem;
+    max-width: 1.2rem;
+    max-height: 1.2rem;
+    aspect-ratio: 1 / 1;
+    flex: 0 0 auto;
     display: block;
+  }
+
+  .details-btn :global(svg),
+  .paths-btn :global(svg) {
+    width: 1.2rem;
+    height: 1.2rem;
   }
 
   /* Make CustomInput border visible on dark background */

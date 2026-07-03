@@ -402,7 +402,14 @@
                 <button
                   class="target-btn"
                   type="button"
-                  on:click={() => dispatch('openabout', { obj: row.obj, targetChip, startChip })}
+                  on:click={() =>
+                    dispatch('openpath', {
+                      contextObject: row.obj,
+                      initialSelectStart: false,
+                      initialStartHip: row.paths[0]?.startHip ?? null,
+                      targetChip,
+                      startChip,
+                    })}
                 >
                   <ObservationObjectSymbol kind={objectSymbolKind(row.obj)} />
                   <strong>{row.targetLabel}</strong>{#if row.targetConst}&nbsp;({row.targetConst}){/if}
@@ -539,10 +546,14 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
+    font-size: 1.5rem;
+    line-height: 1;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.1rem 0.15rem 0.1rem 0.5rem;
     border-radius: 4px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
   }
 
   .header-title {
@@ -710,7 +721,7 @@
 
   .target-cell {
     padding: 0.45rem 0.5rem 0.45rem 0;
-    vertical-align: top;
+    vertical-align: middle;
   }
 
   .target-btn {
@@ -733,7 +744,7 @@
 
   .path-row {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.35rem;
     padding: 0.1rem 0;
   }

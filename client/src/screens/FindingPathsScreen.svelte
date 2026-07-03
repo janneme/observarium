@@ -23,6 +23,8 @@
   export let initialSelectStart = false
   export let initialStartHip = null
   export let initialEditHip = null
+
+  const openedExistingPath = initialStartHip != null || initialEditHip != null
   export let lat = 48.2
   export let lon = 16.37
   export let time = new Date()
@@ -259,6 +261,11 @@
     ? starsByHip.get(String(expandedStartHip))?.label || `HIP ${expandedStartHip}`
     : null
   $: guideMode = initialStartHip != null
+  $: editMode = initialEditHip != null
+  $: visiblePathEntryList =
+    editMode && expandedStartHip != null
+      ? pathEntryList.filter((entry) => String(entry.startHip) === String(expandedStartHip))
+      : pathEntryList
 
   function pathStartPoint(startHip) {
     const star = starsByHip.get(String(startHip))
@@ -785,15 +792,15 @@
         Path {recordingStartLabel} ⇒ {objectFullLabel(objectCtx)}
       {:else if initialSelectStart}
         Select start (bright star)
-      {:else if guideMode && expandedStartLabel}
-        {expandedStartLabel}<span class="title-arrow">→</span>{objectFullLabel(objectCtx)}
+      {:else if expandedStartLabel}
+        Path {expandedStartLabel}<span class="title-arrow">⇒</span>{objectFullLabel(objectCtx)}
       {:else}
         Finding Paths · {objectLabel(objectCtx)}
       {/if}
     </div>
     {#if guideMode}
       <button class="btn danger" on:click={() => askDeletePath(expandedStartHip)}>Delete</button>
-    {:else if !recordingStartHip}
+    {:else if !recordingStartHip && !openedExistingPath}
       <button class="btn" on:click={startPathSelection}>＋ Path</button>
     {/if}
   </div>
@@ -859,7 +866,7 @@
         <span class="step-nav-label">
           {activeStepIndex + 1}/{_gs.length}
           <strong class="step-nav-name"
-            >{_navP.from}<span class="step-arrow">→</span>{_navP.to}{#if _navP.mx}<span class="step-mx">{_navP.mx}</span
+            >{_navP.from}<span class="step-arrow">⇒</span>{_navP.to}{#if _navP.mx}<span class="step-mx">{_navP.mx}</span
               >{/if}</strong
           >
         </span>
@@ -889,10 +896,10 @@
             {@const p = stepTitleParts(step, idx, recordingPath)}
             <div class="step-row" class:active={activeStepIndex === idx}>
               <button class="step-main" on:click={() => selectStep(idx)}>
-                {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span
+                {p.prefix}{p.from}<span class="step-arrow">⇒</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span
                   >{/if}
               </button>
-              {#if activeStepIndex === idx}
+              {#if activeStepIndex === idx && !guideMode}
                 <div class="step-actions">
                   {#if step.final}
                     <button class="mini" on:click={() => deleteStep(idx)}>Delete</button>
@@ -926,18 +933,18 @@
             </div>
           {/each}
 
-          {#if !pathIsComplete}
+          {#if !pathIsComplete && !guideMode}
             <button class="add-step" on:click={addStep}>Add</button>
           {/if}
         </div>
       {/if}
-    {:else}
+    {:else if !guideMode}
       <!-- Normal mode: show full path list -->
-      {#if pathEntryList.length === 0 && !guideMode}
+      {#if visiblePathEntryList.length === 0 && !guideMode}
         <div class="empty">No paths defined for this object.</div>
       {/if}
 
-      {#each pathEntryList as entry (entry.startHip)}
+      {#each visiblePathEntryList as entry (entry.startHip)}
         <section class="path-card">
           <div class="path-head">
             <button class="path-toggle" on:click={() => focusPath(entry.startHip)}>
@@ -963,11 +970,11 @@
                 {@const p = stepTitleParts(step, idx, entry.path)}
                 <div class="step-row" class:active={activeStepIndex === idx}>
                   <button class="step-main" on:click={() => selectStep(idx)}>
-                    {p.prefix}{p.from}<span class="step-arrow">→</span>{p.to}{#if p.mx}<span class="step-mx"
+                    {p.prefix}{p.from}<span class="step-arrow">⇒</span>{p.to}{#if p.mx}<span class="step-mx"
                         >{p.mx}</span
                       >{/if}
                   </button>
-                  {#if activeStepIndex === idx}
+                  {#if activeStepIndex === idx && !guideMode}
                     <div class="step-actions">
                       {#if step.final}
                         <button class="mini" on:click={() => deleteStep(idx)}>Delete</button>
@@ -1001,7 +1008,7 @@
                 </div>
               {/each}
 
-              {#if !pathIsComplete}
+              {#if !pathIsComplete && !guideMode}
                 <button class="add-step" on:click={addStep}>Add</button>
               {/if}
             </div>

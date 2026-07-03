@@ -168,14 +168,13 @@
 
   .tagline {
     margin: 0;
-    font-size: 0.88rem;
-    opacity: 0.7;
+    font-size: 0.92rem;
+    opacity: 0.8;
   }
 
   .version {
     margin: 0 0 4px;
-    font-size: 0.75rem;
-    opacity: 0.4;
+    opacity: 0.55;
     font-variant-numeric: tabular-nums;
   }
 
@@ -209,7 +208,7 @@
 
   :global([data-theme='nightly']) .panel {
     background: #110000;
-    color: #ff8080;
+    color: #ff0000;
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8);
   }
 
@@ -217,7 +216,15 @@
     border-bottom-color: rgba(180, 0, 0, 0.25);
   }
 
-  :global([data-theme='nightly'] .app-icon) {
-    color: #cc2200;
+  :global([data-theme='nightly']) :global(.app-icon) {
+    color: #cc0000;
+  }
+
+  :global([data-theme='nightly']) .tagline,
+  :global([data-theme='nightly']) .version,
+  :global([data-theme='nightly']) .section-head,
+  :global([data-theme='nightly']) .counts dt,
+  :global([data-theme='nightly']) .counts dd {
+    color: #ff0000;
   }
 </style>

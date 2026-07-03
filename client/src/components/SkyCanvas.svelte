@@ -889,7 +889,7 @@
     for (const obj of objects) {
       if (obj.hip) hipMap.set(obj.hip, obj.pos)
     }
-    const defaultLineColor = nightly ? 'rgba(136,0,0,0.55)' : 'rgba(100,120,220,0.5)'
+    const defaultLineColor = nightly ? 'rgba(220,0,0,0.7)' : 'rgba(100,120,220,0.5)'
     ctx.strokeStyle = constellationLineColorOverride || defaultLineColor
     ctx.lineWidth = 1
     ctx.setLineDash([])

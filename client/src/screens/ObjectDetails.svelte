@@ -201,6 +201,24 @@
 
   function formatMagRow(o, ds = null) {
     if (!isDouble(o)) return formatMag(o.mag)
+    const pairs = dblPairs(o, ds)
+    const compMags = new Map()
+    for (const pair of pairs) {
+      if (!pair?.comp || !Array.isArray(pair.mag)) continue
+      const comp = String(pair.comp).trim().toUpperCase()
+      if (comp.length !== 2 || pair.mag.length < 2) continue
+      const [c1, c2] = comp.split('')
+      const [m1, m2] = pair.mag
+      if (m1 != null && !compMags.has(c1)) compMags.set(c1, m1)
+      if (m2 != null && !compMags.has(c2)) compMags.set(c2, m2)
+    }
+    if (compMags.size >= 2) {
+      const compStr = [...compMags.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([, mag]) => mag)
+        .join(' / ')
+      return o.mag != null ? `${formatMag(o.mag)} (${compStr})` : compStr
+    }
     const pair = dblMainPair(o, ds)
     if (pair?.mag && Array.isArray(pair.mag)) {
       const [m1, m2] = pair.mag

@@ -87,7 +87,6 @@
         showHorizon={false}
       />
     </div>
-    <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>
   </div>
   <p class="hint">Tap an object to select</p>
 </div>
@@ -95,7 +94,10 @@
 <style>
   .loupe-overlay {
     position: fixed;
-    inset: 0;
+    top: 2.75rem;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 100;
     background: #0a0a0a;
     display: flex;
@@ -131,26 +133,6 @@
     cursor: crosshair;
   }
 
-  .close-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 1;
-    background: rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.8);
-    border-radius: 6px;
-    font-size: 1rem;
-    line-height: 1;
-    padding: 5px 8px;
-    cursor: pointer;
-    transition: opacity 120ms;
-  }
-
-  .close-btn:hover {
-    opacity: 0.75;
-  }
-
   .hint {
     margin: 1.2vh 1vh 0;
     font-size: 0.85rem;
@@ -166,12 +148,7 @@
     border-color: rgba(180, 0, 0, 0.4);
   }
 
-  :global([data-theme='nightly']) .close-btn {
-    border-color: rgba(180, 0, 0, 0.3);
-    color: rgba(255, 128, 128, 0.8);
-  }
-
   :global([data-theme='nightly']) .hint {
-    color: rgba(255, 128, 128, 0.4);
+    color: rgba(200, 0, 0, 0.4);
   }
 </style>

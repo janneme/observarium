@@ -289,6 +289,33 @@ export function catEntries(obj) {
   return cats
 }
 
+function firstDisplayName(name) {
+  const raw = String(name || '').trim()
+  if (!raw) return ''
+  const parts = raw
+    .split(/[;,/]/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  return parts[0] || raw
+}
+
+function preferredCatalogLabel(obj) {
+  if (obj.m != null) return `M ${obj.m}`
+  if (obj.ngc != null) return `NGC ${obj.ngc}`
+  if (obj.ic != null) return `IC ${obj.ic}`
+  if (obj.caldwell != null) return `C ${obj.caldwell}`
+  return ''
+}
+
+function dsoDisplay(obj, catLabel = '') {
+  const cat = String(catLabel || preferredCatalogLabel(obj) || '').trim()
+  const catWithCon = cat ? (obj.constellation ? `${cat} (${obj.constellation})` : cat) : ''
+  const name = firstDisplayName(obj.name)
+  if (catWithCon && name) return `${catWithCon} – ${name}`
+  if (catWithCon) return catWithCon
+  return name
+}
+
 export function doSearch(q, searchIndex) {
   if (!searchIndex) return []
   const trimmed = q.trim()
@@ -313,7 +340,12 @@ export function doSearch(q, searchIndex) {
   // Pass 0: prefix match on proper name or custom alias (highest rank)
   for (const obj of searchIndex) {
     if (obj.name && obj.name.toLowerCase().replace(/\s+/g, '').startsWith(nq)) {
-      add(obj, obj.name, 0, nq.length, true)
+      if (obj.type === 'dso') {
+        const display = dsoDisplay(obj)
+        add(obj, display, null, null, false)
+      } else {
+        add(obj, obj.name, 0, nq.length, true)
+      }
     } else if (obj.aliases) {
       for (const alias of obj.aliases) {
         if (seen.has(obj.id)) break
@@ -367,9 +399,13 @@ export function doSearch(q, searchIndex) {
     if (seen.has(obj.id)) continue
     for (const cat of catEntries(obj)) {
       if (cat.tokens.some((t) => t.startsWith(nq))) {
-        const display = obj.name ? `${obj.name}, ${cat.label}` : cat.label
-        const hlStart = obj.name ? obj.name.length + 2 : 0
-        add(obj, display, hlStart, display.length, true)
+        if (obj.type === 'dso') {
+          add(obj, dsoDisplay(obj, cat.label), null, null, false)
+        } else {
+          const display = obj.name ? `${obj.name}, ${cat.label}` : cat.label
+          const hlStart = obj.name ? obj.name.length + 2 : 0
+          add(obj, display, hlStart, display.length, true)
+        }
         break
       }
     }
@@ -380,14 +416,21 @@ export function doSearch(q, searchIndex) {
     if (seen.has(obj.id) || !obj.name) continue
     const lower = obj.name.toLowerCase().replace(/\s+/g, '')
     const idx = lower.indexOf(nq)
-    if (idx !== -1) add(obj, obj.name, idx, idx + nq.length, true)
+    if (idx !== -1) {
+      if (obj.type === 'dso') {
+        add(obj, dsoDisplay(obj), null, null, false)
+      } else {
+        add(obj, obj.name, idx, idx + nq.length, true)
+      }
+    }
   }
 
   // Sort alphabetically by display string; normalize superscript digits (¹²³…) to
   // their ASCII equivalents so ε¹ < ε² instead of the reverse (U+00B9 > U+00B2).
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
   out.sort((a, b) => {
     const norm = (s) => s.replace(/[¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => String(SUP_TO_DIGIT[c] ?? c))
-    return norm(a.display).localeCompare(norm(b.display))
+    return collator.compare(norm(a.display), norm(b.display))
   })
 
   return out.slice(0, 20)
