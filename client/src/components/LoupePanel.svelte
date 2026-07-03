@@ -77,6 +77,7 @@
         {lon}
         {time}
         magLimitOverride={magLimit}
+        starRadiusScale={2}
         finderMode={false}
         showFovCircle={false}
         showConstellationLines={false}

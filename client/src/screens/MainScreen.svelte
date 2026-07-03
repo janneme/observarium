@@ -15,6 +15,7 @@
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import VisualRangeSetupScreen from './VisualRangeSetupScreen.svelte'
+  import ConstellationQuizScreen from './ConstellationQuizScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
   import { getObjectsInArea, getPendingChangesCount, getFindingPathsChanges } from '../lib/db.js'
@@ -94,6 +95,7 @@
   let showFindingPathsList = false
   let findingPathsListTargetChip = null
   let showVisualRange = false
+  let showConstellationQuiz = false
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
   let returnToFindingPathsListFromAbout = false
@@ -326,7 +328,7 @@
           const s = angSepDeg(hits[i].obj.pos, hits[j].obj.pos)
           if (s < minSep) minSep = s
         }
-      loupeFov = Math.max(0.05, Math.min(10, (minSep * window.innerWidth) / (3 * TAP_RADIUS)))
+      loupeFov = fov / 5
       loupeRa0 = centRa
       loupeDec0 = centDec
       loupeMagLim = fovToMagLimit(fov)
@@ -374,6 +376,11 @@
       }
       if (showFindingPathsList) {
         showFindingPathsList = false
+        e.preventDefault()
+        return
+      }
+      if (showConstellationQuiz) {
+        showConstellationQuiz = false
         e.preventDefault()
         return
       }
@@ -426,6 +433,7 @@
     if (showFindingPathsList) return
     if (showFindingPaths) return
     if (showVisualRange) return
+    if (showConstellationQuiz) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -685,6 +693,9 @@
     on:sync={() => {
       openObservationSync()
     }}
+    on:constellationquiz={() => {
+      showConstellationQuiz = true
+    }}
   />
 
   {#if showPicker}
@@ -805,9 +816,6 @@
     <FindingPathsListScreen
       initialTargetChip={findingPathsListTargetChip}
       initialStartChip={findingPathsListStartChip}
-      {lat}
-      {lon}
-      time={skyTime}
       on:close={() => {
         showFindingPathsList = false
         findingPathsListTargetChip = null
@@ -864,7 +872,23 @@
       {lat}
       {lon}
       time={skyTime}
-      on:close={() => { showVisualRange = false }}
+      on:close={() => {
+        showVisualRange = false
+      }}
+    />
+  {/if}
+
+  {#if showConstellationQuiz}
+    <ConstellationQuizScreen
+      {lat}
+      {lon}
+      time={skyTime}
+      viewRa0={ra0}
+      viewDec0={dec0}
+      viewFov={minDimFov}
+      on:close={() => {
+        showConstellationQuiz = false
+      }}
     />
   {/if}
 

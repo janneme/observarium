@@ -13,20 +13,20 @@
   } from '../stores/keyboard.js'
   import { onMount, onDestroy, tick } from 'svelte'
 
-  let layout = 'cz' // 'en' or 'cz'
+  let layout = 'en' // 'en' or 'cz'
 
   const en = {
     unshifted: [
       ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='],
-      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 'ENTER'],
+      ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', '[', ']', 'ENTER'],
       ['CAPS', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', "'"],
-      ['SHIFT', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 'SHIFT'],
+      ['SHIFT', 'y', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 'SHIFT'],
     ],
     shifted: [
       ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+'],
-      ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 'ENTER'],
+      ['Q', 'W', 'E', 'R', 'T', 'Z', 'U', 'I', 'O', 'P', '{', '}', 'ENTER'],
       ['CAPS', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"'],
-      ['SHIFT', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', 'SHIFT'],
+      ['SHIFT', 'Y', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', 'SHIFT'],
     ],
   }
 

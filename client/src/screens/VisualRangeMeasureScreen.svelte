@@ -23,15 +23,39 @@
     const raw = String(bayer || '').trim()
     if (!raw) return null
     const first = raw.split(/\s+/)[0] || ''
-    const cleaned = first.toLowerCase().replace(/[0-9]+$/g, '').replace(/[._-]+$/g, '')
+    const cleaned = first
+      .toLowerCase()
+      .replace(/[0-9]+$/g, '')
+      .replace(/[._-]+$/g, '')
     const greekChars = 'αβγδεζηθικλμνξοπρστυφχψω'
     if (cleaned && greekChars.includes(cleaned[0])) return cleaned[0]
     const key = cleaned.length >= 3 ? cleaned.slice(0, 3) : cleaned
     const map = {
-      alf: 'α', alp: 'α', bet: 'β', gam: 'γ', del: 'δ', eps: 'ε',
-      zet: 'ζ', eta: 'η', the: 'θ', iot: 'ι', kap: 'κ', lam: 'λ',
-      mu: 'μ', nu: 'ν', xi: 'ξ', omi: 'ο', pi: 'π', rho: 'ρ',
-      sig: 'σ', tau: 'τ', ups: 'υ', phi: 'φ', chi: 'χ', psi: 'ψ', ome: 'ω',
+      alf: 'α',
+      alp: 'α',
+      bet: 'β',
+      gam: 'γ',
+      del: 'δ',
+      eps: 'ε',
+      zet: 'ζ',
+      eta: 'η',
+      the: 'θ',
+      iot: 'ι',
+      kap: 'κ',
+      lam: 'λ',
+      mu: 'μ',
+      nu: 'ν',
+      xi: 'ξ',
+      omi: 'ο',
+      pi: 'π',
+      rho: 'ρ',
+      sig: 'σ',
+      tau: 'τ',
+      ups: 'υ',
+      phi: 'φ',
+      chi: 'χ',
+      psi: 'ψ',
+      ome: 'ω',
     }
     return map[key] || null
   }
@@ -65,10 +89,7 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  $: fovDeg =
-    eyepiece && telescope
-      ? (eyepiece.fovDeg * eyepiece.focalLengthMm) / telescope.focalLengthMm
-      : 5
+  $: fovDeg = eyepiece && telescope ? (eyepiece.fovDeg * eyepiece.focalLengthMm) / telescope.focalLengthMm : 5
 
   let stepIndex = 0
   let moveIndex = 0
@@ -124,9 +145,16 @@
     }
     return starts
   })()
-  console.log('[VR] plan stepStarts:', _stepStarts.map((p, i) => `[${i}] RA=${p[0].toFixed(3)} Dec=${p[1].toFixed(3)}`))
+  console.log(
+    '[VR] plan stepStarts:',
+    _stepStarts.map((p, i) => `[${i}] RA=${p[0].toFixed(3)} Dec=${p[1].toFixed(3)}`),
+  )
   if (plan?.steps) {
-    plan.steps.forEach((s, i) => console.log(`[VR] step[${i}] centre=(RA=${s.centre[0].toFixed(3)} Dec=${s.centre[1].toFixed(3)}) numMoves=${s.moves.length} candidates=[${s.candidates.map(c => `id=${c.id} mag=${getStarMag(c).toFixed(2)}`).join(', ')}]`))
+    plan.steps.forEach((s, i) =>
+      console.log(
+        `[VR] step[${i}] centre=(RA=${s.centre[0].toFixed(3)} Dec=${s.centre[1].toFixed(3)}) numMoves=${s.moves.length} candidates=[${s.candidates.map((c) => `id=${c.id} mag=${getStarMag(c).toFixed(2)}`).join(', ')}]`,
+      ),
+    )
   }
 
   // Synchronous init — set phase and viewCentre from first step
@@ -135,7 +163,7 @@
     phase = 'result'
   } else if (_firstStep.moves.length === 0) {
     phase = 'test'
-    viewCentre = _stepStarts[0] ?? (startStar?.pos ?? [0, 0])
+    viewCentre = _stepStarts[0] ?? startStar?.pos ?? [0, 0]
   }
   // else: phase='move', viewCentre=startStar.pos (already set at declaration)
 
@@ -206,13 +234,16 @@
   }
 
   function _vrAngSep(p1, p2) {
-    const phi1 = (p1[1] * Math.PI) / 180, phi2 = (p2[1] * Math.PI) / 180
+    const phi1 = (p1[1] * Math.PI) / 180,
+      phi2 = (p2[1] * Math.PI) / 180
     const dPhi = ((p2[1] - p1[1]) * Math.PI) / 180
     const dLam = ((p2[0] - p1[0]) * Math.PI) / 180
     const a = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLam / 2) ** 2
     return (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 180) / Math.PI
   }
-  function _vrFmt(pos) { return `RA=${pos[0].toFixed(3)} Dec=${pos[1].toFixed(3)}` }
+  function _vrFmt(pos) {
+    return `RA=${pos[0].toFixed(3)} Dec=${pos[1].toFixed(3)}`
+  }
 
   function goBack() {
     if (!historyStack.length) return
@@ -230,18 +261,27 @@
     stepIndex = idx
     const step = plan.steps[idx]
     candidateSlot = 0
-    const startPos = _stepStarts[idx] ?? (startStar?.pos ?? [0, 0])
+    const startPos = _stepStarts[idx] ?? startStar?.pos ?? [0, 0]
     const fovR = fovDeg / 2
-    console.log(`[VR] enterStep idx=${idx} viewCentre=(${_vrFmt(startPos)}) fovRadius=${fovR.toFixed(3)}° numMoves=${step.moves.length}`)
+    console.log(
+      `[VR] enterStep idx=${idx} viewCentre=(${_vrFmt(startPos)}) fovRadius=${fovR.toFixed(3)}° numMoves=${step.moves.length}`,
+    )
     step.moves.forEach((m, mi) => {
       const fromDist = _vrAngSep(startPos, m.from.pos)
       const toDist = _vrAngSep(startPos, m.to.pos)
-      const ep = [startPos[0] + m.multiplier * (m.to.pos[0] - m.from.pos[0]), startPos[1] + m.multiplier * (m.to.pos[1] - m.from.pos[1])]
-      console.log(`[VR]   move[${mi}] from=(${_vrFmt(m.from.pos)}) fromDist=${fromDist.toFixed(3)}° inFov=${fromDist <= fovR}  to=(${_vrFmt(m.to.pos)}) toDist=${toDist.toFixed(3)}° inFov=${toDist <= fovR}  x${m.multiplier}  endpoint=(${_vrFmt(ep)})`)
+      const ep = [
+        startPos[0] + m.multiplier * (m.to.pos[0] - m.from.pos[0]),
+        startPos[1] + m.multiplier * (m.to.pos[1] - m.from.pos[1]),
+      ]
+      console.log(
+        `[VR]   move[${mi}] from=(${_vrFmt(m.from.pos)}) fromDist=${fromDist.toFixed(3)}° inFov=${fromDist <= fovR}  to=(${_vrFmt(m.to.pos)}) toDist=${toDist.toFixed(3)}° inFov=${toDist <= fovR}  x${m.multiplier}  endpoint=(${_vrFmt(ep)})`,
+      )
     })
     step.candidates.forEach((c, ci) => {
       const d = _vrAngSep(startPos, c.pos)
-      console.log(`[VR]   candidate[${ci}] id=${c.id} pos=(${_vrFmt(c.pos)}) mag=${getStarMag(c).toFixed(2)} distFromView=${d.toFixed(3)}°`)
+      console.log(
+        `[VR]   candidate[${ci}] id=${c.id} pos=(${_vrFmt(c.pos)}) mag=${getStarMag(c).toFixed(2)} distFromView=${d.toFixed(3)}°`,
+      )
     })
     if (step.moves.length === 0) {
       phase = 'test'
@@ -263,11 +303,15 @@
       viewCentre[1] + m.multiplier * (m.to.pos[1] - m.from.pos[1]),
     ]
     const fovR = fovDeg / 2
-    console.log(`[VR] handleNext step=${stepIndex} move=${moveIndex} viewWas=(${_vrFmt(viewCentre)}) → newCentre=(${_vrFmt(newCentre)})`)
+    console.log(
+      `[VR] handleNext step=${stepIndex} move=${moveIndex} viewWas=(${_vrFmt(viewCentre)}) → newCentre=(${_vrFmt(newCentre)})`,
+    )
     if (currentStep.candidates.length >= 2) {
       const c0dist = _vrAngSep(newCentre, currentStep.candidates[0].pos)
       const c1dist = _vrAngSep(newCentre, currentStep.candidates[1].pos)
-      console.log(`[VR]   after move: c0 dist=${c0dist.toFixed(3)}° inFov=${c0dist <= fovR}  c1 dist=${c1dist.toFixed(3)}° inFov=${c1dist <= fovR}  fovRadius=${fovR.toFixed(3)}°`)
+      console.log(
+        `[VR]   after move: c0 dist=${c0dist.toFixed(3)}° inFov=${c0dist <= fovR}  c1 dist=${c1dist.toFixed(3)}° inFov=${c1dist <= fovR}  fovRadius=${fovR.toFixed(3)}°`,
+      )
     }
     if (moveIndex < moves.length - 1) {
       moveIndex++
@@ -364,11 +408,7 @@
         <p class="instruction">{instructionText}</p>
       {/if}
       <div class="actions">
-        <button
-          class="btn secondary"
-          disabled={historyStack.length === 0}
-          on:click={goBack}
-        >Previous</button>
+        <button class="btn secondary" disabled={historyStack.length === 0} on:click={goBack}>Previous</button>
         <button class="btn primary" on:click={handleNext}>
           {currentStep && moveIndex < currentStep.moves.length - 1 ? 'Next move' : 'Next'}
         </button>
@@ -383,11 +423,7 @@
         </div>
       {/if}
       <div class="actions">
-        <button
-          class="btn secondary"
-          disabled={historyStack.length === 0}
-          on:click={goBack}
-        >Previous</button>
+        <button class="btn secondary" disabled={historyStack.length === 0} on:click={goBack}>Previous</button>
         <button class="btn danger" on:click={handleNo}>No</button>
         <button class="btn primary" on:click={handleYes}>Yes</button>
       </div>
@@ -399,11 +435,9 @@
           <p class="log-confirm">{logConfirmMsg}</p>
         {/if}
         <div class="result-actions">
-          <button
-            class="btn secondary"
-            disabled={resultLogged}
-            on:click={handleAddToObservation}
-          >{resultLogged ? 'Recorded' : 'Add to observation'}</button>
+          <button class="btn secondary" disabled={resultLogged} on:click={handleAddToObservation}
+            >{resultLogged ? 'Recorded' : 'Add to observation'}</button
+          >
           <button class="btn primary" on:click={() => dispatch('close')}>Sky View</button>
         </div>
       </div>
@@ -494,15 +528,6 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-  }
-
-  .mag-badge {
-    background: rgba(200, 0, 0, 0.1);
-    border: 1px solid rgba(200, 0, 0, 0.25);
-    border-radius: 12px;
-    padding: 0.2rem 0.65rem;
-    font-size: 0.82rem;
-    font-variant-numeric: tabular-nums;
   }
 
   .slot-note {

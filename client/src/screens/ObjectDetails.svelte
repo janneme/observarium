@@ -15,6 +15,7 @@
   import { getTodayObservation, getObjectImage, getDoubleStarNear } from '../lib/db.js'
   import { applyDsPatch } from '../lib/customObjects.js'
   import ObservationFormPanel from '../components/ObservationFormPanel.svelte'
+  import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
 
   export let lat = 48.2
   export let lon = 16.37
@@ -397,6 +398,35 @@
     return id.replace(/^star_([A-Za-z]+)(\d+)$/, '$1 $2') || '—'
   }
 
+  function dsLetterCount(pairs) {
+    if (!Array.isArray(pairs)) return 0
+    const letters = new Set()
+    for (const p of pairs) for (const c of String(p.comp || '')) if (c >= 'A' && c <= 'Z') letters.add(c)
+    return letters.size
+  }
+
+  function objectSymbolKind(obj) {
+    if (!obj) return 'generic'
+    if (obj.type === 'double_star') return dsLetterCount(obj.pairs) > 2 ? 'double_star_multi' : 'double_star'
+    if (obj.type === 'star') {
+      if (obj.dbl === 'm') return 'double_star_multi'
+      if (obj.dbl) return 'double_star'
+      if (Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1) return 'variable_star'
+      return 'star'
+    }
+    if (obj.type === 'solar_system_body') return String(obj.name || '').toLowerCase() || 'generic'
+    const type = String(obj.dsoType || '').toLowerCase()
+    if (type === 'open cluster') return 'open_cluster'
+    if (type === 'globular cluster') return 'globular_cluster'
+    if (type === 'planetary nebula') return 'planetary_nebula'
+    if (type === 'spiral galaxy' || type === 'elliptical galaxy' || type === 'galaxy') return 'galaxy'
+    if (type === 'dark nebula') return 'dark_nebula'
+    if (type === 'galaxy cluster' || type === 'cluster of galaxies') return 'galaxy_cluster'
+    if (type === 'quasar' || type === 'qso' || type === 'bl lac') return 'quasar'
+    if (type.includes('nebula')) return 'nebula'
+    return 'generic'
+  }
+
   onMount(() => {
     if (obj) loadData(obj)
     window.addEventListener('keydown', onGlobalKeyDown, true)
@@ -422,13 +452,20 @@
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
     <button class="back-btn" on:click={close}>←</button>
+    <span class="type-symbol"><ObservationObjectSymbol kind={objectSymbolKind(obj)} /></span>
     <span class="header-title">{objLabel(obj)}</span>
     <button
       class="observed-btn"
       class:observed={isObservedToday}
       on:click={openObservedForm}
-      title={isObservedToday ? 'Edit observation' : 'Create observation'}>{isObservedToday ? '★' : '☆'}</button
+      title={isObservedToday ? 'Edit observation' : 'Create observation'}
     >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" aria-hidden="true">
+        <path
+          d="M288 32c-80.8 0-145.5 36.8-192.6 80.6-46.8 43.5-78.1 95.4-93 131.1-3.3 7.9-3.3 16.7 0 24.6 14.9 35.7 46.2 87.7 93 131.1 47.1 43.7 111.8 80.6 192.6 80.6s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1 3.3-7.9 3.3-16.7 0-24.6-14.9-35.7-46.2-87.7-93-131.1-47.1-43.7-111.8-80.6-192.6-80.6zM144 256a144 144 0 1 1 288 0 144 144 0 1 1 -288 0zm144-64c0 35.3-28.7 64-64 64-11.5 0-22.3-3-31.7-8.4-1 10.9-.1 22.1 2.9 33.2 13.7 51.2 66.4 81.6 117.6 67.9s81.6-66.4 67.9-117.6c-12.2-45.7-55.5-74.8-101.1-70.8 5.3 9.3 8.4 20.1 8.4 31.7z"
+        />
+      </svg>
+    </button>
   </div>
 
   <svg style="display:none" aria-hidden="true">
@@ -642,15 +679,27 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
+    font-size: 1.3rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0 0.5rem;
     border-radius: 4px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    line-height: 0;
   }
 
   .back-btn:hover {
-    background: rgba(232, 232, 232, 0.1);
+    background: rgba(200, 0, 0, 0.1);
+  }
+
+  .type-symbol {
+    font-size: 0.95rem;
+    opacity: 0.7;
+    flex-shrink: 0;
+    line-height: 1;
   }
 
   .header-title {
@@ -664,28 +713,29 @@
 
   .observed-btn {
     background: none;
-    border: 1px solid rgba(232, 232, 232, 0.35);
+    border: none;
     color: var(--fg);
-    font-size: 1.25rem;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    line-height: 1;
+    padding: 0.25rem;
+    border-radius: 4px;
+  }
+
+  .observed-btn svg {
+    width: 1.4rem;
+    height: 1.4rem;
+    fill: currentColor;
   }
 
   .observed-btn.observed {
-    background: rgba(220, 80, 80, 0.18);
-    border-color: #dc5050;
-    color: #dc5050;
+    color: #cc0000;
   }
 
   .observed-btn:hover {
-    background: rgba(232, 232, 232, 0.12);
+    background: rgba(200, 0, 0, 0.1);
   }
 
   .content {
@@ -835,9 +885,6 @@
   }
   :global([data-theme='nightly']) .back-btn:hover {
     background: rgba(200, 0, 0, 0.08);
-  }
-  :global([data-theme='nightly']) .observed-btn {
-    border-color: rgba(200, 0, 0, 0.4);
   }
   :global([data-theme='nightly']) .observed-btn:hover {
     background: rgba(200, 0, 0, 0.1);

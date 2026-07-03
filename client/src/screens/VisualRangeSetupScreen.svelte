@@ -34,20 +34,16 @@
   function _saveState(star, telescopeId, eyepieceId, initialMag) {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify({ star, telescopeId, eyepieceId, initialMag }))
-    } catch {}
+    } catch (error) {
+      void error
+    }
   }
 
   $: _mounted && _saveState(selectedStar, selectedTelescopeId, selectedEyepieceId, selectedInitialMag)
 
   $: selectedTelescope = telescopes.find((t) => t.id === selectedTelescopeId) ?? null
   $: selectedEyepiece = eyepieces.find((e) => e.id === selectedEyepieceId) ?? null
-  $: canBegin = !!(
-    selectedStar &&
-    selectedTelescope &&
-    selectedEyepiece &&
-    selectedInitialMag !== null &&
-    !planning
-  )
+  $: canBegin = !!(selectedStar && selectedTelescope && selectedEyepiece && selectedInitialMag !== null && !planning)
 
   $: magOptions = (() => {
     if (!selectedTelescope) return []
@@ -84,13 +80,13 @@
       if (raw) {
         const s = JSON.parse(raw)
         if (s.star) selectedStar = s.star
-        if (s.telescopeId != null && telescopes.some((t) => t.id === s.telescopeId))
-          selectedTelescopeId = s.telescopeId
-        if (s.eyepieceId != null && eyepieces.some((e) => e.id === s.eyepieceId))
-          selectedEyepieceId = s.eyepieceId
+        if (s.telescopeId != null && telescopes.some((t) => t.id === s.telescopeId)) selectedTelescopeId = s.telescopeId
+        if (s.eyepieceId != null && eyepieces.some((e) => e.id === s.eyepieceId)) selectedEyepieceId = s.eyepieceId
         if (s.initialMag != null) selectedInitialMag = s.initialMag
       }
-    } catch {}
+    } catch (error) {
+      void error
+    }
     _mounted = true
   })
 
@@ -110,10 +106,31 @@
     if (cleaned && greekChars.includes(cleaned[0])) return cleaned[0]
     const key = cleaned.length >= 3 ? cleaned.slice(0, 3) : cleaned
     const map = {
-      alf: 'α', alp: 'α', bet: 'β', gam: 'γ', del: 'δ', eps: 'ε',
-      zet: 'ζ', eta: 'η', the: 'θ', iot: 'ι', kap: 'κ', lam: 'λ',
-      mu: 'μ', nu: 'ν', xi: 'ξ', omi: 'ο', pi: 'π', rho: 'ρ',
-      sig: 'σ', tau: 'τ', ups: 'υ', phi: 'φ', chi: 'χ', psi: 'ψ', ome: 'ω',
+      alf: 'α',
+      alp: 'α',
+      bet: 'β',
+      gam: 'γ',
+      del: 'δ',
+      eps: 'ε',
+      zet: 'ζ',
+      eta: 'η',
+      the: 'θ',
+      iot: 'ι',
+      kap: 'κ',
+      lam: 'λ',
+      mu: 'μ',
+      nu: 'ν',
+      xi: 'ξ',
+      omi: 'ο',
+      pi: 'π',
+      rho: 'ρ',
+      sig: 'σ',
+      tau: 'τ',
+      ups: 'υ',
+      phi: 'φ',
+      chi: 'χ',
+      psi: 'ψ',
+      ome: 'ω',
     }
     return map[key] || null
   }
@@ -231,11 +248,9 @@
           <span class="field-label">Initial magnitude</span>
           <div class="pills">
             {#each magOptions as m}
-              <button
-                class="pill"
-                class:selected={selectedInitialMag === m}
-                on:click={() => (selectedInitialMag = m)}
-              >{m}</button>
+              <button class="pill" class:selected={selectedInitialMag === m} on:click={() => (selectedInitialMag = m)}
+                >{m}</button
+              >
             {/each}
           </div>
         </div>
@@ -263,8 +278,7 @@
       title="Select start star"
       resultFilter={(obj) => {
         if (obj.type !== 'star') return false
-        const m =
-          typeof obj.mag === 'number' ? obj.mag : Array.isArray(obj.mag) ? obj.mag[0] : Infinity
+        const m = typeof obj.mag === 'number' ? obj.mag : Array.isArray(obj.mag) ? obj.mag[0] : Infinity
         return m <= INITIAL_STAR_MAX_MAG
       }}
       onAcceptObject={async (obj) => {

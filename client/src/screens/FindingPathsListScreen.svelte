@@ -11,7 +11,6 @@
   import SearchPanel from '../components/SearchPanel.svelte'
   import CustomInput from '../components/CustomInput.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
-  import { keyboardActive } from '../stores/keyboard.js'
   import PlusIcon from '../icons/PlusIcon.svelte'
   import DraftIcon from '../icons/DraftIcon.svelte'
   import EditIcon from '../icons/EditIcon.svelte'
@@ -19,9 +18,6 @@
 
   export let initialTargetChip = null
   export let initialStartChip = null
-  export let lat = 48.2
-  export let lon = 16.37
-  export let time = new Date()
 
   const dispatch = createEventDispatcher()
 
@@ -40,12 +36,18 @@
   let closeFilterTimer = null
 
   function onFilterFocusIn(which) {
-    if (closeFilterTimer) { clearTimeout(closeFilterTimer); closeFilterTimer = null }
+    if (closeFilterTimer) {
+      clearTimeout(closeFilterTimer)
+      closeFilterTimer = null
+    }
     activeFilter = which
   }
 
   function onFilterFocusOut() {
-    closeFilterTimer = setTimeout(() => { activeFilter = null; closeFilterTimer = null }, 150)
+    closeFilterTimer = setTimeout(() => {
+      activeFilter = null
+      closeFilterTimer = null
+    }, 150)
   }
 
   function selectFilterSuggestion(sug) {
@@ -124,15 +126,39 @@
   function greekFromBayer(bayer) {
     const raw = String(bayer || '').trim()
     if (!raw) return null
-    const first = (raw.split(/\s+/)[0] || '').toLowerCase().replace(/[0-9]+$/, '').replace(/[._-]+$/, '')
+    const first = (raw.split(/\s+/)[0] || '')
+      .toLowerCase()
+      .replace(/[0-9]+$/, '')
+      .replace(/[._-]+$/, '')
     const greekChars = 'αβγδεζηθικλμνξοπρστυφχψω'
     if (first && greekChars.includes(first[0])) return first[0]
     const key = first.length >= 3 ? first.slice(0, 3) : first
     const map = {
-      alf: 'α', alp: 'α', bet: 'β', gam: 'γ', del: 'δ', eps: 'ε', zet: 'ζ',
-      eta: 'η', the: 'θ', iot: 'ι', kap: 'κ', lam: 'λ', mu: 'μ', nu: 'ν',
-      xi: 'ξ', omi: 'ο', pi: 'π', rho: 'ρ', sig: 'σ', tau: 'τ', ups: 'υ',
-      phi: 'φ', chi: 'χ', psi: 'ψ', ome: 'ω',
+      alf: 'α',
+      alp: 'α',
+      bet: 'β',
+      gam: 'γ',
+      del: 'δ',
+      eps: 'ε',
+      zet: 'ζ',
+      eta: 'η',
+      the: 'θ',
+      iot: 'ι',
+      kap: 'κ',
+      lam: 'λ',
+      mu: 'μ',
+      nu: 'ν',
+      xi: 'ξ',
+      omi: 'ο',
+      pi: 'π',
+      rho: 'ρ',
+      sig: 'σ',
+      tau: 'τ',
+      ups: 'υ',
+      phi: 'φ',
+      chi: 'χ',
+      psi: 'ψ',
+      ome: 'ω',
     }
     return map[key] || null
   }
@@ -173,7 +199,8 @@
     const kb = naturalSortKey(strB)
     const len = Math.min(ka.length, kb.length)
     for (let i = 0; i < len; i++) {
-      const ai = ka[i], bi = kb[i]
+      const ai = ka[i],
+        bi = kb[i]
       if (typeof ai === 'number' && typeof bi === 'number') {
         if (ai !== bi) return ai - bi
       } else if (typeof ai === 'string' && typeof bi === 'string') {
@@ -296,16 +323,14 @@
           ></span
         >
       {:else}
-        <div
-          class="input-wrap"
-          on:focusin={() => onFilterFocusIn('target')}
-          on:focusout={onFilterFocusOut}
-        >
+        <div class="input-wrap" on:focusin={() => onFilterFocusIn('target')} on:focusout={onFilterFocusOut}>
           <CustomInput
             bind:value={targetQuery}
             placeholder="filter…"
             outlined
-            on:enter={() => { if (targetSuggestions.length > 0) selectFilterSuggestion(targetSuggestions[0]) }}
+            on:enter={() => {
+              if (targetSuggestions.length > 0) selectFilterSuggestion(targetSuggestions[0])
+            }}
           />
         </div>
       {/if}
@@ -325,16 +350,14 @@
           ></span
         >
       {:else}
-        <div
-          class="input-wrap"
-          on:focusin={() => onFilterFocusIn('start')}
-          on:focusout={onFilterFocusOut}
-        >
+        <div class="input-wrap" on:focusin={() => onFilterFocusIn('start')} on:focusout={onFilterFocusOut}>
           <CustomInput
             bind:value={startQuery}
             placeholder="filter…"
             outlined
-            on:enter={() => { if (startSuggestions.length > 0) selectFilterSuggestion(startSuggestions[0]) }}
+            on:enter={() => {
+              if (startSuggestions.length > 0) selectFilterSuggestion(startSuggestions[0])
+            }}
           />
         </div>
       {/if}
@@ -347,12 +370,10 @@
         <OnScreenKeyboard />
       </div>
       <div class="filter-panel-results">
-        {#each (activeFilter === 'target' ? targetSuggestions : startSuggestions) as sug}
-          <button
-            class="filter-result-row"
-            type="button"
-            on:click={() => selectFilterSuggestion(sug)}
-          >{sug.label}</button>
+        {#each activeFilter === 'target' ? targetSuggestions : startSuggestions as sug}
+          <button class="filter-result-row" type="button" on:click={() => selectFilterSuggestion(sug)}
+            >{sug.label}</button
+          >
         {/each}
         {#if (activeFilter === 'target' ? targetSuggestions : startSuggestions).length === 0}
           <div class="filter-no-results">No matches</div>
@@ -403,9 +424,8 @@
                             startChip,
                           })}
                         ><strong>{p.starLabel}</strong>{#if p.starConst}&nbsp;({p.starConst}){/if}</button
-                      >{#if p.isDraft}<sup class="draft-sup"><DraftIcon size="0.975rem" /></sup>{/if}{#if !p.isDraft}<span
-                          class="step-count"
-                        >&nbsp;–&nbsp;{p.stepCount}&nbsp;steps</span
+                      >{#if p.isDraft}<sup class="draft-sup"><DraftIcon size="0.975rem" /></sup
+                        >{/if}{#if !p.isDraft}<span class="step-count">&nbsp;–&nbsp;{p.stepCount}&nbsp;steps</span
                         >{/if}</span
                     >
                     <button

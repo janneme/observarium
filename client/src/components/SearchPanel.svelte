@@ -39,10 +39,10 @@
 
   onMount(async () => {
     window.addEventListener('keydown', onKey)
-    ;[index, objectIdsWithPaths] = await Promise.all([getSearchIndex(), getObjectIdsWithFindingPaths()])
-    loading = false
     await tick()
     inputComp?.focus()
+    ;[index, objectIdsWithPaths] = await Promise.all([getSearchIndex(), getObjectIdsWithFindingPaths()])
+    loading = false
   })
 
   onDestroy(() => {
@@ -265,7 +265,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.65rem 0.75rem;
+    padding: 0.4rem 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     cursor: pointer;
   }
@@ -298,9 +298,10 @@
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.6);
-    font-size: 2rem;
-    width: 3.2rem;
-    height: 3.2rem;
+    font-size: 1.7rem;
+    width: 2.4rem;
+    height: 2rem;
+    overflow: visible;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -312,6 +313,12 @@
   .act-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
+  }
+
+  .act-btn :global(svg) {
+    width: 28px;
+    height: 28px;
+    display: block;
   }
 
   /* Make CustomInput border visible on dark background */

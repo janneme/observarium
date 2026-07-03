@@ -343,7 +343,13 @@
       {#if fullscreenSupported && !isFullscreen}
         <button class="toggle-btn fs-btn" on:click={enterFullscreen} aria-label="Enter fullscreen">
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <path d="M1 5V1h4M10 1h4v4M14 10v4h-4M5 14H1v-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path
+              d="M1 5V1h4M10 1h4v4M14 10v4h-4M5 14H1v-4"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
           </svg>
         </button>
       {/if}
@@ -509,6 +515,7 @@
     font-size: 0.85rem;
     opacity: 0.75;
     flex-shrink: 0;
+    margin-right: 0.25rem;
   }
   .obj-name {
     white-space: nowrap;

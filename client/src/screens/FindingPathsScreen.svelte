@@ -49,6 +49,7 @@
   let expandedStartHip = null
   let activeStepIndex = null
   let statusMsg = ''
+  let overlayBuildDebugSignature = ''
 
   let starsByHip = new Map()
   let labelById = new Map()
@@ -70,18 +71,6 @@
     const n = Number(value)
     if (!Number.isFinite(n)) return 1
     return Math.max(0.5, Math.round(n * 2) / 2)
-  }
-
-  function pointLabel(point) {
-    if (!point) return 'Unset'
-    if (point.objectId && labelById.has(point.objectId)) return labelById.get(point.objectId)
-    if (point.hip && starsByHip.has(String(point.hip))) {
-      return starsByHip.get(String(point.hip)).label
-    }
-    if (Number.isFinite(point.ra) && Number.isFinite(point.dec)) {
-      return `${point.ra.toFixed(2)}°, ${point.dec.toFixed(2)}°`
-    }
-    return 'Unnamed point'
   }
 
   function objectLabel(obj) {
@@ -686,21 +675,25 @@
 
   function overlayGeometry() {
     const path = getExpandedPath()
-    if (!path?.steps) return []
     const result = []
-    path.steps.forEach((step, idx) => {
-      if (step.final) return
-      const startPt = step.startPoint || stepAnchor(path, idx)
-      if (!startPt || !step.endPoint) return
-      const m = normalizeMultiplier(step.multiplier)
-      result.push({
-        fromRa: startPt.ra,
-        fromDec: startPt.dec,
-        toRa: step.endPoint.ra,
-        toDec: step.endPoint.dec,
-        label: m !== 1 ? `${m}x` : '',
+    if (path?.steps) {
+      path.steps.forEach((step, idx) => {
+        if (step.final) return
+        const startPt = step.startPoint || stepAnchor(path, idx)
+        if (!startPt || !step.endPoint) return
+        const m = normalizeMultiplier(step.multiplier)
+        result.push({
+          fromRa: startPt.ra,
+          fromDec: startPt.dec,
+          toRa: step.endPoint.ra,
+          toDec: step.endPoint.dec,
+          label: m !== 1 ? `${m}x` : '',
+        })
       })
-    })
+    }
+    if (activeStepIndex != null && objectCtx?.pos) {
+      result.push({ boundaryDirRa: objectCtx.pos[0], boundaryDirDec: objectCtx.pos[1] })
+    }
     return result
   }
 
@@ -708,7 +701,47 @@
     pathsByStart
     expandedStartHip
     starsByHip
+    activeStepIndex
+    objectCtx
     overlays = overlayGeometry()
+    const fpDebug =
+      typeof window !== 'undefined' &&
+      (() => {
+        try {
+          return window.localStorage?.getItem('fpDebug') === '1'
+        } catch {
+          return false
+        }
+      })()
+    if (expandedStartHip && fpDebug) {
+      const nextSig = JSON.stringify({
+        expandedStartHip,
+        activeStepIndex,
+        count: overlays.length,
+        overlays: overlays.map((o) => ({
+          fromRa: Number((o.fromRa ?? 0).toFixed(3)),
+          fromDec: Number((o.fromDec ?? 0).toFixed(3)),
+          toRa: Number((o.toRa ?? 0).toFixed(3)),
+          toDec: Number((o.toDec ?? 0).toFixed(3)),
+          label: o.label || '',
+        })),
+      })
+      if (nextSig !== overlayBuildDebugSignature) {
+        overlayBuildDebugSignature = nextSig
+        console.log('@@FP_OVERLAY_BUILD', {
+          expandedStartHip,
+          activeStepIndex,
+          count: overlays.length,
+          overlays: overlays.map((o) => ({
+            fromRa: Number((o.fromRa ?? 0).toFixed(3)),
+            fromDec: Number((o.fromDec ?? 0).toFixed(3)),
+            toRa: Number((o.toRa ?? 0).toFixed(3)),
+            toDec: Number((o.toDec ?? 0).toFixed(3)),
+            label: o.label || '',
+          })),
+        })
+      }
+    }
   }
 
   $: targetInView = (() => {
@@ -815,16 +848,6 @@
       {/if}
     </div>
 
-    {#if activeStepIndex != null && !guideMode}
-      <div class="edit-bar">
-        <div class="edit-label">{pendingPoint ? pointLabel(pendingPoint) : 'Tap finder to place a point'}</div>
-        {#if pendingPoint}
-          <div class="edit-actions">
-            <button class="btn small" on:click={clearPending}>Clear</button>
-          </div>
-        {/if}
-      </div>
-    {/if}
     {#if guideMode && activeStepIndex != null}
       {@const _gp = pathsByStart[expandedStartHip]}
       {@const _gs = _gp?.steps || []}
@@ -1056,12 +1079,14 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 1.1rem;
+    font-size: 1.5rem;
     line-height: 1;
     cursor: pointer;
-    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
+    padding: 0.1rem 0.15rem 0.1rem 0.5rem;
     border-radius: 4px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .back-btn:hover {
@@ -1076,11 +1101,6 @@
     padding: 0.3rem 0.55rem;
     font-size: 0.78rem;
     cursor: pointer;
-  }
-
-  .btn.small {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.74rem;
   }
 
   .finder-sticky {
@@ -1150,25 +1170,6 @@
       transparent calc(50% + 3px),
       rgba(160, 200, 255, 0.65) calc(50% + 3px)
     );
-  }
-
-  .edit-bar {
-    margin-top: 0.5rem;
-    border: 1px solid rgba(122, 175, 255, 0.4);
-    border-radius: 8px;
-    padding: 0.45rem;
-    background: rgba(80, 120, 180, 0.12);
-  }
-
-  .edit-label {
-    font-size: 0.8rem;
-    margin-bottom: 0.4rem;
-  }
-
-  .edit-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.4rem;
   }
 
   .list-wrap {
@@ -1337,11 +1338,6 @@
     border-color: rgba(180, 0, 0, 0.4);
   }
 
-  :global([data-theme='nightly']) .edit-bar {
-    border-color: rgba(204, 68, 0, 0.45);
-    background: rgba(160, 40, 0, 0.12);
-  }
-
   :global([data-theme='nightly']) .btn,
   :global([data-theme='nightly']) .mini,
   :global([data-theme='nightly']) .add-step,
@@ -1403,8 +1399,8 @@
 
   .step-arrow,
   .title-arrow {
-    font-size: 1.15em;
-    vertical-align: 0.05em;
+    font-size: 1.3em;
+    vertical-align: 0.12em;
     margin: 0 0.2em;
   }
 

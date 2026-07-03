@@ -163,7 +163,7 @@
           aria-label="Finding Paths"
         >
           <div class="icon-wrap">
-            <FindingPathsIcon size="28" />
+            <FindingPathsIcon size="28px" />
           </div>
           <span class="item-lbl">Finding Paths (p)</span>
         </button>
@@ -215,7 +215,14 @@
           <span class="item-lbl">Solar<br />Sys.<br />Quiz</span>
         </button>
 
-        <button class="grid-item" on:click={stub} aria-label="Constellation quiz">
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('constellationquiz')
+            close()
+          }}
+          aria-label="Constellation quiz"
+        >
           <div class="icon-wrap">
             <ConstellationQuizIcon size="28" />
           </div>

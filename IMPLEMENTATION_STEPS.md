@@ -1511,7 +1511,7 @@ Technical notes:
 
 ## Phase 8 — Quizzes
 
-### Step 35: Quiz framework
+### Step 35: Quiz framework ✅
 
 **README refs:** §2.2g  
 **Deliverable:** Shared quiz infrastructure: setup modal, progress indicator,
@@ -1530,7 +1530,19 @@ Technical notes:
   On incorrect answer: `mastery[id] = max(0, mastery[id] − 0.5)`.
   Quiz ends when `progressPct === 100`.
 - **Back button:** always rendered; on press save state to `localStorage` and
-  `router.go(-1)`.
+  emit quiz close event so `MainScreen` returns to the previous view state.
+
+Implementation notes:
+
+- Implemented shared logic in `client/src/lib/quizFramework.js`:
+  `loadQuizState`, `saveQuizState`, `clearQuizState`, `applyQuizAnswer`,
+  `computeProgressPct`, and weighted next-question selection.
+- Implemented reusable UI in `client/src/components/QuizSetup.svelte` and
+  `client/src/components/QuizProgress.svelte`.
+- Setup choices (`scope`, `difficulty`) are persisted separately in
+  `localStorage` and restored when reopening quiz setup.
+- Back/close behavior saves quiz state and returns to previous app screen via
+  the quiz `close` event.
 
 ---
 
@@ -1550,18 +1562,27 @@ Technical notes:
 
 ---
 
-### Step 37: Constellation Quiz
+### Step 37: Constellation Quiz ✅
 
 **README refs:** §5.8  
 **Deliverable:** Quiz that highlights a star and asks for name + constellation.
 
 Technical notes:
 
-- `CONSTELLATION_QUIZ_FOV` should be wide enough to show the full constellation
-  schema — derive per constellation from the angular span of its member stars
-  plus 20% padding.
-- Selected star is rendered with a highlight ring; constellation lines are hidden
-  during the question, revealed on incorrect answer.
+- Uses a fixed quiz FOV derived from an anchor constellation span to keep zoom
+  consistent across questions. If the selected star would be out of frame, the
+  view is automatically recentered to keep the target visible.
+- Selected star is highlighted with an in-canvas marker; constellation lines are
+  hidden during the question and revealed after answering.
+
+Implementation notes:
+
+- Implemented in `client/src/screens/ConstellationQuizScreen.svelte` and wired
+  from menu in `client/src/screens/MainScreen.svelte`.
+- Difficulty pools currently use: easy `<= 1.5`, medium `<= 3`, hard `<= 4`.
+- During reveal phase, constellation line endpoints missing from per-question
+  object payload are resolved via fallback HIP-position mapping, so full target
+  constellation schemas can still be rendered.
 
 ---
 

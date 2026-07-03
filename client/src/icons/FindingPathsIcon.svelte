@@ -1,13 +1,14 @@
 <script>
-  export let size = '1.6em'
+  export let size = '28px'
 </script>
 
 <svg
   xmlns="http://www.w3.org/2000/svg"
   viewBox="0 0 512 512"
+  fill="currentColor"
   width={size}
   height={size}
-  style="display:block;fill:currentColor"
+  style="display:block"
   {...$$restProps}
 >
   <path

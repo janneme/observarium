@@ -36,6 +36,11 @@
   export let finderMode = false
   export let showSolarSystem = true
   export let overlayArrows = []
+  export let starRadiusScale = 1
+  export let showSpecialStarSymbols = true
+  export let targetMarker = null
+  export let targetMarkerColor = 'rgba(120,0,255,0.9)'
+  export let lineFallbackByHip = null
 
   let canvas
   let W = 0,
@@ -49,6 +54,7 @@
   let solarSystem = null
   let solarSystemBodies = []
   let planetImages = new Map()
+  let overlayArrowDebugSignature = ''
 
   const unsubTheme = theme.subscribe((v) => {
     currentTheme = v
@@ -80,6 +86,10 @@
     magLimitOverride
     finderMode
     overlayArrows
+    showSpecialStarSymbols
+    targetMarker
+    targetMarkerColor
+    lineFallbackByHip
     dirty = true
   }
 
@@ -108,7 +118,7 @@
     const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
     const t = Math.max(0, Math.min(1, (magLim - m) / MAG_RANGE))
     const vmin = Math.min(W, H) / 100
-    return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin
+    return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin * starRadiusScale
   }
 
   // Log-linear interpolation: mag 5 at FOV_MAG5, mag 14 at FOV_MAG14.
@@ -867,6 +877,12 @@
   function drawConstellationLines(ctx) {
     if (!constellations) return
     const nightly = currentTheme === 'nightly'
+    const fallbackIsMap = lineFallbackByHip instanceof Map
+    const getFallbackPos = (hip) => {
+      if (!lineFallbackByHip) return null
+      if (fallbackIsMap) return lineFallbackByHip.get(hip) || null
+      return lineFallbackByHip[hip] || null
+    }
     const hipMap = new Map()
     for (const obj of objects) {
       if (obj.hip) hipMap.set(obj.hip, obj.pos)
@@ -876,8 +892,12 @@
     ctx.setLineDash([])
     for (const con of Object.values(constellations)) {
       for (const [hip_a, hip_b] of con.lines) {
-        const posA = hipMap.get(hip_a)
-        const posB = hipMap.get(hip_b)
+        const mapPosA = hipMap.get(hip_a)
+        const mapPosB = hipMap.get(hip_b)
+        const fallbackPosA = mapPosA ? null : getFallbackPos(hip_a)
+        const fallbackPosB = mapPosB ? null : getFallbackPos(hip_b)
+        const posA = mapPosA || fallbackPosA
+        const posB = mapPosB || fallbackPosB
         if (!posA || !posB) continue
         const ptA = projectToPixel(posA[0], posA[1], ra0, dec0, W, H, fov, rotation)
         const ptB = projectToPixel(posB[0], posB[1], ra0, dec0, W, H, fov, rotation)
@@ -990,6 +1010,74 @@
     ctx.stroke()
   }
 
+  function drawTargetMarker(ctx) {
+    if (!Array.isArray(targetMarker) || targetMarker.length < 2) return
+    const pt = projectToPixel(targetMarker[0], targetMarker[1], ra0, dec0, W, H, fov, rotation)
+    if (!pt || !isOnScreen(pt.px, pt.py, W, H, 40)) return
+
+    const lineHalf = 10
+    const gap = 3
+    ctx.strokeStyle = targetMarkerColor
+    ctx.lineWidth = 2
+    ctx.setLineDash([])
+
+    ctx.beginPath()
+    ctx.moveTo(pt.px - lineHalf, pt.py)
+    ctx.lineTo(pt.px - gap, pt.py)
+    ctx.moveTo(pt.px + gap, pt.py)
+    ctx.lineTo(pt.px + lineHalf, pt.py)
+    ctx.moveTo(pt.px, pt.py - lineHalf)
+    ctx.lineTo(pt.px, pt.py - gap)
+    ctx.moveTo(pt.px, pt.py + gap)
+    ctx.lineTo(pt.px, pt.py + lineHalf)
+    ctx.stroke()
+  }
+
+  function clipSegmentToCircle(ax, ay, bx, by, cx, cy, r) {
+    const dx = bx - ax
+    const dy = by - ay
+    const a = dx * dx + dy * dy
+    if (a < 1e-12) {
+      const inside = Math.hypot(ax - cx, ay - cy) <= r
+      return inside ? { x0: ax, y0: ay, x1: bx, y1: by, t0: 0, t1: 1 } : null
+    }
+
+    const insideA = Math.hypot(ax - cx, ay - cy) <= r
+    const insideB = Math.hypot(bx - cx, by - cy) <= r
+    if (insideA && insideB) {
+      return { x0: ax, y0: ay, x1: bx, y1: by, t0: 0, t1: 1 }
+    }
+
+    const fx = ax - cx
+    const fy = ay - cy
+    const b = 2 * (fx * dx + fy * dy)
+    const c = fx * fx + fy * fy - r * r
+    const disc = b * b - 4 * a * c
+    if (disc < 0) return null
+
+    const sqrtDisc = Math.sqrt(disc)
+    let t0 = (-b - sqrtDisc) / (2 * a)
+    let t1 = (-b + sqrtDisc) / (2 * a)
+    if (t0 > t1) {
+      const tmp = t0
+      t0 = t1
+      t1 = tmp
+    }
+
+    const segMin = Math.max(0, t0)
+    const segMax = Math.min(1, t1)
+    if (segMax <= segMin) return null
+
+    return {
+      x0: ax + dx * segMin,
+      y0: ay + dy * segMin,
+      x1: ax + dx * segMax,
+      y1: ay + dy * segMax,
+      t0: segMin,
+      t1: segMax,
+    }
+  }
+
   function draw() {
     if (!canvas || W === 0 || H === 0) return
     const ctx = canvas.getContext('2d')
@@ -1024,10 +1112,25 @@
       const nightly = currentTheme === 'nightly'
       const arrowColor = nightly ? 'rgba(204,0,0,0.55)' : 'rgba(255,255,255,0.45)'
       const labelColor = nightly ? 'rgba(204,0,0,0.65)' : 'rgba(255,255,255,0.55)'
+      const fpDebug =
+        finderMode &&
+        typeof window !== 'undefined' &&
+        (() => {
+          try {
+            return window.localStorage?.getItem('fpDebug') === '1'
+          } catch {
+            return false
+          }
+        })()
+      const overlayDebugRows = fpDebug ? [] : null
+      const _cR = Math.min(W, H) / 2
+      const _cx = W / 2
+      const _cy = H / 2
       ctx.save()
       ctx.strokeStyle = arrowColor
       ctx.lineWidth = 1.5
-      for (const arr of overlayArrows) {
+      for (let arrIdx = 0; arrIdx < overlayArrows.length; arrIdx++) {
+        const arr = overlayArrows[arrIdx]
         if (arr.markerRa != null && arr.markerDec != null) {
           const pt = projectToPixel(arr.markerRa, arr.markerDec, ra0, dec0, W, H, fov, rotation)
           if (!pt) continue
@@ -1049,44 +1152,101 @@
           ctx.lineTo(px, py + arm + gap)
           ctx.stroke()
           ctx.restore()
+          if (overlayDebugRows) {
+            overlayDebugRows.push({
+              i: arrIdx,
+              marker: true,
+              px: Number(px.toFixed(1)),
+              py: Number(py.toFixed(1)),
+            })
+          }
+          continue
+        }
+        if (arr.boundaryDirRa != null && arr.boundaryDirDec != null) {
+          const pt = projectToPixel(arr.boundaryDirRa, arr.boundaryDirDec, ra0, dec0, W, H, fov, rotation)
+          if (pt) {
+            const ddx = pt.px - _cx
+            const ddy = pt.py - _cy
+            const ddist = Math.hypot(ddx, ddy)
+            if (ddist >= _cR * 0.9 && ddist >= 1) {
+              const bx = _cx + (ddx / ddist) * _cR
+              const by = _cy + (ddy / ddist) * _cR
+              const dotR = Math.min(W, H) / 100
+              ctx.save()
+              ctx.fillStyle = nightly ? 'rgba(204,0,204,0.9)' : 'rgba(200,0,0,0.7)'
+              ctx.beginPath()
+              ctx.arc(bx, by, dotR, 0, 2 * Math.PI)
+              ctx.fill()
+              ctx.restore()
+            }
+          }
           continue
         }
         const from = projectToPixel(arr.fromRa, arr.fromDec, ra0, dec0, W, H, fov, rotation)
         const to = projectToPixel(arr.toRa, arr.toDec, ra0, dec0, W, H, fov, rotation)
-        if (!from || !to) continue
+        if (!from || !to) {
+          if (overlayDebugRows) {
+            overlayDebugRows.push({
+              i: arrIdx,
+              missingProjection: true,
+              hasFrom: !!from,
+              hasTo: !!to,
+              fromRa: Number((arr.fromRa ?? 0).toFixed(3)),
+              fromDec: Number((arr.fromDec ?? 0).toFixed(3)),
+              toRa: Number((arr.toRa ?? 0).toFixed(3)),
+              toDec: Number((arr.toDec ?? 0).toFixed(3)),
+            })
+          }
+          continue
+        }
         const dx = to.px - from.px
         const dy = to.py - from.py
         const len = Math.hypot(dx, dy)
-        if (len < 2) continue
+        if (len < 2) {
+          if (overlayDebugRows) {
+            overlayDebugRows.push({
+              i: arrIdx,
+              tooShort: true,
+              len: Number(len.toFixed(2)),
+            })
+          }
+          continue
+        }
         const ux = dx / len
         const uy = dy / len
         const STAR_GAP = Math.max(4, Math.min(W, H) * 0.015)
-        const startX = from.px + ux * STAR_GAP
-        const startY = from.py + uy * STAR_GAP
-        const _cR = Math.min(W, H) / 2
-        const _cx = W / 2
-        const _cy = H / 2
-        const _dtoX = to.px - _cx
-        const _dtoY = to.py - _cy
-        let tipX, tipY
-        if (Math.hypot(_dtoX, _dtoY) <= _cR * 0.95) {
-          tipX = to.px - ux * STAR_GAP
-          tipY = to.py - uy * STAR_GAP
-        } else {
-          tipX = _cx + ux * _cR * 0.95
-          tipY = _cy + uy * _cR * 0.95
-        }
+        const rawStartX = from.px + ux * STAR_GAP
+        const rawStartY = from.py + uy * STAR_GAP
+        const targetInside = Math.hypot(to.px - _cx, to.py - _cy) <= _cR * 0.99
+        const rawEndX = targetInside ? to.px - ux * STAR_GAP : to.px
+        const rawEndY = targetInside ? to.py - uy * STAR_GAP : to.py
+        const startIn = Math.hypot(rawStartX - _cx, rawStartY - _cy) <= _cR
+        const endIn = Math.hypot(rawEndX - _cx, rawEndY - _cy) <= _cR
+
+        // Ignore arrows that are fully outside; this avoids boundary-to-boundary chords.
+        if (!startIn && !endIn) continue
+
+        const clipped = clipSegmentToCircle(rawStartX, rawStartY, rawEndX, rawEndY, _cx, _cy, _cR)
+        if (!clipped) continue
+
+        const startX = clipped.x0
+        const startY = clipped.y0
+        const tipX = clipped.x1
+        const tipY = clipped.y1
+        const trimmed = clipped.t1 < 0.999 || !targetInside
         ctx.beginPath()
         ctx.moveTo(startX, startY)
         ctx.lineTo(tipX, tipY)
         ctx.stroke()
-        // open chevron head
-        const hw = 8
-        ctx.beginPath()
-        ctx.moveTo(tipX - ux * hw + uy * hw * 0.5, tipY - uy * hw - ux * hw * 0.5)
-        ctx.lineTo(tipX, tipY)
-        ctx.lineTo(tipX - ux * hw - uy * hw * 0.5, tipY - uy * hw + ux * hw * 0.5)
-        ctx.stroke()
+        // open chevron head — omit when arrow is trimmed at circle boundary
+        if (!trimmed) {
+          const hw = 8
+          ctx.beginPath()
+          ctx.moveTo(tipX - ux * hw + uy * hw * 0.5, tipY - uy * hw - ux * hw * 0.5)
+          ctx.lineTo(tipX, tipY)
+          ctx.lineTo(tipX - ux * hw - uy * hw * 0.5, tipY - uy * hw + ux * hw * 0.5)
+          ctx.stroke()
+        }
         if (arr.label) {
           ctx.fillStyle = labelColor
           ctx.font = '11px sans-serif'
@@ -1096,8 +1256,44 @@
           const my = (startY + tipY) / 2
           ctx.fillText(arr.label, mx - uy * 11, my + ux * 11)
         }
+        if (overlayDebugRows) {
+          overlayDebugRows.push({
+            i: arrIdx,
+            fromIn: startIn,
+            toIn: endIn,
+            cR: Number(_cR.toFixed(2)),
+            lineLen: Number(len.toFixed(2)),
+            startX: Number(startX.toFixed(1)),
+            startY: Number(startY.toFixed(1)),
+            tipX: Number(tipX.toFixed(1)),
+            tipY: Number(tipY.toFixed(1)),
+            trimmed,
+            t0: Number(clipped.t0.toFixed(4)),
+            t1: Number(clipped.t1.toFixed(4)),
+            label: arr.label || '',
+          })
+        }
       }
       ctx.restore()
+      if (overlayDebugRows) {
+        const nextSig = JSON.stringify({
+          ra0: Number(ra0.toFixed(3)),
+          dec0: Number(dec0.toFixed(3)),
+          fov: Number(fov.toFixed(3)),
+          count: overlayArrows.length,
+          rows: overlayDebugRows,
+        })
+        if (nextSig !== overlayArrowDebugSignature) {
+          overlayArrowDebugSignature = nextSig
+          console.log('@@FP_ARROW_RENDER', {
+            ra0: Number(ra0.toFixed(3)),
+            dec0: Number(dec0.toFixed(3)),
+            fov: Number(fov.toFixed(3)),
+            count: overlayArrows.length,
+            rows: overlayDebugRows,
+          })
+        }
+      }
     }
 
     // Pass 1: DSOs (rendered first so stars paint on top)
@@ -1128,8 +1324,8 @@
         const isMulti = (obj.type === 'double_star' && dsLetterCount(obj.pairs) > 2) || obj.dbl === 'm'
         const isVariable = Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1
         drawStar(ctx, obj, pt, above)
-        if (isVariable) addVariableRing(ctx, obj, pt, above)
-        if (isDouble) addDoubleJut(ctx, obj, pt, above, isMulti)
+        if (showSpecialStarSymbols && isVariable) addVariableRing(ctx, obj, pt, above)
+        if (showSpecialStarSymbols && isDouble) addDoubleJut(ctx, obj, pt, above, isMulti)
         renderedPx.set(obj.id, { px: pt.px, py: pt.py })
         tally(isDouble ? 'double_star' : 'star')
       }
@@ -1138,6 +1334,7 @@
     // Pass 3: solar system bodies (on top of stars)
     if (showSolarSystem) drawSolarSystem(ctx)
 
+    drawTargetMarker(ctx)
     if (!finderMode) drawSelectedMarker(ctx)
     if (showFovCircle) drawFovCircle(ctx)
 

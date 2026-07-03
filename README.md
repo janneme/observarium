@@ -102,7 +102,10 @@ Main screen) and quiz difficulty (easy/medium/hard) - the higher
 difficulty the less bright objects are included in the quiz. There is no
 score of a quiz — instead the quiz runs until the user has answered every
 question in the quiz correctly at least once. After each incorrect answer in the quiz the
-correct answer is shown. A "Back" button is always available to exit the quiz at any time.
+correct answer is shown. A back button is always available to exit the quiz at any time.
+
+In Constellation Quiz, keyboard shortcuts `A`, `B`, `C`, `D` select options 1,
+2, 3, 4.
 
 A progress indicator is displayed throughout the quiz. It reflects how close
 the user is to completing the quiz: a correct answer increases it, an incorrect
@@ -473,16 +476,18 @@ Before the beginning of the quiz constellations and constellations stars
 the difficulty level.
 
 In each step a star from the selected set is chosen and a square sky fragment
-is rendered with CONSTELLATION_QUIZ_FOV FOV (without constellation schemas,
-randomly changing rotation) in such way that the target constellation
-schema is in the center. The selected star is highlighted and four options
+is rendered with fixed quiz FOV (without constellation schemas) centered on the
+target constellation. If needed, the view is recentered so the selected star
+is always visible. The selected star is highlighted and four options
 are displayed — each having a star name and the parent constellation.
 The user is expected to choose the right combination. If the user answers incorrectly,
 along with showing the correct answer the constellation lines are shown.
 
+The quiz is shown below the main top bar, so the top bar remains visible.
+
 Difficulties:
 
-- Easy: Only big constellations with bright stars, stars up to magnitude 2.
+- Easy: Only big constellations with bright stars, stars up to magnitude 1.5.
 - Medium: Constellations with one bright star at least, stars up to magnitude 3.
 - Hard: All constellations, stars up to magnitude 4.
 

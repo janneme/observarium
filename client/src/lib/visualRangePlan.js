@@ -121,9 +121,9 @@ function getStarMag(star) {
 }
 
 function midpointRa(ra1, ra2) {
-  let d = ((ra2 - ra1) % 360 + 360) % 360
+  let d = (((ra2 - ra1) % 360) + 360) % 360
   if (d > 180) d -= 360
-  return ((ra1 + d / 2) % 360 + 360) % 360
+  return (((ra1 + d / 2) % 360) + 360) % 360
 }
 
 // --------------------------------------------------------------------------
@@ -227,15 +227,15 @@ function isIsolated(star, fineBuckets, isolRadius) {
 
 function notInDso(star, significantDsos, margin) {
   for (const dso of significantDsos) {
-    if (angSepDeg(star.pos[0], star.pos[1], dso.pos[0], dso.pos[1]) < dso.radiusDeg + margin)
-      return false
+    if (angSepDeg(star.pos[0], star.pos[1], dso.pos[0], dso.pos[1]) < dso.radiusDeg + margin) return false
   }
   return true
 }
 
 // Binary search: first index where getStarMag(sortedStars[i]) >= magLo
 function _lowerBound(sortedStars, magLo) {
-  let lo = 0, hi = sortedStars.length
+  let lo = 0,
+    hi = sortedStars.length
   while (lo < hi) {
     const mid = (lo + hi) >> 1
     if (getStarMag(sortedStars[mid]) < magLo) lo = mid + 1
@@ -271,7 +271,7 @@ function computeEndpoint(origin, moves) {
     const k = mv.multiplier ?? 1
     const dRa = mv.to.pos[0] - mv.from.pos[0]
     const dDec = mv.to.pos[1] - mv.from.pos[1]
-    pos = [((pos[0] + k * dRa) % 360 + 360) % 360, pos[1] + k * dDec]
+    pos = [(((pos[0] + k * dRa) % 360) + 360) % 360, pos[1] + k * dDec]
   }
   return pos
 }
@@ -320,9 +320,7 @@ function findGuidePath(origin, target, maxSteps, guideMaxMag, buckets, fovRadius
       const [pRa, pDec] = state.pos
 
       const guideInnerR = fovRadius * 0.85
-      const guideS = queryInRadius(buckets, pRa, pDec, guideInnerR).filter(
-        (s) => getStarMag(s) <= guideMaxMag,
-      )
+      const guideS = queryInRadius(buckets, pRa, pDec, guideInnerR).filter((s) => getStarMag(s) <= guideMaxMag)
 
       for (const sS of guideS) {
         const guideE = queryInRadius(buckets, sS.pos[0], sS.pos[1], fovRadius).filter(
@@ -340,7 +338,7 @@ function findGuidePath(origin, target, maxSteps, guideMaxMag, buckets, fovRadius
 
             const dRa = eE.pos[0] - sS.pos[0]
             const dDec = eE.pos[1] - sS.pos[1]
-            const newRa = ((pRa + k * dRa) % 360 + 360) % 360
+            const newRa = (((pRa + k * dRa) % 360) + 360) % 360
             const newDec = pDec + k * dDec
 
             if (newDec < -90 || newDec > 90) continue
@@ -425,8 +423,10 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
   const planCeiling = theoreticalMax
 
   const _raw = await getObjectsInArea(
-    startStar.pos[0] - planSearchRadius, startStar.pos[0] + planSearchRadius,
-    startStar.pos[1] - planSearchRadius, startStar.pos[1] + planSearchRadius,
+    startStar.pos[0] - planSearchRadius,
+    startStar.pos[0] + planSearchRadius,
+    startStar.pos[1] - planSearchRadius,
+    startStar.pos[1] + planSearchRadius,
     planCeiling + STEP_MAG_TOLERANCE,
   )
   const allLocalStars = _raw.filter((o) => o.type === 'star')
@@ -476,7 +476,8 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
       if (
         angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
         angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
-      ) continue
+      )
+        continue
       initialStep = { centre: pair.centre, candidates: [c1, c2], moves }
       initialActualEndpoint = actualEndpoint
       break
@@ -539,7 +540,8 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
         if (
           angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
           angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
-        ) continue
+        )
+          continue
         steps.push({ centre: pair.centre, candidates: [c1, c2], moves })
         currentCentre = actualEndpoint
         nextM = Math.round((getStarMag(c1) + MEASURE_STEP) * 10) / 10
