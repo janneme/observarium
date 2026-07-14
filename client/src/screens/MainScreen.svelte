@@ -60,6 +60,7 @@
   let loadRa0 = 0
   let loadDec0 = 0
   let loadMargin = 0
+  let loadRaMargin = 0
   let loadMagLimit = 0
   let fetching = false
 
@@ -133,10 +134,23 @@
     if (fetching) return
     fetching = true
     const margin = fov * 1.5
-    objects = await getObjectsInArea(ra0 - margin, ra0 + margin, dec0 - margin, dec0 + margin, fovToMagLimit(minDimFov))
+    // Near the celestial poles, cos(dec) → 0, so a fixed RA margin covers an
+    // ever-shrinking sliver of the actual visible sky — stars just outside
+    // that narrow RA window get excluded even though they're angularly close
+    // to the view centre. Scale the RA margin by 1/cos(dec) to compensate.
+    const cosDec = Math.max(0.05, Math.cos((dec0 * Math.PI) / 180))
+    const raMargin = Math.min(180, margin / cosDec)
+    objects = await getObjectsInArea(
+      ra0 - raMargin,
+      ra0 + raMargin,
+      dec0 - margin,
+      dec0 + margin,
+      fovToMagLimit(minDimFov),
+    )
     loadRa0 = ra0
     loadDec0 = dec0
     loadMargin = margin
+    loadRaMargin = raMargin
     loadMagLimit = fovToMagLimit(minDimFov)
     fetching = false
   }
@@ -157,9 +171,11 @@
     const rawDRa = Math.abs(ra0 - loadRa0)
     const dRa = Math.min(rawDRa, 360 - rawDRa)
     const dDec = Math.abs(dec0 - loadDec0)
-    // Reload when view centre drifts, FOV grew beyond what was loaded, or zoom-in raises mag limit
+    // dRa is compared against loadRaMargin (already cos(dec)-scaled), not
+    // loadMargin — a raw RA-degree drift near the pole can be huge while the
+    // view has barely moved on the sky, and vice versa near the equator.
     if (
-      dRa > loadMargin * 0.5 ||
+      dRa > loadRaMargin * 0.5 ||
       dDec > loadMargin * 0.5 ||
       fov > loadMargin / 1.5 ||
       fovToMagLimit(minDimFov) > loadMagLimit

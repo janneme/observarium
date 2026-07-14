@@ -116,10 +116,6 @@ function angSepDeg(ra1, dec1, ra2, dec2) {
   return (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 180) / Math.PI
 }
 
-function _vrLabel(star) {
-  return star?.name || star?.bay || star?.id || 'star'
-}
-
 function getStarMag(star) {
   return typeof star.mag === 'number' ? star.mag : star.mag[0]
 }
@@ -308,15 +304,7 @@ function checkMaxMagDiff(centre, M, buckets, fovRadius) {
 // --------------------------------------------------------------------------
 
 function findGuidePath(origin, target, maxSteps, guideMaxMag, buckets, fovRadius, fovDeg) {
-  console.log(
-    `@@VR_BFS_START origin=(${origin[0].toFixed(3)},${origin[1].toFixed(3)}) target=(${target[0].toFixed(3)},${target[1].toFixed(3)}) ` +
-      `maxSteps=${maxSteps} guideMaxMag=${guideMaxMag.toFixed(2)} fovRadius=${fovRadius.toFixed(3)}° fovDeg=${fovDeg.toFixed(3)}°`,
-  )
-
-  if (angSepDeg(origin[0], origin[1], target[0], target[1]) <= fovRadius / 2) {
-    console.log('@@VR_BFS_START target already within FOV of origin — no moves needed')
-    return []
-  }
+  if (angSepDeg(origin[0], origin[1], target[0], target[1]) <= fovRadius / 2) return []
 
   const cellSize = fovRadius / 4
 
@@ -365,14 +353,7 @@ function findGuidePath(origin, target, maxSteps, guideMaxMag, buckets, fovRadius
 
             const dist = angSepDeg(newRa, newDec, target[0], target[1])
 
-            console.log(
-              `@@VR_HOP depth=${depth} from="${_vrLabel(sS)}"(${sS.pos[0].toFixed(3)},${sS.pos[1].toFixed(3)}) mag=${getStarMag(sS).toFixed(2)} ` +
-                `to="${_vrLabel(eE)}"(${eE.pos[0].toFixed(3)},${eE.pos[1].toFixed(3)}) mag=${getStarMag(eE).toFixed(2)} x${k} ` +
-                `newPos=(${newRa.toFixed(3)},${newDec.toFixed(3)}) distToTarget=${dist.toFixed(3)}° reachedTarget=${dist <= fovRadius / 2}`,
-            )
-
             if (dist <= fovRadius / 2) {
-              console.log(`@@VR_BFS_FOUND depth=${depth} pathLength=${state.path.length + 1}`)
               return [...state.path, { from: sS, to: eE, multiplier: k }]
             }
 
@@ -387,14 +368,11 @@ function findGuidePath(origin, target, maxSteps, guideMaxMag, buckets, fovRadius
       }
     }
 
-    console.log(`@@VR_BFS_DEPTH depth=${depth} beamIn=${beam.length} childrenFound=${children.length}`)
-
     if (children.length === 0) break
     children.sort((a, b) => a.dist - b.dist)
     beam = children.slice(0, BFS_BEAM_WIDTH)
   }
 
-  console.log(`@@VR_BFS_FAIL exhausted maxSteps=${maxSteps} without reaching target`)
   return null
 }
 
@@ -482,32 +460,11 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
   let initialStep = null
   let initialActualEndpoint = null
 
-  console.log(
-    `@@VR_PHASE1_START startStar="${_vrLabel(startStar)}"(${startStar.pos[0].toFixed(3)},${startStar.pos[1].toFixed(3)}) ` +
-      `initialMag=${initialMag} initPairs=${initPairs.length} planSearchRadius=${planSearchRadius.toFixed(3)}°`,
-  )
-
-  for (const [pairIdx, pair] of initPairs.entries()) {
-    if (pair.dist > planSearchRadius) {
-      console.log(
-        `@@VR_PAIR_TRY idx=${pairIdx} centre=(${pair.centre[0].toFixed(3)},${pair.centre[1].toFixed(3)}) dist=${pair.dist.toFixed(3)}° ` +
-          `> planSearchRadius=${planSearchRadius.toFixed(3)}° — stopping (pairs sorted by distance)`,
-      )
-      break
-    }
-    if (!checkMaxMagDiff(pair.centre, initialMag, allBuckets, fovRadius)) {
-      console.log(
-        `@@VR_PAIR_TRY idx=${pairIdx} centre=(${pair.centre[0].toFixed(3)},${pair.centre[1].toFixed(3)}) dist=${pair.dist.toFixed(3)}° ` +
-          `rejected: checkMaxMagDiff failed (a brighter star intrudes near the candidate FOV)`,
-      )
-      continue
-    }
+  for (const pair of initPairs) {
+    if (pair.dist > planSearchRadius) break
+    if (!checkMaxMagDiff(pair.centre, initialMag, allBuckets, fovRadius)) continue
 
     const guideMaxMag = initialMag - MOVE_STARS_MIN_MAG_DIFF
-    console.log(
-      `@@VR_PAIR_TRY idx=${pairIdx} centre=(${pair.centre[0].toFixed(3)},${pair.centre[1].toFixed(3)}) dist=${pair.dist.toFixed(3)}° ` +
-        `c1="${_vrLabel(pair.c1)}" c2="${_vrLabel(pair.c2)}" — running findGuidePath`,
-    )
     const moves = findGuidePath(
       startStar.pos,
       pair.centre,
@@ -518,35 +475,21 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
       fovDeg,
     )
 
-    if (moves === null) {
-      console.log(`@@VR_PAIR_TRY idx=${pairIdx} rejected: findGuidePath returned null (no BFS path found)`)
-      continue
-    }
-    if (!lastHopClear(moves, pair.centre, initialMag, fovRadius)) {
-      console.log(`@@VR_PAIR_TRY idx=${pairIdx} rejected: lastHopClear failed (last guide star too bright near target)`)
-      continue
-    }
-
-    const actualEndpoint = computeEndpoint(startStar.pos, moves)
-    const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
-    if (
-      angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
-      angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
-    ) {
-      console.log(
-        `@@VR_PAIR_TRY idx=${pairIdx} rejected: actual BFS endpoint=(${actualEndpoint[0].toFixed(3)},${actualEndpoint[1].toFixed(3)}) ` +
-          `drifted outside FOV of candidates c1/c2 (accumulated rounding from multi-hop moves)`,
+    if (moves !== null && lastHopClear(moves, pair.centre, initialMag, fovRadius)) {
+      const actualEndpoint = computeEndpoint(startStar.pos, moves)
+      const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
+      if (
+        angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
+        angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
       )
-      continue
+        continue
+      initialStep = { centre: pair.centre, candidates: [c1, c2], moves }
+      initialActualEndpoint = actualEndpoint
+      break
     }
-    console.log(`@@VR_PAIR_TRY idx=${pairIdx} accepted — ${moves.length} move(s)`)
-    initialStep = { centre: pair.centre, candidates: [c1, c2], moves }
-    initialActualEndpoint = actualEndpoint
-    break
   }
 
   if (!initialStep) {
-    console.log('@@VR_PHASE1_FAIL no initial pair produced a usable guide path')
     return { ok: false, reason: 'Could not find a guide path to any initial test position.' }
   }
 

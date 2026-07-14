@@ -300,12 +300,6 @@
     const newCentre = _applyMoves(viewCentre, [m])
     const fovR = fovDeg / 2
     console.log(
-      `@@VR_MOVE step=${stepIndex} move=${moveIndex}/${moves.length - 1} x${m.multiplier} ` +
-        `from="${preferredStarLabel(m.from)}"(${_vrFmt(m.from.pos)}) to="${preferredStarLabel(m.to)}"(${_vrFmt(m.to.pos)}) ` +
-        `viewBefore=(${_vrFmt(viewCentre)}) viewAfter=(${_vrFmt(newCentre)}) fov=${fovDeg.toFixed(3)}° ` +
-        `nextPhase=${moveIndex < moves.length - 1 ? 'move' : 'test'}`,
-    )
-    console.log(
       `[VR] handleNext step=${stepIndex} move=${moveIndex} viewWas=(${_vrFmt(viewCentre)}) → newCentre=(${_vrFmt(newCentre)})`,
     )
     if (currentStep.candidates.length >= 2) {
