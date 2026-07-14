@@ -53,7 +53,7 @@
           aria-label="Toggle constellation lines"
         >
           <div class="icon-wrap">
-            <ConstellationLinesIcon size="28" />
+            <ConstellationLinesIcon size="42" />
           </div>
           <span class="item-lbl">Const.<br />Lines (c)</span>
         </button>
@@ -65,7 +65,7 @@
           aria-label="Toggle constellation names"
         >
           <div class="icon-wrap">
-            <ConstellationNamesIcon size="28" />
+            <ConstellationNamesIcon size="42" />
           </div>
           <span class="item-lbl">Const.<br />Names (C)</span>
         </button>
@@ -77,7 +77,7 @@
           aria-label="Toggle constellation boundaries"
         >
           <div class="icon-wrap">
-            <ConstellationBoundsIcon size="28" />
+            <ConstellationBoundsIcon size="42" />
           </div>
           <span class="item-lbl">Const.<br />Bounds (b)</span>
         </button>
@@ -94,7 +94,7 @@
           aria-label="Toggle deep sky objects"
         >
           <div class="icon-wrap">
-            <DsoIcon size="28" />
+            <DsoIcon size="42" />
           </div>
           <span class="item-lbl">DSO (d)</span>
         </button>
@@ -106,7 +106,7 @@
           aria-label="Toggle solar system"
         >
           <div class="icon-wrap">
-            <SolarSystemIcon size="28" />
+            <SolarSystemIcon size="42" />
           </div>
           <span class="item-lbl">Solar<br />System (s)</span>
         </button>
@@ -118,7 +118,7 @@
           aria-label="Toggle horizon"
         >
           <div class="icon-wrap">
-            <HorizonIcon size="28" />
+            <HorizonIcon size="42" />
           </div>
           <span class="item-lbl">Horizon (h)</span>
         </button>
@@ -130,7 +130,7 @@
           aria-label="Toggle FOV circle"
         >
           <div class="icon-wrap">
-            <FovCircleIcon size="28" />
+            <FovCircleIcon size="42" />
           </div>
           <span class="item-lbl">FOV<br />Circle</span>
         </button>
@@ -149,7 +149,7 @@
           aria-label="Observations"
         >
           <div class="icon-wrap">
-            <ObservationsIcon size="28" />
+            <ObservationsIcon size="42" />
           </div>
           <span class="item-lbl">Observations (o)</span>
         </button>
@@ -163,7 +163,7 @@
           aria-label="Finding Paths"
         >
           <div class="icon-wrap">
-            <FindingPathsIcon size="28px" />
+            <FindingPathsIcon size="42px" />
           </div>
           <span class="item-lbl">Finding Paths (p)</span>
         </button>
@@ -177,7 +177,7 @@
           aria-label="Visual Range"
         >
           <div class="icon-wrap">
-            <RangeIcon size="28" />
+            <RangeIcon size="42" />
           </div>
           <span class="item-lbl">Visual Range (r)</span>
         </button>
@@ -191,7 +191,7 @@
           aria-label="Telescopes"
         >
           <div class="icon-wrap">
-            <TelescopeIcon size="28" />
+            <TelescopeIcon size="42" />
           </div>
           <span class="item-lbl">Telescopes (t)</span>
         </button>
@@ -203,16 +203,16 @@
       <div class="section-row">
         <button class="grid-item" on:click={stub} aria-label="Moon quiz">
           <div class="icon-wrap">
-            <MoonQuizIcon size="28" />
+            <MoonQuizIcon size="42" />
           </div>
-          <span class="item-lbl">Moon<br />Quiz</span>
+          <span class="item-lbl">Moon Quiz</span>
         </button>
 
         <button class="grid-item" on:click={stub} aria-label="Solar system quiz">
           <div class="icon-wrap">
-            <PlanetQuizIcon size="28" />
+            <PlanetQuizIcon size="42" />
           </div>
-          <span class="item-lbl">Solar<br />Sys.<br />Quiz</span>
+          <span class="item-lbl">Solar Sys. Quiz</span>
         </button>
 
         <button
@@ -224,16 +224,16 @@
           aria-label="Constellation quiz"
         >
           <div class="icon-wrap">
-            <ConstellationQuizIcon size="28" />
+            <ConstellationQuizIcon size="42" />
           </div>
-          <span class="item-lbl">Const.<br />Quiz</span>
+          <span class="item-lbl">Const. Quiz</span>
         </button>
 
         <button class="grid-item" on:click={stub} aria-label="Deep sky quiz">
           <div class="icon-wrap">
-            <DsoQuizIcon size="28" />
+            <DsoQuizIcon size="42" />
           </div>
-          <span class="item-lbl">DSO<br />Quiz</span>
+          <span class="item-lbl">DSO Quiz</span>
         </button>
       </div>
 
@@ -250,7 +250,7 @@
           aria-label="Update object data"
         >
           <div class="icon-wrap">
-            <RefreshIcon size="28" />
+            <RefreshIcon size="42" />
           </div>
           <span class="item-lbl">Update<br />Data (u)</span>
         </button>
@@ -264,7 +264,7 @@
           aria-label="Synchronize observations"
         >
           <div class="icon-wrap">
-            <SyncIcon size="28" />
+            <SyncIcon size="42" />
             {#if $pendingChanges > 0}
               <span class="badge">{$pendingChanges}</span>
             {/if}
@@ -281,7 +281,7 @@
           aria-label="About"
         >
           <div class="icon-wrap">
-            <InfoIcon size="28" />
+            <InfoIcon size="42" />
           </div>
           <span class="item-lbl">About (a)</span>
         </button>
@@ -322,56 +322,72 @@
   }
 
   .grid-item {
-    flex: 0 0 25%;
+    flex: 0 0 calc(25% - 4px);
+    box-sizing: border-box;
+    margin: 2px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 10px 4px 8px;
-    gap: 5px;
-    background: none;
+    padding: 4px 2px;
+    gap: 3px;
+    background: #000;
     border: none;
     color: inherit;
     cursor: pointer;
     border-radius: 8px;
     transition: background 120ms;
-    min-height: 64px;
+    min-height: 76px;
   }
 
   .grid-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: #1a1a1a;
   }
   .grid-item:active {
-    background: rgba(255, 255, 255, 0.15);
+    background: #262626;
   }
 
   .icon-wrap {
     position: relative;
     flex-shrink: 0;
-    transition: opacity 150ms;
-    background: #000;
-    border-radius: 8px;
-    padding: 6px;
+    display: flex;
+    padding: 2px;
+    --off-line-color: currentColor;
   }
 
-  .grid-item.off .icon-wrap {
-    opacity: 0.38;
+  .icon-wrap :global(svg) {
+    display: block;
+  }
+
+  .grid-item.off .icon-wrap::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top right,
+      transparent calc(50% - 1px),
+      var(--off-line-color) calc(50% - 1px),
+      var(--off-line-color) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    );
+    pointer-events: none;
+  }
+
+  :global([data-theme='nightly']) .icon-wrap {
+    --off-line-color: #0000ff;
   }
 
   .item-lbl {
-    font-size: 0.65rem;
+    font-size: 0.78rem;
     line-height: 1.25;
     text-align: center;
-    opacity: 0.75;
     word-break: break-word;
     hyphens: auto;
-    background: #000;
-    border-radius: 3px;
     padding: 1px 3px;
   }
 
-  .grid-item.off .item-lbl {
-    opacity: 0.45;
+  :global([data-theme='nightly']) .grid-item {
+    color: #ff0000;
   }
 
   /* Badge on sync icon */
