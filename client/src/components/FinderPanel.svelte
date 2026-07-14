@@ -896,8 +896,8 @@
   /* Nightly overrides for inline search */
   :global([data-theme='nightly']) .finder-search {
     background: #110000;
-    color: #cc0000;
-    --fg: #cc0000;
+    color: #ff0000;
+    --fg: #ff0000;
     --bg: #110000;
     --key-bg: rgba(80, 0, 0, 0.55);
   }
@@ -915,7 +915,7 @@
   }
 
   :global([data-theme='nightly']) .fs-cancel {
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .fs-cancel:hover {

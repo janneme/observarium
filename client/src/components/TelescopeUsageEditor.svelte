@@ -149,13 +149,13 @@
 
   :global([data-theme='nightly']) .chip {
     border-color: rgba(200, 0, 0, 0.55);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .chip.active {
-    border-color: #cc0000;
+    border-color: #ff0000;
     background: rgba(200, 0, 0, 0.2);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .chip:focus-visible {

@@ -110,7 +110,7 @@ function _parseMag(raw) {
 
 function _parseT1Csv(csv) {
   const lines = csv.split('\n')
-  // header: ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn
+  // header: ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn,vt,vp,an
   const stars = []
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]
@@ -147,6 +147,7 @@ function _parseT1Csv(csv) {
     if (c[16]) star.constellation = c[16]
     if (c[17]) star.varType = c[17]
     if (c[18]) star.varPeriod = parseFloat(c[18])
+    if (c[19]) star.altNames = c[19].split(';')
     stars.push(star)
   }
   return stars

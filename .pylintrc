@@ -1,0 +1,19 @@
+[MASTER]
+# Maximum number of lines in a module
+max-module-lines=1000
+
+[DESIGN]
+# Maximum number of statements in a function / method
+# Tightened per request to catch large methods like `main()`
+max-statements=30
+
+[FORMAT]
+# Keep lines reasonably short
+max-line-length=100
+
+[MESSAGES CONTROL]
+# Project-wide disables approved by user
+# R0913: too-many-arguments
+# R0917: too-many-positional-arguments
+# R0903: too-few-public-methods
+disable=R0913,R0917,R0903,R0902,R0914

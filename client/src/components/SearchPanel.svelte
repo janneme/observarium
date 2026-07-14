@@ -258,7 +258,7 @@
     color: #e0e0e0;
   }
   :global([data-theme='nightly']) .input-wrap {
-    color: #cc0000;
+    color: #ff0000;
   }
 
   .bar-btn {
@@ -382,8 +382,8 @@
   /* Nightly theme */
   :global([data-theme='nightly']) .search-overlay {
     background: #110000;
-    color: #cc0000;
-    --fg: #cc0000;
+    color: #ff0000;
+    --fg: #ff0000;
     --bg: #110000;
     --key-bg: rgba(80, 0, 0, 0.55);
   }
@@ -397,7 +397,7 @@
     background: rgba(180, 0, 0, 0.15);
   }
   :global([data-theme='nightly']) .cancel-btn {
-    color: #cc0000;
+    color: #ff0000;
   }
   :global([data-theme='nightly']) .hint {
     color: rgba(200, 0, 0, 0.5);
@@ -412,7 +412,7 @@
     color: rgba(200, 0, 0, 0.6);
   }
   :global([data-theme='nightly']) .act-btn:hover {
-    color: #cc0000;
+    color: #ff0000;
     background: rgba(180, 0, 0, 0.15);
   }
   :global([data-theme='nightly']) .hl {

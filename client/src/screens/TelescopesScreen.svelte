@@ -670,12 +670,12 @@
 
   :global([data-theme='nightly']) .btn {
     border-color: rgba(200, 0, 0, 0.5);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .icon-btn {
     border-color: rgba(200, 0, 0, 0.5);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .icon-btn.danger {

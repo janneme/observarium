@@ -9,6 +9,7 @@ from stars import (
     _bayer_letter,
     _build_star,
     _is_variable,
+    _load_alt_names,
     _load_notes,
     _parse_lum_class,
     _parse_spec_class,
@@ -269,6 +270,42 @@ class TestLoadNotes:
         notes = _load_notes(csv_file)
         assert len(notes) == 1
         assert notes[32349] == "Valid"
+
+
+# ---------------------------------------------------------------------------
+# _load_alt_names
+# ---------------------------------------------------------------------------
+
+
+class TestLoadAltNames:
+    def test_returns_empty_dict_when_file_absent(self, tmp_path: Path):
+        assert not _load_alt_names(tmp_path / "no_such_file.csv")
+
+    def test_loads_single_alt_name(self, tmp_path: Path):
+        csv_file = tmp_path / "star_alt_names.csv"
+        csv_file.write_text("hip,alt_name\n4427,Navi\n")
+        alt_names = _load_alt_names(csv_file)
+        assert alt_names == {4427: ["Navi"]}
+
+    def test_multiple_rows_for_same_hip_are_collected(self, tmp_path: Path):
+        csv_file = tmp_path / "star_alt_names.csv"
+        csv_file.write_text("hip,alt_name\n4427,Navi\n4427,Second\n")
+        alt_names = _load_alt_names(csv_file)
+        assert alt_names == {4427: ["Navi", "Second"]}
+
+    def test_skips_rows_with_empty_alt_name(self, tmp_path: Path):
+        csv_file = tmp_path / "star_alt_names.csv"
+        csv_file.write_text("hip,alt_name\n4427,\n32349,Valid\n")
+        alt_names = _load_alt_names(csv_file)
+        assert 4427 not in alt_names
+        assert alt_names[32349] == ["Valid"]
+
+    def test_skips_rows_with_invalid_hip(self, tmp_path: Path):
+        csv_file = tmp_path / "star_alt_names.csv"
+        csv_file.write_text("hip,alt_name\nnot_a_number,Some name\n4427,Navi\n")
+        alt_names = _load_alt_names(csv_file)
+        assert len(alt_names) == 1
+        assert alt_names[4427] == ["Navi"]
 
 
 # ---------------------------------------------------------------------------

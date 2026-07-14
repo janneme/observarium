@@ -217,7 +217,7 @@
   }
 
   :global([data-theme='nightly']) :global(.app-icon) {
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .tagline,

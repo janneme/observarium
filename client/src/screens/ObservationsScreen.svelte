@@ -1276,12 +1276,12 @@
   :global([data-theme='nightly']) .candidate,
   :global([data-theme='nightly']) .add-object-box {
     border-color: rgba(200, 0, 0, 0.55);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .icon-btn.danger {
     border-color: rgba(200, 0, 0, 0.75);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .error-msg {

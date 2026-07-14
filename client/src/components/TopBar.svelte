@@ -388,6 +388,7 @@
     right: 0;
     z-index: 10;
     color: var(--surface-fg);
+    font-variant-numeric: tabular-nums;
     pointer-events: none;
   }
 
@@ -424,52 +425,41 @@
   .dt-date {
     opacity: 0.6;
   }
-  .dt-time {
-    font-variant-numeric: tabular-nums;
-  }
 
   .center-group {
     display: flex;
     align-items: center;
   }
 
-  .menu-btn {
-    background: none;
-    border: none;
-    color: inherit;
-    padding: 0.4rem 0.6rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
+  .menu-btn,
   .toggle-btn {
     background: none;
     border: none;
     color: inherit;
-    padding: 0.4rem 0.5rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.45;
   }
 
-  .toggle-btn.active,
+  .menu-btn:hover,
   .toggle-btn:hover {
-    opacity: 1;
+    background: none;
+    transform: none;
   }
 
-  .fs-btn {
-    opacity: 0.55;
+  .menu-btn {
+    padding: 0.4rem 0.6rem;
+  }
+
+  .toggle-btn {
+    padding: 0.4rem 0.5rem;
   }
 
   .batt-group {
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    opacity: 0.7;
   }
 
   .batt-icon {
@@ -477,7 +467,7 @@
   }
 
   .batt-pct {
-    font-size: 0.7rem;
+    font-size: 0.82rem;
     line-height: 1;
   }
 
@@ -485,8 +475,7 @@
     display: flex;
     align-items: baseline;
     justify-content: flex-end;
-    font-size: 0.78rem;
-    opacity: 0.7;
+    font-size: 0.82rem;
     white-space: nowrap;
   }
 

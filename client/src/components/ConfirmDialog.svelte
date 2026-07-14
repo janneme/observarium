@@ -105,11 +105,11 @@
 
   :global([data-theme='nightly']) .btn {
     border-color: rgba(200, 0, 0, 0.55);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .btn.danger {
     border-color: rgba(200, 0, 0, 0.8);
-    color: #cc0000;
+    color: #ff0000;
   }
 </style>

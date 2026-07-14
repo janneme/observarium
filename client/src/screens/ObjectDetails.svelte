@@ -510,7 +510,12 @@
 
       <section class="info-section">
         {#if obj.name}
-          <div class="row"><span class="label">Name</span><span class="value">{obj.name}</span></div>
+          <div class="row">
+            <span class="label">Name</span>
+            <span class="value"
+              >{obj.name}{#if obj.altNames?.length}, {obj.altNames.join(', ')}{/if}</span
+            >
+          </div>
         {/if}
         {#if catNumbers(obj)}
           <div class="row cat-row">
@@ -915,7 +920,7 @@
     stroke: rgba(200, 0, 0, 0.3);
   }
   :global([data-theme='nightly']) .moon-lit {
-    fill: #cc0000;
+    fill: #ff0000;
   }
   :global([data-theme='nightly']) .object-image {
     filter: url(#nightly-red-scale);

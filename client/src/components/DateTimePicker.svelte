@@ -386,7 +386,7 @@
   }
 
   :global([data-theme='nightly']) .day-cell.today:not(.sel) .day-num {
-    color: #e00000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .day-cell:not(.empty):not(.sel):hover .day-num {

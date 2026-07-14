@@ -90,11 +90,11 @@
   :global([data-theme='nightly']) .box {
     border-color: rgba(200, 0, 0, 0.6);
     background: rgba(200, 0, 0, 0.06);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .box.checked {
-    border-color: #cc0000;
+    border-color: #ff0000;
     background: rgba(200, 0, 0, 0.2);
   }
 

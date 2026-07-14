@@ -110,6 +110,24 @@ def _load_notes(path: Path) -> dict[int, str]:
     return notes
 
 
+def _load_alt_names(path: Path) -> dict[int, list[str]]:
+    """Return a HIP → [alt_name, ...] mapping loaded from a CSV sidecar file.
+
+    One row per alt name; a HIP may have several rows. Returns an empty dict
+    when the file is absent (alt names are optional).
+    """
+    if not path.exists():
+        return {}
+    alt_names: dict[int, list[str]] = {}
+    with path.open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            hip = _int_or_none(row.get("hip", ""))
+            alt_name = row.get("alt_name", "").strip()
+            if hip and alt_name:
+                alt_names.setdefault(hip, []).append(alt_name)
+    return alt_names
+
+
 _BAYER_MAP: dict[str, str] = {
     "Alp": "α", "Bet": "β", "Gam": "γ", "Del": "δ", "Eps": "ε",
     "Zet": "ζ", "Eta": "η", "The": "θ", "Iot": "ι", "Kap": "κ",
@@ -373,7 +391,9 @@ class StarPipeline:
             csv_paths = [self._downloader.fetch(ATHYG_URL, ATHYG_FILENAME)]
         notes_path = self._sources_dir / "notes_stars.csv"
         notes = _load_notes(notes_path)
-        stars, n_curated, _ = self._process(csv_paths, var_index or {}, notes)
+        alt_names_path = self._sources_dir / "star_alt_names.csv"
+        alt_names = _load_alt_names(alt_names_path)
+        stars, n_curated, _ = self._process(csv_paths, var_index or {}, notes, alt_names)
 
         # Gaia DR3 supplement — fills the gap above the AT-HYG / Tycho-2 ceiling
         if self._max_mag > GAIA_MAG_THRESHOLD:
@@ -691,6 +711,7 @@ class StarPipeline:
         row: dict[str, str],
         var_index: dict[int, tuple],
         notes: dict[int, str],
+        alt_names: dict[int, list[str]],
     ) -> tuple[dict[str, Any] | None, int, int]:
         """Process one CSV row; return (star_or_None, n_curated_delta, n_auto_delta)."""
         hip = _int_or_none(row.get("hip", ""))
@@ -708,6 +729,11 @@ class StarPipeline:
         )
         if star is None:
             return None, 0, 0
+        if hip and hip in alt_names:
+            # Alternate (informal / historical) names, e.g. "Navi" for gamma Cas.
+            # Additive field: absent when a star has no curated alt names, so
+            # older catalogues without this feature remain unaffected.
+            star["altNames"] = alt_names[hip]
         if hip and hip in notes:
             # Attach curated note into `note` (preserve curated text).
             star["note"] = notes[hip]
@@ -723,6 +749,7 @@ class StarPipeline:
         fieldnames: list[str] | None,
         var_index: dict[int, tuple],
         notes: dict[int, str],
+        alt_names: dict[int, list[str]],
     ) -> tuple[list[dict[str, Any]], int, int, list[str]]:
         """Read one catalogue file; return (stars, n_curated, n_auto, fieldnames)."""
         stars: list[dict[str, Any]] = []
@@ -732,7 +759,7 @@ class StarPipeline:
         with opener(csv_path, "rt", encoding="utf-8") as fh:
             reader = csv.DictReader(fh, fieldnames=fieldnames)
             for row in reader:
-                star, dc, da = self._process_row(row, var_index, notes)
+                star, dc, da = self._process_row(row, var_index, notes, alt_names)
                 if star is not None:
                     stars.append(star)
                     n_curated += dc
@@ -744,6 +771,7 @@ class StarPipeline:
         csv_paths: list[Path],
         var_index: dict[int, tuple[float, float]],
         notes: dict[int, str],
+        alt_names: dict[int, list[str]],
     ) -> tuple[list[dict[str, Any]], int, int]:
         """Parse one or more CSV files and return (stars, n_curated, n_auto).
 
@@ -761,6 +789,7 @@ class StarPipeline:
                 None if idx == 0 else shared_fieldnames,
                 var_index,
                 notes,
+                alt_names,
             )
             stars.extend(batch)
             n_curated += dc
@@ -861,7 +890,7 @@ class StarPipeline:
         def _col_idx(s: dict[str, Any]) -> int:
             return _COLOUR_TO_IDX.get(s.get("clr", ""), len(COLOR_PALETTE) - 1)
 
-        t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn,vt,vp"
+        t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn,vt,vp,an"
         t1_fixed_cols = 10   # columns before the optional trailing group
         t2_header = "z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd"
 
@@ -897,6 +926,7 @@ class StarPipeline:
                     s.get("const") or "",
                     s.get("var_type") or "",
                     f"{s['var_period']:.6g}" if s.get("var_period") is not None else "",
+                    ";".join(s.get("altNames") or []),
                 ]
                 # Strip trailing empty optional columns to save space.
                 while len(row) > t1_fixed_cols and row[-1] == "":

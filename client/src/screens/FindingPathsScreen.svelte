@@ -1351,7 +1351,7 @@
   :global([data-theme='nightly']) .path-card,
   :global([data-theme='nightly']) .step-row {
     border-color: rgba(180, 0, 0, 0.35);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .mini.set {
@@ -1396,12 +1396,12 @@
 
   :global([data-theme='nightly']) .icon-btn {
     border-color: rgba(200, 0, 0, 0.5);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .icon-btn.danger {
     border-color: rgba(200, 0, 0, 0.65);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   .step-arrow,
@@ -1459,12 +1459,12 @@
 
   :global([data-theme='nightly']) .btn.danger {
     border-color: rgba(200, 0, 0, 0.5);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .nav-btn {
     border-color: rgba(180, 0, 0, 0.35);
-    color: #cc0000;
+    color: #ff0000;
     background: rgba(180, 0, 0, 0.08);
   }
 </style>

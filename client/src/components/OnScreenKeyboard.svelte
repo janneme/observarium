@@ -472,12 +472,12 @@
   }
 
   :global([data-theme='nightly']) .key {
-    color: #cc0000;
+    color: #ff0000;
     border-color: rgba(200, 0, 0, 0.5);
     background: rgba(80, 0, 0, 0.55);
   }
   :global([data-theme='nightly']) .key:hover {
-    border-color: #cc0000;
+    border-color: #ff0000;
   }
   :global([data-theme='nightly']) .key:active,
   :global([data-theme='nightly']) .key.hw-active {
@@ -492,7 +492,7 @@
   }
   :global([data-theme='nightly']) .key.key-toggled:active {
     background: rgba(80, 0, 0, 0.55);
-    color: #cc0000;
+    color: #ff0000;
     border-color: rgba(200, 0, 0, 0.5);
   }
   :global([data-theme='nightly']) .key.dead-active {
@@ -502,7 +502,7 @@
   }
   :global([data-theme='nightly']) .key.dead-active:active {
     background: rgba(80, 0, 0, 0.55);
-    color: #cc0000;
+    color: #ff0000;
     border-color: rgba(200, 0, 0, 0.5);
   }
 </style>

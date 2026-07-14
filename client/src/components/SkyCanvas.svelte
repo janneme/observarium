@@ -120,7 +120,8 @@
     const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
     const t = Math.max(0, Math.min(1, (magLim - m) / MAG_RANGE))
     const vmin = Math.min(W, H) / 100
-    return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin * starRadiusScale
+    const nightlyScale = currentTheme === 'nightly' ? 1.5 : 1
+    return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin * starRadiusScale * nightlyScale
   }
 
   // Log-linear interpolation: mag 5 at FOV_MAG5, mag 14 at FOV_MAG14.
@@ -630,7 +631,7 @@
     ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
     let fill
     if (nightly) {
-      fill = '#e00000'
+      fill = '#ff0000'
     } else if (finderMode) {
       const m = Array.isArray(obj.mag) ? obj.mag[0] : (obj.mag ?? 99)
       fill = m <= 3 && obj.clr ? _blendToWhite(obj.clr, 0.72) : '#ffffff'
@@ -673,7 +674,7 @@
     const gap = Math.max(1.5, r * 1.5)
     const lw = Math.max(0.9, r * 1.0)
     ctx.arc(pt.px, pt.py, r + gap, 0, Math.PI * 2)
-    const starColor = nightly ? '#e00000' : obj.clr || '#ffffff'
+    const starColor = nightly ? '#ff0000' : obj.clr || '#ffffff'
     ctx.strokeStyle = _darkenHex(starColor, 0.45)
     ctx.lineWidth = lw
     ctx.stroke()
@@ -691,7 +692,7 @@
     const fovScale = Math.min(1, Math.pow(3 / Math.max(fov, 3), 0.25))
     const jut = Math.max(4.2, baseJut * fovScale)
     ctx.globalAlpha = 0.7
-    ctx.strokeStyle = nightly ? '#e00000' : '#ffffff'
+    ctx.strokeStyle = nightly ? '#ff0000' : '#ffffff'
     ctx.lineWidth = 1.4
     const x0 = pt.px + Math.SQRT1_2 * (r + gap)
     const y0 = pt.py - Math.SQRT1_2 * (r + gap)
@@ -889,7 +890,7 @@
     for (const obj of objects) {
       if (obj.hip) hipMap.set(obj.hip, obj.pos)
     }
-    const defaultLineColor = nightly ? 'rgba(220,0,0,0.7)' : 'rgba(100,120,220,0.5)'
+    const defaultLineColor = nightly ? '#0000ff' : 'rgba(100,120,220,0.5)'
     ctx.strokeStyle = constellationLineColorOverride || defaultLineColor
     ctx.lineWidth = 1
     ctx.setLineDash([])
@@ -998,7 +999,7 @@
     }
     const gap = 9,
       len = 10
-    ctx.strokeStyle = currentTheme === 'nightly' ? 'rgba(255,110,110,0.9)' : 'rgba(255,255,255,0.9)'
+    ctx.strokeStyle = currentTheme === 'nightly' ? '#0000ff' : 'rgba(255,255,255,0.9)'
     ctx.lineWidth = 1.5
     ctx.setLineDash([])
     ctx.beginPath()

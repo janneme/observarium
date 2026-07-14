@@ -191,7 +191,7 @@
   }
 
   :global([data-theme='nightly']) .custom-textarea:focus-visible {
-    border-color: #cc0000;
+    border-color: #ff0000;
     box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.25);
   }
 </style>

@@ -10,13 +10,13 @@
 
 :root[data-theme='nightly'] {
   --bg: #000000;
-  --fg: #e00000;
-  --accent: #cc0000;
+  --fg: #ff0000;
+  --accent: #ff0000;
   --accent-border: rgba(200, 0, 0, 0.32);
   --button-bg-hover: rgba(200, 0, 0, 0.06);
   --key-border: rgba(224, 0, 0, 0.16);
   --surface-bg: rgba(0, 0, 0, 0.7);
-  --surface-fg: #e00000;
+  --surface-fg: #ff0000;
   --menu-bg: transparent;
 }
 

@@ -98,7 +98,7 @@
   :global([data-theme='nightly']) .trigger {
     border-color: rgba(180, 0, 0, 0.4);
     background: #190000;
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .opts {
@@ -107,7 +107,7 @@
   }
 
   :global([data-theme='nightly']) .opt {
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .opt:hover {

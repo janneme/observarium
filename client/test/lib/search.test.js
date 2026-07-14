@@ -315,6 +315,46 @@ describe('doSearch — custom aliases', () => {
   })
 })
 
+// ── doSearch — alternate names ───────────────────────────────────────────────
+
+const gammaCas = {
+  id: 'star_HIP4427',
+  bay: 'γ',
+  constellation: 'Cas',
+  name: 'Cih',
+  altNames: ['Navi'],
+}
+
+describe('doSearch — alternate names', () => {
+  it('finds object by alt-name prefix', () => {
+    const r = doSearch('nav', [gammaCas])
+    expect(r).toHaveLength(1)
+    expect(r[0].obj.id).toBe('star_HIP4427')
+  })
+
+  it('finds object by alt-name substring', () => {
+    const r = doSearch('avi', [gammaCas])
+    expect(r).toHaveLength(1)
+    expect(r[0].obj.id).toBe('star_HIP4427')
+  })
+
+  it('displays the matched alt name, highlighted, not the official name', () => {
+    const r = doSearch('navi', [gammaCas])
+    expect(r[0].display).toBe('Navi')
+    expect(r[0].spans).toEqual([{ text: 'Navi', hl: true }])
+  })
+
+  it('does not appear twice when matched by official name already', () => {
+    const r = doSearch('cih', [gammaCas])
+    expect(r).toHaveLength(1)
+  })
+
+  it('stars without altNames are unaffected', () => {
+    const r = doSearch('navi', [betelgeuse])
+    expect(r).toHaveLength(0)
+  })
+})
+
 // ── doSearch — catalog token queries ─────────────────────────────────────────
 
 describe('doSearch — HIP / HD', () => {

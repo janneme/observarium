@@ -356,6 +356,15 @@ export function doSearch(q, searchIndex) {
           break
         }
       }
+    } else if (obj.altNames) {
+      const altName = obj.altNames.find((n) => n.toLowerCase().replace(/\s+/g, '').startsWith(nq))
+      if (altName) {
+        if (obj.type === 'dso') {
+          add(obj, dsoDisplay(obj), null, null, false)
+        } else {
+          add(obj, altName, 0, nq.length, true)
+        }
+      }
     }
   }
 
@@ -421,6 +430,21 @@ export function doSearch(q, searchIndex) {
         add(obj, dsoDisplay(obj), null, null, false)
       } else {
         add(obj, obj.name, idx, idx + nq.length, true)
+      }
+    }
+  }
+
+  // Pass 5: substring match on alt names (e.g. "Navi" for gamma Cas), lowest rank
+  for (const obj of searchIndex) {
+    if (seen.has(obj.id) || !obj.altNames) continue
+    const altName = obj.altNames.find((n) => n.toLowerCase().replace(/\s+/g, '').includes(nq))
+    if (altName) {
+      if (obj.type === 'dso') {
+        add(obj, dsoDisplay(obj), null, null, false)
+      } else {
+        const lower = altName.toLowerCase().replace(/\s+/g, '')
+        const idx = lower.indexOf(nq)
+        add(obj, altName, idx, idx + nq.length, true)
       }
     }
   }

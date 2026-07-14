@@ -798,7 +798,7 @@
 
   :global([data-theme='nightly'] .filter-group .custom-input.outlined) {
     border-color: rgba(200, 0, 0, 0.4);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly'] .filter-group .custom-input.outlined:focus) {
@@ -816,7 +816,7 @@
 
   :global([data-theme='nightly']) .icon-btn {
     border-color: rgba(200, 0, 0, 0.55);
-    color: #cc0000;
+    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .paths-table th {
