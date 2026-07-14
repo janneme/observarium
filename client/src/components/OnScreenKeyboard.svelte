@@ -410,7 +410,7 @@
     align-items: center;
     justify-content: center;
     height: clamp(36px, 6vw, 56px);
-    font-size: 1.05rem;
+    font-size: 1.155rem;
   }
   .key:active,
   .key.hw-active {
@@ -424,7 +424,7 @@
     min-width: 36px;
     flex: 1 1 0;
     max-width: 64px;
-    font-size: 1.05rem;
+    font-size: 1.155rem;
   }
   /* use a clamped height so keys remain visually balanced; flex distributes width evenly */
   .key.flex {

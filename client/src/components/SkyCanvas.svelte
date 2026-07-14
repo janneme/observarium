@@ -37,6 +37,7 @@
   export let showSolarSystem = true
   export let overlayArrows = []
   export let starRadiusScale = 1
+  export let nightlyStarRadiusScale = 1.5
   export let showSpecialStarSymbols = true
   export let targetMarker = null
   export let targetMarkerColor = 'rgba(120,0,255,0.9)'
@@ -120,7 +121,7 @@
     const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
     const t = Math.max(0, Math.min(1, (magLim - m) / MAG_RANGE))
     const vmin = Math.min(W, H) / 100
-    const nightlyScale = currentTheme === 'nightly' ? 1.5 : 1
+    const nightlyScale = currentTheme === 'nightly' ? nightlyStarRadiusScale : 1
     return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin * starRadiusScale * nightlyScale
   }
 
@@ -1115,8 +1116,8 @@
     // Pass 0: overlay arrows (behind DSOs and stars)
     if (overlayArrows.length) {
       const nightly = currentTheme === 'nightly'
-      const arrowColor = nightly ? 'rgba(204,0,0,0.55)' : 'rgba(255,255,255,0.45)'
-      const labelColor = nightly ? 'rgba(204,0,0,0.65)' : 'rgba(255,255,255,0.55)'
+      const arrowColor = nightly ? '#0000ff' : 'rgba(255,255,255,0.45)'
+      const labelColor = nightly ? '#0000ff' : 'rgba(255,255,255,0.55)'
       const fpDebug =
         finderMode &&
         typeof window !== 'undefined' &&
@@ -1140,11 +1141,10 @@
           const pt = projectToPixel(arr.markerRa, arr.markerDec, ra0, dec0, W, H, fov, rotation)
           if (!pt) continue
           const { px, py } = pt
-          const markerColor = currentTheme === 'nightly' ? 'rgba(0,0,220,0.85)' : 'rgba(0,200,255,0.85)'
           ctx.save()
-          ctx.strokeStyle = markerColor
+          ctx.strokeStyle = '#0000ff'
           ctx.lineWidth = 1.5
-          const arm = 10
+          const arm = 13
           const gap = 5
           ctx.beginPath()
           ctx.moveTo(px - arm - gap, py)
@@ -1245,7 +1245,7 @@
         ctx.stroke()
         // open chevron head — omit when arrow is trimmed at circle boundary
         if (!trimmed) {
-          const hw = 8
+          const hw = nightly ? 16 : 8
           ctx.beginPath()
           ctx.moveTo(tipX - ux * hw + uy * hw * 0.5, tipY - uy * hw - ux * hw * 0.5)
           ctx.lineTo(tipX, tipY)
@@ -1254,7 +1254,7 @@
         }
         if (arr.label) {
           ctx.fillStyle = labelColor
-          ctx.font = '11px sans-serif'
+          ctx.font = nightly ? 'bold 22px sans-serif' : '11px sans-serif'
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           const mx = (startX + tipX) / 2

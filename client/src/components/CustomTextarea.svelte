@@ -149,8 +149,10 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
+    justify-content: center;
     align-items: stretch;
+    font-size: 1.2rem;
+    font-family: monospace;
   }
 
   .custom-textarea pre {

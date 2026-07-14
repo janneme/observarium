@@ -8,6 +8,7 @@
     INITIAL_MAG_RANGE_START_FACTOR,
   } from '../lib/visualRangePlan.js'
   import SearchPanel from '../components/SearchPanel.svelte'
+  import CustomSelect from '../components/CustomSelect.svelte'
   import VisualRangeMeasureScreen from './VisualRangeMeasureScreen.svelte'
 
   export let lat = 0
@@ -40,6 +41,15 @@
   }
 
   $: _mounted && _saveState(selectedStar, selectedTelescopeId, selectedEyepieceId, selectedInitialMag)
+
+  // Clear a stale plan error whenever the user changes any input, so "Begin" reappears.
+  $: {
+    selectedStar
+    selectedTelescopeId
+    selectedEyepieceId
+    selectedInitialMag
+    planError = ''
+  }
 
   $: selectedTelescope = telescopes.find((t) => t.id === selectedTelescopeId) ?? null
   $: selectedEyepiece = eyepieces.find((e) => e.id === selectedEyepieceId) ?? null
@@ -215,17 +225,15 @@
         {#if telescopes.length === 0}
           <span class="hint">No telescopes — add one under Telescopes in the menu</span>
         {:else}
-          <select
-            bind:value={selectedTelescopeId}
-            on:change={() => {
+          <CustomSelect
+            value={selectedTelescopeId}
+            options={telescopes.map((t) => ({ value: t.id, label: t.name }))}
+            placeholder="Select telescope…"
+            on:change={(e) => {
+              selectedTelescopeId = e.detail
               selectedEyepieceId = null
             }}
-          >
-            <option value={null} disabled>Select telescope…</option>
-            {#each telescopes as tel (tel.id)}
-              <option value={tel.id}>{tel.name}</option>
-            {/each}
-          </select>
+          />
         {/if}
       </div>
 
@@ -234,12 +242,13 @@
         {#if eyepieces.length === 0}
           <span class="hint">No eyepieces — add one under Telescopes in the menu</span>
         {:else}
-          <select bind:value={selectedEyepieceId} disabled={!selectedTelescopeId}>
-            <option value={null} disabled>Select eyepiece…</option>
-            {#each eyepieces as ep (ep.id)}
-              <option value={ep.id}>{ep.name}</option>
-            {/each}
-          </select>
+          <CustomSelect
+            value={selectedEyepieceId}
+            options={eyepieces.map((ep) => ({ value: ep.id, label: ep.name }))}
+            placeholder="Select eyepiece…"
+            disabled={!selectedTelescopeId}
+            on:change={(e) => (selectedEyepieceId = e.detail)}
+          />
         {/if}
       </div>
 
@@ -258,11 +267,11 @@
 
       {#if planError}
         <p class="plan-error">{planError}</p>
+      {:else}
+        <button class="begin-btn" disabled={!canBegin} on:click={handleBegin}>
+          {planning ? 'Computing…' : 'Begin'}
+        </button>
       {/if}
-
-      <button class="begin-btn" disabled={!canBegin} on:click={handleBegin}>
-        {planning ? 'Computing…' : 'Begin'}
-      </button>
     </div>
   </div>
 
@@ -356,8 +365,7 @@
   }
 
   .field-label {
-    font-size: 0.8rem;
-    opacity: 0.7;
+    font-size: 0.96rem;
     min-width: 7rem;
     flex-shrink: 0;
   }
@@ -369,28 +377,13 @@
     color: var(--fg);
     border-radius: 6px;
     padding: 0.4rem 0.75rem;
-    font-size: 0.85rem;
+    font-size: 1.02rem;
     cursor: pointer;
     text-align: left;
   }
 
   .pick-btn:hover {
     background: rgba(200, 0, 0, 0.12);
-  }
-
-  select {
-    flex: 1;
-    background: rgba(200, 0, 0, 0.07);
-    border: 1px solid rgba(200, 0, 0, 0.25);
-    color: var(--fg);
-    border-radius: 6px;
-    padding: 0.4rem 0.5rem;
-    font-size: 0.85rem;
-  }
-
-  select:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
   }
 
   .hint {
@@ -411,7 +404,7 @@
     color: var(--fg);
     border-radius: 20px;
     padding: 0.3rem 0.65rem;
-    font-size: 0.8rem;
+    font-size: 0.96rem;
     cursor: pointer;
     transition: background 100ms;
   }
@@ -426,8 +419,16 @@
     color: #000000;
   }
 
+  :global([data-theme='nightly']) .pill.selected {
+    background: rgba(200, 0, 0, 0.12);
+    border: 2px solid var(--accent);
+    color: var(--fg);
+    font-weight: 700;
+    padding: calc(0.3rem - 1px) calc(0.65rem - 1px);
+  }
+
   .plan-error {
-    font-size: 0.82rem;
+    font-size: 0.96rem;
     color: #dd0000;
     background: rgba(200, 0, 0, 0.08);
     border: 1px solid rgba(200, 0, 0, 0.25);
@@ -457,5 +458,13 @@
 
   .begin-btn:hover:not(:disabled) {
     opacity: 0.85;
+  }
+
+  :global([data-theme='nightly']) .begin-btn {
+    background: rgba(200, 0, 0, 0.12);
+    border: 2px solid var(--accent);
+    color: var(--fg);
+    font-weight: 700;
+    padding: calc(0.7rem - 2px) calc(2rem - 2px);
   }
 </style>

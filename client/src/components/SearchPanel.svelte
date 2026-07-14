@@ -13,7 +13,6 @@
   const dispatch = createEventDispatcher()
 
   export let placeholder = 'Search objects…'
-  export let emptyHint = 'Type to search'
   export let noResultsHint = 'No results'
   export let useSearchStore = true
   export let manageSelection = true
@@ -161,11 +160,9 @@
   <div class="results">
     {#if loading}
       <div class="hint">Loading…</div>
-    {:else if !query}
-      <div class="hint">{emptyHint}</div>
-    {:else if results.length === 0}
+    {:else if query && results.length === 0}
       <div class="hint">{noResultsHint}</div>
-    {:else}
+    {:else if query}
       {#each results as item (item.obj.id)}
         <div
           class="result-row"
@@ -237,8 +234,7 @@
   .search-title {
     flex-shrink: 0;
     padding: 0.5rem 0.75rem 0.25rem;
-    font-size: 0.8rem;
-    opacity: 0.6;
+    font-size: 0.96rem;
     letter-spacing: 0.02em;
   }
 
@@ -266,7 +262,7 @@
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.7);
-    font-size: 0.95rem;
+    font-size: 1.425rem;
     padding: 0.35rem 0.5rem;
     cursor: pointer;
     border-radius: 4px;
@@ -279,9 +275,11 @@
   }
   .cancel-btn {
     color: #7aafff;
-    font-size: 1.2rem;
+    font-size: 1.8rem;
     padding: 0.25rem 0.45rem;
     line-height: 1;
+    position: relative;
+    top: -0.2em;
   }
 
   .results {
@@ -315,7 +313,7 @@
   .result-label {
     flex: 1;
     min-width: 0;
-    font-size: 0.9rem;
+    font-size: 0.96rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

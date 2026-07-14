@@ -1,6 +1,13 @@
 terraform {
   required_version = ">= 1.5"
 
+  backend "s3" {
+    bucket       = "observarium-tfstate-0b5ad51e"
+    key          = "observarium/terraform.tfstate"
+    region       = "eu-central-1"
+    use_lockfile = true
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -264,6 +271,14 @@ resource "aws_cognito_user_pool_client" "main" {
 
   # Prevent user existence errors
   prevent_user_existence_errors = "ENABLED"
+
+  # generate_secret is write-only: the Cognito API never returns it, so a
+  # freshly-imported resource always shows it as null in state. It's also
+  # ForceNew, so without ignoring it here, every plan would want to destroy
+  # and recreate this client (invalidating the real client ID in use).
+  lifecycle {
+    ignore_changes = [generate_secret]
+  }
 }
 
 # ============================================================================

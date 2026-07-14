@@ -126,6 +126,19 @@
 
   $: if (viewCentre && fovDeg > 0) _loadStarsForView(viewCentre, fovDeg, magLimitForView)
 
+  // A hop lands at the `to` guide star (multiplier 1 = "center on the star you
+  // can see"); for k>1 it extrapolates (k-1) more hops past it. Each move is
+  // self-contained, so only the *last* move of a step's chain determines where
+  // that step actually ends up — not an accumulation from the step's start.
+  function _applyMoves(startPos, moves) {
+    if (moves.length === 0) return startPos
+    const m = moves[moves.length - 1]
+    const k = m.multiplier ?? 1
+    const dRa = m.to.pos[0] - m.from.pos[0]
+    const dDec = m.to.pos[1] - m.from.pos[1]
+    return [(((m.to.pos[0] + (k - 1) * dRa) % 360) + 360) % 360, m.to.pos[1] + (k - 1) * dDec]
+  }
+
   // Precompute the telescope's starting position for each step by applying
   // moves sequentially. step.centre is the DSO pair midpoint (navigation target),
   // which differs from the actual computed endpoint of the moves.
@@ -133,14 +146,7 @@
     const starts = [startStar?.pos ?? [0, 0]]
     if (plan?.steps) {
       for (let i = 0; i < plan.steps.length - 1; i++) {
-        let pos = starts[i]
-        for (const m of plan.steps[i].moves) {
-          pos = [
-            pos[0] + m.multiplier * (m.to.pos[0] - m.from.pos[0]),
-            pos[1] + m.multiplier * (m.to.pos[1] - m.from.pos[1]),
-          ]
-        }
-        starts.push(pos)
+        starts.push(_applyMoves(starts[i], plan.steps[i].moves))
       }
     }
     return starts
@@ -210,13 +216,6 @@
       return 'Can you see this star?'
     }
     return ''
-  })()
-
-  $: stepLabel = (() => {
-    if (!plan?.steps?.length) return ''
-    const total = plan.steps.length
-    if (phase === 'result') return `Done (${total} step${total !== 1 ? 's' : ''})`
-    return `Step ${stepIndex + 1} of ${total}`
   })()
 
   function saveHistory() {
@@ -298,11 +297,14 @@
     saveHistory()
     const moves = currentStep.moves
     const m = moves[moveIndex]
-    const newCentre = [
-      viewCentre[0] + m.multiplier * (m.to.pos[0] - m.from.pos[0]),
-      viewCentre[1] + m.multiplier * (m.to.pos[1] - m.from.pos[1]),
-    ]
+    const newCentre = _applyMoves(viewCentre, [m])
     const fovR = fovDeg / 2
+    console.log(
+      `@@VR_MOVE step=${stepIndex} move=${moveIndex}/${moves.length - 1} x${m.multiplier} ` +
+        `from="${preferredStarLabel(m.from)}"(${_vrFmt(m.from.pos)}) to="${preferredStarLabel(m.to)}"(${_vrFmt(m.to.pos)}) ` +
+        `viewBefore=(${_vrFmt(viewCentre)}) viewAfter=(${_vrFmt(newCentre)}) fov=${fovDeg.toFixed(3)}° ` +
+        `nextPhase=${moveIndex < moves.length - 1 ? 'move' : 'test'}`,
+    )
     console.log(
       `[VR] handleNext step=${stepIndex} move=${moveIndex} viewWas=(${_vrFmt(viewCentre)}) → newCentre=(${_vrFmt(newCentre)})`,
     )
@@ -375,9 +377,6 @@
   <div class="header">
     <button class="back-btn" type="button" on:click={() => dispatch('close')}>←</button>
     <span class="header-title">Visual Range</span>
-    {#if stepLabel}
-      <span class="step-label">{stepLabel}</span>
-    {/if}
   </div>
 
   <div class="body">
@@ -400,6 +399,7 @@
         magLimitOverride={magLimitForView}
         overlayArrows={guideArrows}
         objects={_starObjects}
+        nightlyStarRadiusScale={2}
       />
     </div>
 
@@ -489,12 +489,6 @@
     font-weight: 600;
   }
 
-  .step-label {
-    margin-left: auto;
-    font-size: 0.78rem;
-    opacity: 0.55;
-  }
-
   .body {
     flex: 1;
     overflow-y: auto;
@@ -511,17 +505,20 @@
     clip-path: circle(50%);
     border-radius: 50%;
     overflow: hidden;
-    border: 1px solid rgba(200, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.4);
     flex-shrink: 0;
   }
 
+  :global([data-theme='nightly']) .canvas-wrap {
+    border-color: #0000ff;
+  }
+
   .instruction {
-    font-size: 0.88rem;
+    font-size: 1.056rem;
     text-align: center;
     line-height: 1.4;
     max-width: 26rem;
     margin: 0;
-    opacity: 0.9;
   }
 
   .candidate-info {
@@ -547,7 +544,7 @@
     border: none;
     border-radius: 8px;
     padding: 0.6rem 1.4rem;
-    font-size: 0.88rem;
+    font-size: 1.056rem;
     font-weight: 600;
     cursor: pointer;
     transition: opacity 120ms;
@@ -586,6 +583,41 @@
     background: rgba(200, 0, 0, 0.95);
   }
 
+  /* Nightly: solid red fills are too intense — differentiate button states by
+     border thickness instead (secondary 1px < primary 2px < danger 3px). */
+  :global([data-theme='nightly']) .btn.primary {
+    background: rgba(200, 0, 0, 0.12);
+    color: var(--fg);
+    border: 2px solid var(--accent);
+    font-weight: 700;
+    padding: calc(0.6rem - 2px) calc(1.4rem - 2px);
+  }
+
+  :global([data-theme='nightly']) .btn.primary:hover:not(:disabled) {
+    background: rgba(200, 0, 0, 0.2);
+    opacity: 1;
+  }
+
+  :global([data-theme='nightly']) .btn.danger {
+    background: rgba(200, 0, 0, 0.12);
+    color: var(--fg);
+    border: 3px solid var(--accent);
+    font-weight: 700;
+    padding: calc(0.6rem - 3px) calc(1.4rem - 3px);
+  }
+
+  :global([data-theme='nightly']) .btn.danger:hover:not(:disabled) {
+    background: rgba(200, 0, 0, 0.2);
+  }
+
+  /* Nightly: fading disabled buttons to 0.35 opacity on top of already-subtle
+     borders/backgrounds makes them nearly invisible. Keep them legible and
+     signal "disabled" with a dashed border instead. */
+  :global([data-theme='nightly']) .btn:disabled {
+    opacity: 0.75;
+    border-style: dashed;
+  }
+
   .result-box {
     display: flex;
     flex-direction: column;
@@ -609,7 +641,6 @@
 
   .result-label {
     font-size: 0.75rem;
-    opacity: 0.5;
     text-transform: uppercase;
     letter-spacing: 0.07em;
   }

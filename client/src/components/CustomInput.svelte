@@ -141,6 +141,8 @@
     border: 1px solid rgba(127, 127, 127, 0.08);
     border-radius: 4px;
     outline: none;
+    font-size: 1.2rem;
+    font-family: monospace;
   }
   .custom-input:focus {
     box-shadow: 0 0 0 2px rgba(59, 99, 255, 0.06);

@@ -1031,7 +1031,6 @@
   {#if startSearchOpen}
     <SearchPanel
       placeholder="Start star"
-      emptyHint="Type a bright star name"
       noResultsHint="No bright stars found"
       useSearchStore={false}
       manageSelection={false}
