@@ -6,6 +6,7 @@
   export let message = 'Are you sure?'
   export let confirmLabel = 'Confirm'
   export let cancelLabel = 'Cancel'
+  export let textScale = 1
 
   const dispatch = createEventDispatcher()
 
@@ -28,7 +29,7 @@
     on:click={close}
     on:keydown={(e) => (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') && close()}
   ></div>
-  <div class="confirm-panel" on:pointerdown|stopPropagation>
+  <div class="confirm-panel" style="--text-scale: {textScale}" on:pointerdown|stopPropagation>
     <div class="confirm-title">{title}</div>
     <div class="confirm-message">{message}</div>
     <div class="confirm-actions">
@@ -61,13 +62,13 @@
   }
 
   .confirm-title {
-    font-size: 0.95rem;
+    font-size: calc(0.95rem * var(--text-scale, 1));
     font-weight: 700;
     margin-bottom: 0.35rem;
   }
 
   .confirm-message {
-    font-size: 0.85rem;
+    font-size: calc(0.85rem * var(--text-scale, 1));
     opacity: 0.82;
     line-height: 1.4;
     white-space: pre-wrap;
@@ -86,7 +87,7 @@
     color: var(--fg);
     border-radius: 6px;
     padding: 0.35rem 0.65rem;
-    font-size: 0.8rem;
+    font-size: calc(0.8rem * var(--text-scale, 1));
     cursor: pointer;
   }
 

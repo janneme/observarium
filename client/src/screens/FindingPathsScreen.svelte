@@ -98,6 +98,17 @@
     return cat || obj.name || String(obj.id || 'Object')
   }
 
+  // Catalogue number preferred over common name — used for the final step's
+  // target label, where the number is what you'd actually look for in an atlas.
+  function objectCatalogLabel(obj) {
+    if (!obj) return null
+    if (obj.m != null) return `M ${obj.m}`
+    if (obj.ngc != null) return `NGC ${obj.ngc}`
+    if (obj.ic != null) return `IC ${obj.ic}`
+    if (obj.caldwell != null) return `C ${obj.caldwell}`
+    return null
+  }
+
   function greekFromBayer(bayer) {
     const raw = String(bayer || '').trim()
     if (!raw) return null
@@ -675,7 +686,7 @@
     return {
       prefix: `${idx + 1}. `,
       from: placeLabel(resolvedStart),
-      to: placeLabel(step?.endPoint),
+      to: step?.final ? objectCatalogLabel(objectCtx) || placeLabel(step?.endPoint) : placeLabel(step?.endPoint),
       mx: m !== 1 ? ` (${m}x)` : null,
     }
   }
@@ -775,8 +786,12 @@
 
   onMount(async () => {
     window.addEventListener('keydown', handleKey)
-    await init()
+    // Open the start-star search synchronously, before init()'s async work
+    // resolves — otherwise expandedStartHip briefly points at an existing
+    // path (set inside init/loadPaths) and it flashes on screen underneath
+    // the search overlay for a frame.
     if (initialSelectStart) startPathSelection()
+    await init()
   })
 
   onDestroy(() => {
@@ -799,8 +814,15 @@
       {/if}
     </div>
     {#if guideMode}
-      <button class="btn danger" on:click={() => askDeletePath(expandedStartHip)}>Delete</button>
-    {:else if !recordingStartHip && !openedExistingPath}
+      <button
+        class="icon-btn danger"
+        on:click={() => askDeletePath(expandedStartHip)}
+        aria-label="Delete path"
+        title="Delete path"
+      >
+        <DeleteIcon size="1.35rem" aria-hidden="true" />
+      </button>
+    {:else if !recordingStartHip && !openedExistingPath && !initialSelectStart}
       <button class="btn" on:click={startPathSelection}>＋ Path</button>
     {/if}
   </div>
@@ -908,7 +930,7 @@
                       <button class="mini" on:click={() => deleteStep(idx)}>Delete</button>
                     {/if}
                     <button
-                      class="mini"
+                      class="mini set-start"
                       class:set={step.startPoint != null}
                       disabled={!pendingPoint?.hip}
                       on:click={() => setStart(idx)}>Set start</button
@@ -1024,6 +1046,7 @@
     message={confirmMessage}
     confirmLabel="Delete"
     cancelLabel="Cancel"
+    textScale={1.2}
     on:cancel={closeConfirm}
     on:confirm={onConfirm}
   />
@@ -1085,7 +1108,7 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     line-height: 1;
     cursor: pointer;
     padding: 0.1rem 0.15rem 0.1rem 0.5rem;
@@ -1093,6 +1116,8 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
+    position: relative;
+    top: -0.15em;
   }
 
   .back-btn:hover {
@@ -1126,7 +1151,7 @@
     border-radius: 50%;
     overflow: hidden;
     touch-action: none;
-    border: 1px solid rgba(232, 232, 232, 0.2);
+    border: 2px solid rgba(232, 232, 232, 0.2);
   }
 
   .pick-mark {
@@ -1263,7 +1288,7 @@
     overflow: hidden;
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .step-row.active {
@@ -1284,7 +1309,7 @@
     text-align: left;
     padding: 0.45rem;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.96rem;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
@@ -1294,18 +1319,20 @@
   .step-actions {
     flex-shrink: 0;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     gap: 0.3rem;
     padding: 0.25rem 0.4rem;
   }
 
   .mini {
+    flex-shrink: 0;
     border: 1px solid rgba(232, 232, 232, 0.26);
     background: rgba(255, 255, 255, 0.04);
     color: var(--fg);
     border-radius: 6px;
     padding: 0.2rem 0.45rem;
-    font-size: 0.7rem;
+    font-size: 0.96rem;
     cursor: pointer;
   }
 
@@ -1319,14 +1346,20 @@
     color: rgba(255, 255, 255, 0.9);
   }
 
+  .set-start:not(:disabled) {
+    color: #ff0000;
+    border-color: #ff0000;
+  }
+
   .add-step {
     width: 100%;
-    border: 1px dashed rgba(232, 232, 232, 0.35);
+    border: 1px solid rgba(120, 180, 255, 0.9);
     background: rgba(255, 255, 255, 0.03);
     color: var(--fg);
     border-radius: 6px;
-    padding: 0.4rem;
-    font-size: 0.78rem;
+    padding: 0.45rem;
+    font-size: 0.96rem;
+    font-weight: 700;
     cursor: pointer;
   }
 
@@ -1341,7 +1374,7 @@
   }
 
   :global([data-theme='nightly']) .finder-wrap {
-    border-color: rgba(180, 0, 0, 0.4);
+    border-color: #0000bb;
   }
 
   :global([data-theme='nightly']) .btn,
@@ -1358,14 +1391,29 @@
     color: #cc8070;
   }
 
+  :global([data-theme='nightly']) .mini:disabled {
+    color: #ff0000;
+    opacity: 0.5;
+  }
+
   :global([data-theme='nightly']) .btn,
   :global([data-theme='nightly']) .mini,
   :global([data-theme='nightly']) .add-step {
     background: rgba(180, 0, 0, 0.08);
   }
 
-  :global([data-theme='nightly']) .step-row.active {
+  :global([data-theme='nightly']) .add-step {
     border-color: rgba(204, 68, 0, 0.85);
+  }
+
+  :global([data-theme='nightly']) .set-start:not(:disabled) {
+    color: #ff0000;
+    border-color: #ff0000;
+  }
+
+  :global([data-theme='nightly']) .step-row.active {
+    border-color: #ff0000;
+    border-width: 2px;
     background: rgba(160, 40, 0, 0.12);
   }
 
@@ -1406,18 +1454,13 @@
   .step-arrow,
   .title-arrow {
     font-size: 1.3em;
-    vertical-align: 0.12em;
+    vertical-align: -0.08em;
     margin: 0 0.2em;
   }
 
   .step-mx {
     font-weight: normal;
     opacity: 0.75;
-  }
-
-  .btn.danger {
-    border-color: rgba(255, 120, 120, 0.5);
-    color: #ff9a9a;
   }
 
   .step-nav {
@@ -1429,7 +1472,7 @@
   }
 
   .step-nav-label {
-    font-size: 0.85rem;
+    font-size: 1.02rem;
     text-align: center;
     flex: 1;
     min-width: 0;
@@ -1446,7 +1489,7 @@
     color: var(--fg);
     border-radius: 6px;
     padding: 0.3rem 0.6rem;
-    font-size: 1rem;
+    font-size: 1.2rem;
     cursor: pointer;
     line-height: 1;
   }
@@ -1454,11 +1497,6 @@
   .nav-btn:disabled {
     opacity: 0.35;
     cursor: default;
-  }
-
-  :global([data-theme='nightly']) .btn.danger {
-    border-color: rgba(200, 0, 0, 0.5);
-    color: #ff0000;
   }
 
   :global([data-theme='nightly']) .nav-btn {

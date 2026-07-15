@@ -4,6 +4,8 @@
   import SkyCanvas from '../components/SkyCanvas.svelte'
   import QuizSetup from '../components/QuizSetup.svelte'
   import QuizProgress from '../components/QuizProgress.svelte'
+  import ThumbUpIcon from '../icons/ThumbUpIcon.svelte'
+  import ThumbDownIcon from '../icons/ThumbDownIcon.svelte'
   import { getMeta, getObjectsInArea, getSearchIndex } from '../lib/db.js'
   import {
     applyQuizAnswer,
@@ -23,15 +25,25 @@
 
   const dispatch = createEventDispatcher()
   const QUIZ_TYPE = 'constellation'
-  const DIFFICULTY_MAX_MAG = { easy: 1.5, medium: 3, hard: 4 }
+  const DIFFICULTY_MAX_MAG = { easy: 1.5, medium: 2.5, hard: 4 }
   const QUIZ_SETTINGS_KEY = 'observarium.constellationQuiz.settings'
+  // Cap the quiz to a fixed-size random sample so it has a definite end,
+  // rather than cycling through every eligible star indefinitely.
+  const QUIZ_POOL_SIZE = 20
+  // The star catalogue only covers dec >= -35° (Europe visibility filter, see
+  // data_prep/config.py). A quiz star too close to that edge would render with
+  // its neighbourhood cut off, since there's no data beyond the boundary.
+  const EUROPE_MIN_DEC = -35
 
   let loading = true
   let setupMode = true
   let allStars = []
   let starsById = new Map()
+  let starsByHip = new Map()
   let starsByConst = new Map()
   let schemaHipSet = new Set()
+  let conNameByAbbr = new Map()
+  let constellationsMeta = null
 
   let scope = 'global'
   let difficulty = 'medium'
@@ -43,7 +55,9 @@
   let currentQuestion = null
   let options = []
   let revealLines = false
-  let answered = false
+  let resolved = false // correct option has been tapped for the current question
+  let firstTapMade = false // whether mastery has already been scored for this question
+  let wrongTapped = new Set() // option ids tapped that were incorrect
   let feedback = ''
   let progressPct = 0
 
@@ -183,11 +197,16 @@
 
   function buildPool(s, d) {
     const maxMag = DIFFICULTY_MAX_MAG[d] ?? DIFFICULTY_MAX_MAG.medium
+    // A quiz view of fixedQuizFov centred on (or near) this star must not dip
+    // below the catalogue's southern edge, or the rendered neighbourhood cuts
+    // off abruptly with no stars beyond the boundary.
+    const decFloor = EUROPE_MIN_DEC + fixedQuizFov / 2
     const base = allStars.filter((star) => {
       if (!hasNameAndConstellation(star)) return false
       const mag = Array.isArray(star.mag) ? star.mag[0] : Number(star.mag)
       if (!Number.isFinite(mag) || mag > maxMag) return false
       if (d === 'easy' && !String(star?.name || '').trim()) return false
+      if (!Number.isFinite(star.pos?.[1]) || star.pos[1] < decFloor) return false
       if (s === 'local') {
         const dist = angSepDeg(star.pos, [viewRa0, viewDec0])
         if (!Number.isFinite(dist) || dist > computeLocalRadiusDeg()) return false
@@ -273,9 +292,22 @@
     qObjects = await getObjectsInArea(qRa0 - margin, qRa0 + margin, qDec0 - margin, qDec0 + margin, queryMag)
   }
 
-  function optionLabel(starId) {
+  function sampleIds(ids, n) {
+    const arr = [...ids]
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr.slice(0, n)
+  }
+
+  function optionParts(starId) {
     const s = starsById.get(starId)
-    return `${preferredStarLabel(s)} (${s?.constellation || '?'})`
+    const con = s?.constellation
+    return {
+      name: preferredStarLabel(s),
+      constellation: (con && conNameByAbbr.get(con)) || con || '?',
+    }
   }
 
   function pickOptions(correctId) {
@@ -309,12 +341,14 @@
 
     const saved = continuePrev ? loadQuizState(QUIZ_TYPE, difficulty, scope) : null
     if (saved?.pool?.length >= 4) {
+      // Resume the exact star selection from the saved quiz, not a fresh sample.
       const validPool = saved.pool.filter((id) => freshPool.includes(id))
-      pool = validPool.length >= 4 ? validPool : freshPool
+      pool = validPool.length >= 4 ? validPool : sampleIds(freshPool, QUIZ_POOL_SIZE)
       mastery = { ...(saved.mastery || {}) }
       currentQuestion = pool.includes(saved.currentQuestion) ? saved.currentQuestion : pickNextQuestion(pool, mastery)
     } else {
-      pool = freshPool
+      // New quiz: pick a fresh, fixed-size random sample so the quiz has a definite end.
+      pool = sampleIds(freshPool, QUIZ_POOL_SIZE)
       mastery = {}
       currentQuestion = pickNextQuestion(pool, mastery)
       clearQuizState(QUIZ_TYPE, difficulty, scope)
@@ -323,7 +357,9 @@
     progressPct = computeProgressPct(pool, mastery)
     setupMode = false
     revealLines = false
-    answered = false
+    resolved = false
+    firstTapMade = false
+    wrongTapped = new Set()
     feedback = ''
     pickOptions(currentQuestion)
     await loadQuestionSky(starsById.get(currentQuestion))
@@ -332,7 +368,9 @@
 
   async function nextQuestion() {
     revealLines = false
-    answered = false
+    resolved = false
+    firstTapMade = false
+    wrongTapped = new Set()
     feedback = ''
     currentQuestion = pickNextQuestion(pool, mastery)
     if (!currentQuestion) return
@@ -342,21 +380,31 @@
   }
 
   async function handleAnswer(optionId) {
-    if (!currentQuestion || answered) return
-    const correct = optionId === currentQuestion
-    mastery = applyQuizAnswer(mastery, currentQuestion, correct)
-    progressPct = computeProgressPct(pool, mastery)
-    answered = true
+    if (!currentQuestion) return
+    if (resolved) {
+      // Re-tapping the highlighted correct option advances to the next question.
+      if (optionId === currentQuestion && progressPct < 100) await nextQuestion()
+      return
+    }
+    if (wrongTapped.has(optionId)) return
     revealLines = true
-    const starName = preferredStarLabel(starsById.get(currentQuestion))
-    feedback = correct ? 'Correct!' : `Incorrect. It is ${starName}`
-    if (progressPct >= 100) clearQuizState(QUIZ_TYPE, difficulty, scope)
+    const correct = optionId === currentQuestion
+    if (!firstTapMade) {
+      firstTapMade = true
+      mastery = applyQuizAnswer(mastery, currentQuestion, correct)
+      progressPct = computeProgressPct(pool, mastery)
+      if (progressPct >= 100) clearQuizState(QUIZ_TYPE, difficulty, scope)
+    }
+    if (correct) {
+      resolved = true
+    } else {
+      wrongTapped = new Set([...wrongTapped, optionId])
+    }
     saveState()
   }
 
-  async function handleContinue() {
-    if (progressPct >= 100) return
-    await nextQuestion()
+  function handleSkyTap() {
+    if (resolved && progressPct < 100) nextQuestion()
   }
 
   function handleBack() {
@@ -365,7 +413,7 @@
   }
 
   function onGlobalKeyDown(e) {
-    if (setupMode || answered || progressPct >= 100 || options.length === 0) return
+    if (setupMode || (resolved && progressPct >= 100) || options.length === 0) return
     if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
     const t = e.target
     const tag = String(t?.tagName || '').toLowerCase()
@@ -384,15 +432,26 @@
     qObjects.find((o) => o?.id === currentQuestion && Array.isArray(o?.pos)) || starsById.get(currentQuestion) || null
   $: currentQuestionConstellation =
     renderedTargetStar?.constellation || starsById.get(currentQuestion)?.constellation || null
+  // Resolve fallback positions directly from the line schema's own HIP
+  // references, rather than via starsByConst's constellation-membership
+  // match — a star can be a genuine vertex of a constellation's line figure
+  // while its own catalogued `constellation` field (from a different source)
+  // doesn't exactly match that constellation's abbreviation. Requiring an
+  // exact match silently dropped some line endpoints, breaking lines that
+  // should always be fully drawable once revealed.
   $: lineFallbackByHip = (() => {
     if (!revealLines || !currentQuestionConstellation) return null
-    const group = starsByConst.get(currentQuestionConstellation)
-    if (!Array.isArray(group) || group.length === 0) return null
+    const con = constellationsMeta?.[currentQuestionConstellation]
+    const lines = Array.isArray(con?.lines) ? con.lines : []
+    if (lines.length === 0) return null
     const map = new Map()
-    for (const s of group) {
-      const hip = Number(s?.hip)
-      if (!Number.isFinite(hip) || !Array.isArray(s?.pos)) continue
-      map.set(hip, s.pos)
+    for (const edge of lines) {
+      if (!Array.isArray(edge) || edge.length < 2) continue
+      for (const hip of [Number(edge[0]), Number(edge[1])]) {
+        if (!Number.isFinite(hip) || map.has(hip)) continue
+        const s = starsByHip.get(hip)
+        if (s && Array.isArray(s.pos)) map.set(hip, s.pos)
+      }
     }
     return map
   })()
@@ -403,15 +462,24 @@
       loadQuizSettings()
       settingsLoaded = true
       const [index, constellations] = await Promise.all([getSearchIndex(), getMeta('constellations')])
+      constellationsMeta = constellations
       schemaHipSet = buildSchemaHipSet(constellations)
+      if (constellations && typeof constellations === 'object') {
+        const names = new Map()
+        for (const [abbr, con] of Object.entries(constellations)) {
+          if (con?.name) names.set(abbr, con.name)
+        }
+        conNameByAbbr = names
+      }
       const sourceStars = index.filter((x) => x.type === 'star' && Array.isArray(x.pos))
       allStars = sourceStars.filter((s) => hasNameAndConstellation(s))
       starsById = new Map(allStars.map((s) => [s.id, s]))
-      const starsByHip = new Map()
+      const nextStarsByHip = new Map()
       for (const s of allStars) {
         const hip = Number(s?.hip)
-        if (Number.isFinite(hip)) starsByHip.set(hip, s)
+        if (Number.isFinite(hip)) nextStarsByHip.set(hip, s)
       }
+      starsByHip = nextStarsByHip
       const grouped = new Map()
       if (constellations && typeof constellations === 'object') {
         for (const [abbr, con] of Object.entries(constellations)) {
@@ -483,8 +551,17 @@
     {:else}
       <QuizProgress {progressPct} />
 
-      <p class="question">Which star is highlighted?</p>
-      <div class="sky-wrap">
+      <p class="question">
+        {resolved && progressPct < 100 ? 'Tap the sky for the next question' : 'Which star is highlighted?'}
+      </p>
+      <div
+        class="sky-wrap"
+        class:tappable={resolved && progressPct < 100}
+        role="button"
+        tabindex="0"
+        on:click={handleSkyTap}
+        on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleSkyTap()}
+      >
         <SkyCanvas
           ra0={qRa0}
           dec0={qDec0}
@@ -511,23 +588,29 @@
         />
       </div>
 
-      {#if !answered}
-        <div class="answers">
-          {#each options as oid}
-            <button class="answer" on:click={() => handleAnswer(oid)}>
-              {optionLabel(oid)}
-            </button>
-          {/each}
-        </div>
-      {/if}
-
-      {#if feedback}
-        <p class="msg">{feedback}</p>
-      {/if}
-
-      {#if answered && progressPct < 100}
-        <button class="continue-btn" on:click={handleContinue}>Continue</button>
-      {/if}
+      <div class="answers">
+        {#each options as oid}
+          {@const parts = optionParts(oid)}
+          {@const isCorrect = oid === currentQuestion}
+          {@const isWrongTapped = wrongTapped.has(oid)}
+          {@const isSkipped = resolved && !isCorrect && !isWrongTapped}
+          <button
+            class="answer"
+            class:correct={resolved && isCorrect}
+            class:wrong={isWrongTapped}
+            class:skipped={isSkipped}
+            disabled={isWrongTapped || isSkipped}
+            on:click={() => handleAnswer(oid)}
+          >
+            <span class="answer-label"><strong>{parts.name}</strong> ({parts.constellation})</span>
+            {#if resolved && isCorrect}
+              <ThumbUpIcon size="1.1rem" aria-hidden="true" />
+            {:else if isWrongTapped}
+              <ThumbDownIcon size="1.1rem" aria-hidden="true" />
+            {/if}
+          </button>
+        {/each}
+      </div>
 
       {#if progressPct >= 100}
         <p class="done">Quiz complete. 100% mastery reached.</p>
@@ -597,7 +680,8 @@
 
   .sky-wrap {
     position: relative;
-    width: min(92vw, 520px);
+    width: 100%;
+    max-width: 520px;
     aspect-ratio: 1 / 1;
     border-radius: 10px;
     overflow: hidden;
@@ -605,20 +689,62 @@
     align-self: center;
   }
 
+  .sky-wrap.tappable {
+    cursor: pointer;
+  }
+
   .answers {
     display: grid;
     grid-template-columns: 1fr;
     gap: 0.45rem;
+    width: 100%;
+    max-width: 520px;
+    align-self: center;
   }
 
   .answer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     text-align: left;
     border: 1px solid rgba(180, 0, 0, 0.4);
     border-radius: 8px;
     background: rgba(0, 0, 0, 0.7);
     color: var(--fg);
     padding: 0.48rem 0.56rem;
+    font-size: 1.2rem;
     cursor: pointer;
+  }
+
+  .answer:disabled {
+    cursor: default;
+  }
+
+  .answer-label {
+    min-width: 0;
+  }
+
+  .answer.correct {
+    border-color: rgba(0, 0, 220, 0.9);
+    background: rgba(0, 0, 200, 0.18);
+    color: rgba(170, 190, 255, 1);
+  }
+
+  :global([data-theme='nightly']) .answer.correct {
+    border-color: #ff0044;
+    background: rgba(255, 0, 68, 0.18);
+    color: #ff0044;
+  }
+
+  .answer.wrong .answer-label {
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  .answer.skipped .answer-label {
+    text-decoration: line-through;
+    opacity: 0.55;
   }
 
   .msg {
@@ -635,19 +761,5 @@
     margin: 0.5rem 0;
     color: rgba(0, 0, 200, 0.9);
     font-size: 0.95rem;
-  }
-
-  .continue-btn {
-    align-self: flex-start;
-    border: 1px solid rgba(180, 0, 0, 0.4);
-    border-radius: 8px;
-    background: rgba(200, 0, 0, 0.12);
-    color: var(--fg);
-    padding: 0.44rem 0.7rem;
-    cursor: pointer;
-  }
-
-  .continue-btn:hover {
-    background: rgba(200, 0, 0, 0.2);
   }
 </style>

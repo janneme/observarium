@@ -1245,7 +1245,7 @@
         ctx.stroke()
         // open chevron head — omit when arrow is trimmed at circle boundary
         if (!trimmed) {
-          const hw = nightly ? 16 : 8
+          const hw = 16
           ctx.beginPath()
           ctx.moveTo(tipX - ux * hw + uy * hw * 0.5, tipY - uy * hw - ux * hw * 0.5)
           ctx.lineTo(tipX, tipY)
@@ -1254,7 +1254,7 @@
         }
         if (arr.label) {
           ctx.fillStyle = labelColor
-          ctx.font = nightly ? 'bold 22px sans-serif' : '11px sans-serif'
+          ctx.font = 'bold 22px sans-serif'
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           const mx = (startX + tipX) / 2

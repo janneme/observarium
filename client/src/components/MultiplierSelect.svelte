@@ -49,6 +49,7 @@
   .md {
     position: relative;
     display: inline-block;
+    flex-shrink: 0;
   }
 
   .trigger {
@@ -57,7 +58,7 @@
     color: #e8e8e8;
     border-radius: 6px;
     padding: 0.2rem 0.45rem;
-    font-size: 0.7rem;
+    font-size: 0.96rem;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -80,7 +81,7 @@
     border: none;
     color: #e8e8e8;
     padding: 0.28rem 0.55rem;
-    font-size: 0.7rem;
+    font-size: 0.96rem;
     text-align: left;
     cursor: pointer;
     white-space: nowrap;

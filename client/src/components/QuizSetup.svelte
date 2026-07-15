@@ -75,7 +75,7 @@
 
   h2 {
     margin: 0 0 0.7rem;
-    font-size: 1rem;
+    font-size: 1.2rem;
     color: var(--fg);
   }
 
@@ -85,7 +85,7 @@
 
   .label {
     color: rgba(200, 0, 0, 0.9);
-    font-size: 0.86rem;
+    font-size: 1.032rem;
     margin-bottom: 0.35rem;
   }
 
@@ -100,6 +100,7 @@
     color: var(--fg);
     border-radius: 7px;
     padding: 0.36rem 0.6rem;
+    font-size: 1.2rem;
     cursor: pointer;
   }
 
@@ -120,6 +121,7 @@
     color: var(--fg);
     border-radius: 8px;
     padding: 0.45rem 0.7rem;
+    font-size: 1.2rem;
     cursor: pointer;
   }
 
