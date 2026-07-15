@@ -538,12 +538,12 @@
   const DSO_SYMBOL_THRESHOLD = 0.04
   const SYM_R = 8 // fixed symbol radius in px
 
-  function drawDsoSymbol(ctx, obj, pt, above) {
+  function drawDsoSymbol(ctx, obj, pt) {
     const nightly = currentTheme === 'nightly'
     const r = SYM_R
-    ctx.globalAlpha = above ? 0.85 : 0.2
-    ctx.strokeStyle = nightly ? '#880000' : '#99c0ff'
-    ctx.lineWidth = 1
+    ctx.globalAlpha = nightly ? 1.0 : 0.85
+    ctx.strokeStyle = nightly ? '#bb0000' : '#99c0ff'
+    ctx.lineWidth = nightly ? 2 : 1
     ctx.setLineDash([])
 
     const type = obj.dsoType ?? 'galaxy'
@@ -733,19 +733,19 @@
     ctx.setLineDash([])
   }
 
-  function drawDso(ctx, obj, pt, above) {
+  function drawDso(ctx, obj, pt) {
     const rawSz = dsoRawPx(obj.size)
     if (rawSz < DSO_SYMBOL_THRESHOLD * Math.min(W, H)) {
-      drawDsoSymbol(ctx, obj, pt, above)
+      drawDsoSymbol(ctx, obj, pt)
       return
     }
 
     const nightly = currentTheme === 'nightly'
     const sz = Math.max(4, Math.min(50, rawSz))
     const r = sz / 2
-    ctx.globalAlpha = above ? 0.85 : 0.2
-    ctx.strokeStyle = nightly ? '#880000' : '#99c0ff'
-    ctx.lineWidth = 1
+    ctx.globalAlpha = nightly ? 1.0 : 0.85
+    ctx.strokeStyle = nightly ? '#bb0000' : '#99c0ff'
+    ctx.lineWidth = nightly ? 2 : 1
     ctx.setLineDash([])
 
     const type = obj.dsoType ?? 'galaxy'
@@ -1309,7 +1309,7 @@
         const [ra, dec] = obj.pos
         const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
         if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
-        drawDso(ctx, obj, pt, aboveMap.get(obj.id) ?? false)
+        drawDso(ctx, obj, pt)
         renderedPx.set(obj.id, { px: pt.px, py: pt.py })
         tally(obj.dsoType ?? 'galaxy')
       }
