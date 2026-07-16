@@ -6,9 +6,9 @@ Usage:
 
 import argparse
 import json
+import logging
 import mimetypes
 import os
-import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -16,6 +16,8 @@ from python_lib.storage import backend as storage_backend
 from python_lib.storage.backend import LocalBackend
 
 from handler import lambda_handler
+
+logger = logging.getLogger(__name__)
 
 
 class LocalLambdaHandler(BaseHTTPRequestHandler):
@@ -140,7 +142,7 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
             result = lambda_handler(event, context=None)
             self._send_response_from_lambda(result)
         except Exception as e:
-            traceback.print_exc()
+            logger.exception("Unhandled error handling request")
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
             cors_origin = self._cors_origin()
@@ -180,23 +182,27 @@ class LocalLambdaHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         """Override to customize log format."""
-        print(f"[local_server] {fmt % args}")
+        logger.info("[local_server] %s", fmt % args)
 
 
 def main():
     """Start the local development server."""
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(levelname)s %(name)s: %(message)s"
+    )
+
     parser = argparse.ArgumentParser(description="Local Lambda wrapper")
     parser.add_argument("--port", type=int, default=8787, help="Port to listen on")
     args = parser.parse_args()
 
     server = HTTPServer(("localhost", args.port), LocalLambdaHandler)
-    print(f"Local Lambda server listening on http://localhost:{args.port}")
-    print("Press Ctrl+C to stop")
+    logger.info("Local Lambda server listening on http://localhost:%d", args.port)
+    logger.info("Press Ctrl+C to stop")
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down server...")
+        logger.info("Shutting down server...")
         server.shutdown()
 
 

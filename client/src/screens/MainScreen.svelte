@@ -46,6 +46,7 @@
   let time = new Date()
   let skyTime = new Date()
   let clockInterval = null
+  let usingCustomTime = false // true once the user picks a date other than today; pauses the live clock
   let ra0 = 0
   let dec0 = 0
   let fov = 60
@@ -593,6 +594,10 @@
     window.addEventListener('keydown', handleKey)
     window.addEventListener('wheel', handleWheel, { passive: false })
     clockInterval = setInterval(() => {
+      if (usingCustomTime) {
+        console.log(`@@MS_TICK skipped usingCustomTime=true time=${time?.toString()}`)
+        return
+      }
       time = new Date()
       if (time.getMinutes() !== skyTime.getMinutes()) skyTime = time
     }, 1000)
@@ -676,7 +681,7 @@
       searchViewActive.update((v) => !v)
     }}
     on:timepick={() => {
-      showPicker = true
+      showPicker = !showPicker
     }}
     on:objectdetails={() => {
       objectDetailsActive.set(true)
@@ -715,14 +720,21 @@
   />
 
   {#if showPicker}
+    {console.log(`@@MS_PICKER_OPEN time=${time?.toString()}`)}
     <DateTimePicker
       {time}
       on:pick={(e) => {
+        console.log(`@@MS_ON_PICK before time=${time?.toString()} detail=${e.detail?.toString()}`)
         time = e.detail
         skyTime = e.detail
-        showPicker = false
+        usingCustomTime = e.detail.toDateString() !== new Date().toDateString()
+        console.log(`@@MS_ON_PICK after time=${time?.toString()} usingCustomTime=${usingCustomTime}`)
       }}
-      on:cancel={() => {
+      on:resumeLive={() => {
+        console.log('@@MS_RESUME_LIVE')
+        usingCustomTime = false
+      }}
+      on:done={() => {
         showPicker = false
       }}
     />

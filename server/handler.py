@@ -5,6 +5,7 @@ JWT verification helpers that fetch and cache Cognito JWKS for token checks.
 """
 
 import json
+import logging
 import os
 import time
 import traceback
@@ -15,6 +16,8 @@ import jwt
 from botocore.exceptions import ClientError
 from jwt import PyJWKClient
 from python_lib.storage import backend as storage_backend
+
+logger = logging.getLogger(__name__)
 
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "eu-central-1")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
@@ -339,7 +342,7 @@ def _route_presign(path: str, method: str, event: dict):
         try:
             verify_jwt(token)
         except Exception as exc:
-            print(f"[auth] token rejected: {exc}")
+            logger.warning("[auth] token rejected: %s", exc)
             return build_response(401, {"error": "Invalid token"})
         try:
             out = handle_presign_key("images.zip")
@@ -355,7 +358,7 @@ def _route_presign(path: str, method: str, event: dict):
         try:
             verify_jwt(token)
         except Exception as exc:
-            print(f"[auth] token rejected: {exc}")
+            logger.warning("[auth] token rejected: %s", exc)
             return build_response(401, {"error": "Invalid token"})
         try:
             out = handle_images_hash()
@@ -375,7 +378,7 @@ def _route_manifest(path: str, method: str, event: dict):
         try:
             verify_jwt(token)
         except Exception as exc:
-            print(f"[auth] token rejected: {exc}")
+            logger.warning("[auth] token rejected: %s", exc)
             return build_response(401, {"error": "Invalid token"})
         try:
             params = event.get("queryStringParameters") or {}

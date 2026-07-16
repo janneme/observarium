@@ -1,11 +1,12 @@
 <script>
-  import { createEventDispatcher, onMount, tick } from 'svelte'
+  import { createEventDispatcher } from 'svelte'
+  import CloseIcon from '../icons/CloseIcon.svelte'
 
   export let time = new Date()
 
-  const dispatch = createEventDispatcher()
+  console.log(`@@DTP_INIT time=${time?.toString()}`)
 
-  const ITEM_H = 44
+  const dispatch = createEventDispatcher()
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -34,6 +35,13 @@
   const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
   $: calCells = buildCalGrid(calYear, calMonth)
+  // Explicit reactive values (rather than isSel(d)/isTdy(d) function calls in the
+  // template) — Svelte's dependency tracking only sees identifiers referenced
+  // directly in a template expression. A function call site doesn't expose the
+  // variables the function's body closes over, so selDate/today changes would
+  // never re-trigger the {#each} row's class:sel/class:today bindings.
+  $: selDay = selDate.getFullYear() === calYear && selDate.getMonth() === calMonth ? selDate.getDate() : null
+  $: todayDay = today.getFullYear() === calYear && today.getMonth() === calMonth ? today.getDate() : null
 
   function buildCalGrid(year, month) {
     const firstDow = new Date(year, month, 1).getDay()
@@ -43,13 +51,6 @@
     for (let d = 1; d <= daysInMonth; d++) cells.push(d)
     while (cells.length % 7 !== 0) cells.push(null)
     return cells
-  }
-
-  function isSel(d) {
-    return d && selDate.getFullYear() === calYear && selDate.getMonth() === calMonth && selDate.getDate() === d
-  }
-  function isTdy(d) {
-    return d && today.getFullYear() === calYear && today.getMonth() === calMonth && today.getDate() === d
   }
 
   function prevMonth() {
@@ -66,39 +67,26 @@
   }
   function selectDay(d) {
     if (d) selDate = new Date(calYear, calMonth, d)
+    console.log(`@@DTP_SELECT_DAY d=${d} selDate=${selDate?.toString()}`)
+    applyLive()
   }
 
-  // ── Time drums ──────────────────────────────────────────
+  // ── Time ────────────────────────────────────────────────
   const hourOptions = Array.from({ length: 24 }, (_, h) => h)
   const minuteOptions = Array.from({ length: 12 }, (_, i) => i * 5)
 
   let hourIdx = time.getHours()
   let minuteIdx = Math.round(time.getMinutes() / 5) % 12
 
-  let hourEl
-  let minuteEl
-
-  function onHourScroll() {
-    if (hourEl) hourIdx = Math.max(0, Math.min(23, Math.round(hourEl.scrollTop / ITEM_H)))
+  // Arrow-button stepping — the only way to adjust the time; no drum/scroll
+  // gesture, so this works the same with or without a touch screen.
+  function stepHour(delta) {
+    hourIdx = Math.max(0, Math.min(23, hourIdx + delta))
+    applyLive()
   }
-  function onMinuteScroll() {
-    if (minuteEl) minuteIdx = Math.max(0, Math.min(11, Math.round(minuteEl.scrollTop / ITEM_H)))
-  }
-
-  const hourAcc = { v: 0 }
-  const minuteAcc = { v: 0 }
-
-  function drumWheel(e, acc, el, count) {
-    e.stopPropagation()
-    e.preventDefault()
-    const px = e.deltaMode === 1 ? e.deltaY * ITEM_H : e.deltaMode === 2 ? e.deltaY * 132 : e.deltaY
-    acc.v += px
-    const steps = Math.trunc(acc.v / ITEM_H)
-    if (steps !== 0) {
-      acc.v -= steps * ITEM_H
-      const cur = Math.round(el.scrollTop / ITEM_H)
-      el.scrollTop = Math.max(0, Math.min(count - 1, cur + steps)) * ITEM_H
-    }
+  function stepMinute(delta) {
+    minuteIdx = Math.max(0, Math.min(11, minuteIdx + delta))
+    applyLive()
   }
 
   // ── Actions ─────────────────────────────────────────────
@@ -108,14 +96,24 @@
     return d
   }
 
-  function apply() {
-    dispatch('pick', buildResult())
-  }
-  function cancel() {
-    dispatch('cancel')
+  // Applies the current selection immediately (top bar/sky reflect it live)
+  // without closing the picker, so the user can keep adjusting date/time.
+  function applyLive() {
+    const result = buildResult()
+    console.log(`@@DTP_APPLY_LIVE selDate=${selDate?.toString()} result=${result.toString()}`)
+    dispatch('pick', result)
   }
 
-  async function useNow() {
+  function close() {
+    console.log('@@DTP_CLOSE')
+    dispatch('done')
+  }
+
+  // "Now" jumps to the current moment and explicitly tells the parent to
+  // resume live sky updates — a dedicated event rather than relying on the
+  // parent inferring intent by comparing dates, so this stays correct even
+  // if the picked moment doesn't happen to land on today for some reason.
+  function useNow() {
     const now = new Date()
     selDate = new Date(now)
     selDate.setHours(0, 0, 0, 0)
@@ -123,34 +121,30 @@
     calMonth = selDate.getMonth()
     hourIdx = now.getHours()
     minuteIdx = Math.round(now.getMinutes() / 5) % 12
-    await tick()
-    if (hourEl) hourEl.scrollTop = hourIdx * ITEM_H
-    if (minuteEl) minuteEl.scrollTop = minuteIdx * ITEM_H
+    console.log('@@DTP_RESUME_LIVE')
+    dispatch('resumeLive')
+    applyLive()
   }
-
-  onMount(async () => {
-    await tick()
-    if (hourEl) hourEl.scrollTop = hourIdx * ITEM_H
-    if (minuteEl) minuteEl.scrollTop = minuteIdx * ITEM_H
-  })
 </script>
 
-<!-- transparent backdrop: blocks canvas pointer events, click = cancel -->
+<!-- transparent backdrop: blocks canvas pointer events, click = close -->
 <div
   class="backdrop"
   on:pointerdown|stopPropagation
-  on:click={cancel}
+  on:click={close}
   role="button"
   tabindex="-1"
   aria-label="Close"
-  on:keydown={(e) => e.key === 'Escape' && cancel()}
+  on:keydown={(e) => e.key === 'Escape' && close()}
 ></div>
 
 <div class="panel" on:pointerdown|stopPropagation>
   <div class="sheet-header">
-    <button class="action-btn" on:click={cancel}>Cancel</button>
     <span class="sheet-title">Date &amp; Time</span>
-    <button class="action-btn primary" on:click={apply}>Apply</button>
+    <button class="now-btn" on:click={useNow}>Now</button>
+    <button class="close-btn" on:click={close} aria-label="Close">
+      <CloseIcon size="1.1rem" aria-hidden="true" />
+    </button>
   </div>
 
   <div class="picker-body">
@@ -170,8 +164,8 @@
         {#each calCells as d}
           <div
             class="day-cell"
-            class:sel={isSel(d)}
-            class:today={isTdy(d)}
+            class:sel={!!d && d === selDay}
+            class:today={!!d && d === todayDay}
             class:empty={!d}
             role="button"
             tabindex={d ? 0 : -1}
@@ -184,41 +178,23 @@
       </div>
     </div>
 
-    <!-- Right: time drums -->
+    <!-- Right: time -->
     <div class="time-section">
       <span class="time-lbl">Time</span>
 
-      <div class="drum-row">
-        <div
-          class="drum"
-          bind:this={hourEl}
-          on:scroll={onHourScroll}
-          on:wheel={(e) => drumWheel(e, hourAcc, hourEl, 24)}
-        >
-          <div class="drum-pad"></div>
-          {#each hourOptions as h, i}
-            <div class="drum-item" class:sel={i === hourIdx}>{String(h).padStart(2, '0')}</div>
-          {/each}
-          <div class="drum-pad"></div>
+      <div class="time-cols">
+        <div class="time-col">
+          <button class="drum-arrow" on:click={() => stepHour(-1)} aria-label="Previous hour">▲</button>
+          <span class="time-value">{String(hourOptions[hourIdx]).padStart(2, '0')}</span>
+          <button class="drum-arrow" on:click={() => stepHour(1)} aria-label="Next hour">▼</button>
         </div>
-
-        <div class="drum-sep">:</div>
-
-        <div
-          class="drum"
-          bind:this={minuteEl}
-          on:scroll={onMinuteScroll}
-          on:wheel={(e) => drumWheel(e, minuteAcc, minuteEl, 12)}
-        >
-          <div class="drum-pad"></div>
-          {#each minuteOptions as m, i}
-            <div class="drum-item" class:sel={i === minuteIdx}>{String(m).padStart(2, '0')}</div>
-          {/each}
-          <div class="drum-pad"></div>
+        <span class="drum-sep">:</span>
+        <div class="time-col">
+          <button class="drum-arrow" on:click={() => stepMinute(-1)} aria-label="Previous 5 minutes">▲</button>
+          <span class="time-value">{String(minuteOptions[minuteIdx]).padStart(2, '0')}</span>
+          <button class="drum-arrow" on:click={() => stepMinute(1)} aria-label="Next 5 minutes">▼</button>
         </div>
       </div>
-
-      <button class="now-btn" on:click={useNow}>Now</button>
     </div>
   </div>
 </div>
@@ -249,33 +225,32 @@
   .sheet-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.6rem;
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid rgba(127, 127, 127, 0.12);
   }
 
   .sheet-title {
-    font-size: 0.88rem;
+    flex: 1;
+    font-size: 1.056rem;
     opacity: 0.75;
   }
 
-  .action-btn {
+  .close-btn {
     background: none;
     border: none;
     color: inherit;
-    font-size: 0.88rem;
     cursor: pointer;
-    padding: 0.2rem 0.4rem;
-    opacity: 0.5;
+    padding: 0.2rem 0.3rem;
+    opacity: 0.6;
     transform: none;
+    display: flex;
+    align-items: center;
   }
-  .action-btn:hover {
+  .close-btn:hover {
     background: none;
-    transform: none;
-  }
-  .action-btn.primary {
     opacity: 1;
-    font-weight: 600;
+    transform: none;
   }
 
   /* ── Side-by-side body ── */
@@ -300,7 +275,7 @@
   }
 
   .month-label {
-    font-size: 0.85rem;
+    font-size: 1.02rem;
     font-weight: 600;
   }
 
@@ -308,7 +283,7 @@
     background: none;
     border: none;
     color: inherit;
-    font-size: 1.35rem;
+    font-size: 2.1rem;
     line-height: 1;
     cursor: pointer;
     padding: 0 0.45rem;
@@ -329,9 +304,10 @@
 
   .dow-cell {
     text-align: center;
-    font-size: 0.67rem;
+    font-size: 0.98rem;
+    font-weight: 700;
     opacity: 0.38;
-    height: 1.25rem;
+    height: 1.4rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -355,13 +331,13 @@
   }
 
   .day-num {
-    width: 1.65rem;
-    height: 1.65rem;
+    width: 1.8rem;
+    height: 1.8rem;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    font-size: 0.82rem;
+    font-size: 0.98rem;
     transition: background 100ms;
   }
 
@@ -405,17 +381,26 @@
     border-right-color: rgba(136, 0, 0, 0.2);
   }
 
-  :global([data-theme='nightly']) .drum-row::before,
-  :global([data-theme='nightly']) .drum-row::after {
-    background: rgba(224, 0, 0, 0.22);
+  /* Nightly: opacity-based dimming reads as too faint to use comfortably in
+     the dark. Force full opacity and use a solid (non-transparent) dimmer
+     red for de-emphasized text instead, keeping pure #ff0000 for the
+     selected/emphasized state so hierarchy is still readable. */
+  :global([data-theme='nightly']) .sheet-title,
+  :global([data-theme='nightly']) .close-btn,
+  :global([data-theme='nightly']) .nav-btn,
+  :global([data-theme='nightly']) .dow-cell,
+  :global([data-theme='nightly']) .time-lbl,
+  :global([data-theme='nightly']) .time-value,
+  :global([data-theme='nightly']) .drum-sep,
+  :global([data-theme='nightly']) .drum-arrow {
+    opacity: 1;
+    color: rgba(180, 0, 0, 1);
   }
 
-  :global([data-theme='nightly']) .now-btn {
-    border-color: rgba(224, 0, 0, 0.28);
-  }
-
-  :global([data-theme='nightly']) .now-btn:hover {
-    background: rgba(224, 0, 0, 0.1);
+  :global([data-theme='nightly']) .nav-btn:hover,
+  :global([data-theme='nightly']) .drum-arrow:hover,
+  :global([data-theme='nightly']) .close-btn:hover {
+    color: #ff0000;
   }
 
   /* ── Time section (right column) ── */
@@ -429,101 +414,88 @@
   }
 
   .time-lbl {
-    font-size: 0.67rem;
+    font-size: 0.8rem;
     opacity: 0.38;
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
 
-  /* ── Drums ── */
-  .drum-row {
-    display: flex;
-    width: 100%;
-    height: 132px;
-    position: relative;
-  }
-
-  .drum-row::before,
-  .drum-row::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.18);
-    z-index: 1;
-    pointer-events: none;
-  }
-
-  .drum-row::before {
-    top: 44px;
-  }
-  .drum-row::after {
-    top: 88px;
-  }
-
-  .drum {
-    flex: 1;
-    overflow-y: auto;
-    scroll-snap-type: y mandatory;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    touch-action: pan-y;
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 33%, black 67%, transparent 100%);
-    mask-image: linear-gradient(to bottom, transparent 0%, black 33%, black 67%, transparent 100%);
-  }
-
-  .drum::-webkit-scrollbar {
-    display: none;
-  }
-
-  .drum-pad {
-    height: 44px;
-    flex-shrink: 0;
-  }
-
-  .drum-item {
-    height: 44px;
+  /* ── Time value display: each hour/minute column stacks its own arrows
+     directly above/below its own digits, so they're always centered on the
+     value they control regardless of column width. ── */
+  .time-cols {
     display: flex;
     align-items: center;
     justify-content: center;
-    scroll-snap-align: center;
-    font-size: 1.05rem;
-    opacity: 0.35;
+  }
+
+  .time-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+  }
+
+  .time-value {
+    min-width: 2.2rem;
+    text-align: center;
+    font-size: 1.9rem;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 
-  .drum-item.sel {
-    opacity: 1;
-    font-weight: 600;
-  }
-
   .drum-sep {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     width: 1.1rem;
     flex-shrink: 0;
-    font-size: 1.1rem;
+    text-align: center;
+    font-size: 1.9rem;
     font-weight: 600;
     opacity: 0.6;
-    padding-bottom: 2px;
+  }
+
+  /* ── Time arrow buttons (mouse-clickable alternative to swipe/wheel) ── */
+  .drum-arrow {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.15rem 0.6rem;
+    opacity: 0.55;
+    transform: none;
+  }
+  .drum-arrow:hover {
+    background: none;
+    opacity: 1;
+    transform: none;
   }
 
   /* ── Now button ── */
   .now-btn {
-    background: none;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: inherit;
-    font-size: 0.78rem;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 700;
     cursor: pointer;
-    padding: 0.3rem 1rem;
+    padding: 0.35rem 1.1rem;
     border-radius: 20px;
-    opacity: 0.65;
+    opacity: 1;
     transform: none;
   }
   .now-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    filter: brightness(1.12);
     transform: none;
+  }
+
+  :global([data-theme='nightly']) .now-btn {
+    background: none;
+    border: 2px solid #cc0000;
+    color: #cc0000;
+  }
+  :global([data-theme='nightly']) .now-btn:hover {
+    background: rgba(204, 0, 0, 0.15);
+    filter: none;
   }
 </style>

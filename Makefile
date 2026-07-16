@@ -29,7 +29,7 @@ deploy: ## Apply Terraform, deploy Lambda, sync data, deploy client
 	@echo "Server: $$(cd infra && tofu output -raw lambda_function_url)"
 
 dev: ## Run both frontend and backend development servers
-	python3 run.py
+	BACKEND_LOG_FILE=/tmp/observarium-be.log FRONTEND_LOG_FILE=/tmp/observarium-fe.log python3 run.py
 
 dev-server: ## Run the Lambda handler via the local HTTP wrapper
 	$(MAKE) -C server dev

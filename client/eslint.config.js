@@ -15,4 +15,12 @@ export default [
       },
     },
   },
+  {
+    files: ['vite.config.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
 ]

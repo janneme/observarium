@@ -1,6 +1,9 @@
 import App from './App.svelte'
 import './styles.css'
 import { startMobileFullscreen } from './lib/mobileFullscreen.js'
+import { initDevConsoleLog } from './lib/devConsoleLog.js'
+
+initDevConsoleLog()
 
 // Prevent browser page-zoom on trackpad pinch (Mac Chrome fires wheel+ctrlKey).
 const _noZoom = (e) => {

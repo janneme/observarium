@@ -49,12 +49,11 @@
   }
 
   function formatDate(d) {
-    const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]
-    return `${d.getDate()} ${mon}`
+    return `${d.getDate()}.${d.getMonth() + 1}.`
   }
 
   function formatTime(d) {
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
   }
 
   function onBatteryUpdate() {
@@ -119,6 +118,7 @@
   }
 
   $: isToday = time.toDateString() === new Date().toDateString()
+  $: console.log(`@@TB_TIME time=${time?.toString()} isToday=${isToday}`)
 
   function formatFov(f) {
     if (f >= 1) return `${parseFloat(f.toPrecision(2))}°`
