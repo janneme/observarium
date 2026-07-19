@@ -711,6 +711,34 @@ export async function getObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_lim
 // Search index
 // --------------------------------------------------------------------------
 
+// Point lookup for a handful of specific object ids (e.g. the objects
+// referenced by a user's observations) — unlike getSearchIndex, this never
+// loads the full catalogue, so it stays fast regardless of catalogue size.
+export async function getObjectsByIds(ids) {
+  const idSet = new Set(ids)
+  const found = new Map()
+  if (idSet.size === 0) return found
+
+  await _ensureTier1Loaded()
+  for (const s of _tier1Cache) {
+    if (idSet.has(s.id)) found.set(s.id, s)
+  }
+
+  const remaining = [...idSet].filter((id) => !found.has(id))
+  if (remaining.length > 0) {
+    const db = await getDB()
+    const hasNamed = db.objectStoreNames.contains('stars_named')
+    await Promise.all(
+      remaining.map(async (id) => {
+        const obj = (await db.get('objects', id)) || (hasNamed ? await db.get('stars_named', id) : null)
+        if (obj) found.set(id, obj)
+      }),
+    )
+  }
+
+  return found
+}
+
 // Returns T1 stars, DSOs/double-stars, and named T2 stars (those with HIP/HD).
 // Used by SearchPanel to build its index.
 export async function getSearchIndex() {

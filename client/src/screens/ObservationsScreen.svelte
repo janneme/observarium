@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte'
   import {
     getAllObservations,
+    getObjectsByIds,
     getSearchIndex,
     getMeta,
     putObservation,
@@ -34,6 +35,7 @@
   let telescopeById = new Map()
   let eyepieceById = new Map()
   let searchItems = []
+  let searchItemsPromise = null
   let addObjectInput = null
   let addObjectQuery = ''
   let activeCandidates = []
@@ -154,16 +156,18 @@
     return first === last ? first : `${first}-${last}`
   }
 
-  function observationHeaderLabel(obs) {
-    const names = (obs.objects || []).map((entry) => labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id))
-    const locationName = String(obs?.location?.name || '').trim()
+  function observationDateTimeLabel(obs) {
     const timeLabel = observationTimeLabel(obs)
-    const datePart = timeLabel ? `${normalizeDate(obs.date)} ${timeLabel}` : normalizeDate(obs.date)
-    const objectsPart = trimList(names)
-    let label = datePart
-    if (locationName) label += `, ${locationName}`
-    if (objectsPart) label += ` (${objectsPart})`
-    return label
+    return timeLabel ? `${normalizeDate(obs.date)} ${timeLabel}` : normalizeDate(obs.date)
+  }
+
+  function observationHeaderLocationName(obs) {
+    return String(obs?.location?.name || '').trim()
+  }
+
+  function observationHeaderObjectsPart(obs) {
+    const names = (obs.objects || []).map((entry) => labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id))
+    return trimList(names)
   }
 
   function observationLocationLabel(obs) {
@@ -535,12 +539,53 @@
     await bumpPending()
   }
 
+  function buildSearchItem(obj) {
+    const label = objectLabel(obj)
+    const variants = [label, fallbackLabelFromId(obj.id), obj.id || '', obj.name || '']
+    if (obj.m != null) variants.push(`M${obj.m}`, `M ${obj.m}`)
+    if (obj.ngc != null) variants.push(`NGC${obj.ngc}`, `NGC ${obj.ngc}`)
+    if (obj.ic != null) variants.push(`IC${obj.ic}`, `IC ${obj.ic}`)
+    if (obj.caldwell != null) variants.push(`C${obj.caldwell}`, `C ${obj.caldwell}`)
+    const rawId = String(obj.id || '')
+    if (rawId.startsWith('dso_M')) {
+      const n = Number(rawId.slice(5))
+      if (Number.isFinite(n)) variants.push(`M${n}`, `M ${n}`)
+    }
+    if (rawId.startsWith('dso_NGC')) {
+      const n = Number(rawId.slice(7))
+      if (Number.isFinite(n)) variants.push(`NGC${n}`, `NGC ${n}`)
+    }
+    if (rawId.startsWith('dso_IC')) {
+      const n = Number(rawId.slice(6))
+      if (Number.isFinite(n)) variants.push(`IC${n}`, `IC ${n}`)
+    }
+    return {
+      id: obj.id,
+      label,
+      symbolKind: objectSymbolKind(obj),
+      searchTextNormalized: normalizeSearchText(variants.join(' ')),
+    }
+  }
+
+  // The full-catalogue search index (needed only for "Add object" free-text
+  // matching) is expensive to build — defer it until the user actually
+  // opens the add-object box, and memoize so repeat opens are instant.
+  function ensureSearchItems() {
+    if (!searchItemsPromise) {
+      searchItemsPromise = getSearchIndex().then((searchIndex) => {
+        searchItems = searchIndex.map(buildSearchItem)
+      })
+    }
+    return searchItemsPromise
+  }
+
   async function openAddObject(date) {
     const next = new Set(expandedDates)
     next.add(date)
     expandedDates = next
     addObjectState = { date }
     addObjectQuery = ''
+    ensureSearchItems()
     await tick()
     addObjectInput?.focus?.()
   }
@@ -610,50 +655,47 @@
     await putObservation(updated)
     observations = sortedObservations(next)
     closeAddObject()
-    if (createdEntry) startObjectEdit(date, createdEntry)
+    if (createdEntry) {
+      // The added object wasn't necessarily covered by the initial targeted
+      // lookup in loadData() — fetch just this one so its label/icon render
+      // correctly without reloading the whole screen.
+      if (!objectById.has(objectId)) {
+        const found = await getObjectsByIds([objectId])
+        const obj = found.get(objectId)
+        if (obj) {
+          objectById = new Map(objectById).set(objectId, obj)
+          labelByObjectId = new Map(labelByObjectId).set(objectId, objectLabel(obj))
+        }
+      }
+      startObjectEdit(date, createdEntry)
+    }
     await bumpPending()
   }
 
   async function loadData() {
     loading = true
-    const [allObservations, searchIndex, telescopes, eyepieces] = await Promise.all([
-      getAllObservations(),
-      getSearchIndex(),
+    const allObservations = await getAllObservations()
+    const observedIds = new Set()
+    for (const obs of allObservations) {
+      for (const entry of obs.objects || []) {
+        if (entry?.id) observedIds.add(entry.id)
+      }
+    }
+
+    // Targeted lookup for just the objects these observations reference —
+    // avoids loading the entire star/DSO catalogue to render a couple of
+    // observation rows (see getObjectsByIds vs. the much heavier
+    // getSearchIndex, which is only needed for the "Add object" search box).
+    const [foundObjects, telescopes, eyepieces] = await Promise.all([
+      getObjectsByIds(observedIds),
       getMeta('telescopes'),
       getMeta('eyepieces'),
     ])
 
-    labelByObjectId = new Map(searchIndex.map((obj) => [obj.id, objectLabel(obj)]))
-    objectById = new Map(searchIndex.map((obj) => [obj.id, obj]))
+    labelByObjectId = new Map([...foundObjects.values()].map((obj) => [obj.id, objectLabel(obj)]))
+    objectById = foundObjects
     telescopeById = new Map((Array.isArray(telescopes) ? telescopes : []).map((t) => [t.id, t]))
     eyepieceById = new Map((Array.isArray(eyepieces) ? eyepieces : []).map((e) => [e.id, e]))
-    searchItems = searchIndex.map((obj) => {
-      const label = objectLabel(obj)
-      const variants = [label, fallbackLabelFromId(obj.id), obj.id || '', obj.name || '']
-      if (obj.m != null) variants.push(`M${obj.m}`, `M ${obj.m}`)
-      if (obj.ngc != null) variants.push(`NGC${obj.ngc}`, `NGC ${obj.ngc}`)
-      if (obj.ic != null) variants.push(`IC${obj.ic}`, `IC ${obj.ic}`)
-      if (obj.caldwell != null) variants.push(`C${obj.caldwell}`, `C ${obj.caldwell}`)
-      const rawId = String(obj.id || '')
-      if (rawId.startsWith('dso_M')) {
-        const n = Number(rawId.slice(5))
-        if (Number.isFinite(n)) variants.push(`M${n}`, `M ${n}`)
-      }
-      if (rawId.startsWith('dso_NGC')) {
-        const n = Number(rawId.slice(7))
-        if (Number.isFinite(n)) variants.push(`NGC${n}`, `NGC ${n}`)
-      }
-      if (rawId.startsWith('dso_IC')) {
-        const n = Number(rawId.slice(6))
-        if (Number.isFinite(n)) variants.push(`IC${n}`, `IC ${n}`)
-      }
-      return {
-        id: obj.id,
-        label,
-        symbolKind: objectSymbolKind(obj),
-        searchTextNormalized: normalizeSearchText(variants.join(' ')),
-      }
-    })
     observations = sortedObservations(Array.isArray(allObservations) ? allObservations : [])
     loading = false
   }
@@ -689,7 +731,16 @@
           <div class="obs-header">
             <button class="obs-toggle" on:click={() => toggleDate(obs.date)}>
               <span class="caret">{expandedDates.has(obs.date) ? '▾' : '▸'}</span>
-              <span class="obs-title">{observationHeaderLabel(obs)}</span>
+              <span class="obs-title">
+                <span class="obs-date-location"
+                  ><span class="obs-date">{observationDateTimeLabel(obs)}</span
+                  >{#if observationHeaderLocationName(obs)}<span class="obs-location"
+                      >, {observationHeaderLocationName(obs)}</span
+                    >{/if}</span
+                >{#if observationHeaderObjectsPart(obs)}
+                  <span class="obs-objects">({observationHeaderObjectsPart(obs)})</span>
+                {/if}
+              </span>
             </button>
             <span class="header-actions">
               <button
@@ -766,7 +817,9 @@
                 {/if}
                 {#if obs.location}
                   <div class="detail-row">
-                    <span class="label">Location:</span>{observationLocationLabel(obs)}
+                    <span class="label">Location:</span><span class="detail-location"
+                      >{observationLocationLabel(obs)}</span
+                    >
                   </div>
                 {/if}
               {/if}
@@ -963,7 +1016,7 @@
   }
 
   .header-title {
-    font-size: 1rem;
+    font-size: 1.2rem;
     font-weight: 600;
   }
 
@@ -979,7 +1032,7 @@
     border-radius: 6px;
     padding: 0.45rem 0.55rem;
     color: #ff9a9a;
-    font-size: 0.82rem;
+    font-size: 0.984rem;
   }
 
   .obs-card {
@@ -1012,8 +1065,13 @@
   }
 
   .obs-title {
-    font-size: 0.86rem;
+    font-size: 1.032rem;
     line-height: 1.25;
+  }
+
+  .obs-date,
+  .obs-location {
+    font-weight: 600;
   }
 
   .header-actions {
@@ -1024,7 +1082,7 @@
   }
 
   .caret {
-    font-size: 1.3rem;
+    font-size: 1.56rem;
     line-height: 1;
     opacity: 0.7;
     flex-shrink: 0;
@@ -1037,13 +1095,17 @@
 
   .detail-row {
     margin-bottom: 0.3rem;
-    font-size: 0.8rem;
+    font-size: 0.96rem;
     line-height: 1.3;
   }
 
   .label {
     opacity: 0.75;
     margin-right: 0.35rem;
+  }
+
+  .detail-location {
+    font-weight: 600;
   }
 
   .coords {
@@ -1063,7 +1125,7 @@
   }
 
   .field-label {
-    font-size: 0.74rem;
+    font-size: 0.888rem;
     opacity: 0.75;
     margin-bottom: 0.2rem;
   }
@@ -1078,7 +1140,7 @@
   }
 
   .objects-title {
-    font-size: 0.76rem;
+    font-size: 0.912rem;
     opacity: 0.75;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1119,7 +1181,7 @@
   }
 
   .object-name {
-    font-size: 0.82rem;
+    font-size: 0.984rem;
     font-weight: 600;
     min-width: 0;
     white-space: nowrap;
@@ -1139,7 +1201,7 @@
   }
 
   .object-meta {
-    font-size: 0.74rem;
+    font-size: 0.888rem;
     opacity: 0.72;
     min-width: 0;
     white-space: nowrap;
@@ -1158,7 +1220,7 @@
   }
 
   .object-notes {
-    font-size: 0.78rem;
+    font-size: 0.936rem;
     line-height: 1.28;
     margin-top: 0.12rem;
     margin-left: 1.35rem;
@@ -1183,7 +1245,7 @@
     border-radius: 6px;
     padding: 0.35rem 0.45rem;
     color: #ff9a9a;
-    font-size: 0.78rem;
+    font-size: 0.936rem;
   }
 
   .add-object-box {
@@ -1207,7 +1269,7 @@
     background: none;
     color: var(--fg);
     border-radius: 6px;
-    font-size: 0.78rem;
+    font-size: 0.936rem;
     padding: 0.22rem 0.4rem;
     display: flex;
     gap: 0.35rem;
@@ -1249,7 +1311,7 @@
     color: var(--fg);
     border-radius: 6px;
     padding: 0.22rem 0.52rem;
-    font-size: 0.76rem;
+    font-size: 0.912rem;
     cursor: pointer;
   }
 
@@ -1258,16 +1320,16 @@
   }
 
   .btn.small {
-    font-size: 0.74rem;
+    font-size: 0.888rem;
   }
 
   .hint {
-    font-size: 0.84rem;
+    font-size: 1.008rem;
     opacity: 0.72;
   }
 
   .hint.small {
-    font-size: 0.78rem;
+    font-size: 0.936rem;
   }
 
   :global([data-theme='nightly']) .header {
@@ -1310,5 +1372,20 @@
   :global([data-theme='nightly']) .error-msg {
     border-color: rgba(200, 0, 0, 0.5);
     color: #ff9a9a;
+  }
+
+  /* Nightly: opacity-based dimming reads as too faint to use comfortably in
+     the dark. Force full opacity and use a solid dim red instead. */
+  :global([data-theme='nightly']) .caret,
+  :global([data-theme='nightly']) .label,
+  :global([data-theme='nightly']) .field-label,
+  :global([data-theme='nightly']) .objects-title,
+  :global([data-theme='nightly']) .obj-symbol,
+  :global([data-theme='nightly']) .object-meta,
+  :global([data-theme='nightly']) .object-notes,
+  :global([data-theme='nightly']) .btn.ghost,
+  :global([data-theme='nightly']) .hint {
+    opacity: 1;
+    color: rgba(180, 0, 0, 1);
   }
 </style>

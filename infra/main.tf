@@ -365,11 +365,23 @@ resource "aws_cloudwatch_log_group" "lambda" {
 # ============================================================================
 
 # Package Lambda code
+#
+# This archive is only used to create the function and to give Terraform
+# something to compute an initial source_code_hash from — it deliberately
+# does NOT include pip dependencies (PyJWT, cryptography), so it is not a
+# deployable package on its own. Real code deployments (including runtime
+# deps, built for the correct Lambda platform) are handled exclusively by
+# `make deploy-lambda`, which uploads via S3 to avoid Lambda's ~67 MB direct
+# UpdateFunctionCode request-size cap. See the `ignore_changes` lifecycle
+# block below — Terraform intentionally never re-uploads code after create,
+# so it can't clobber what deploy-lambda pushed, and never re-triggers the
+# same size-limited direct upload this exclusion list previously allowed
+# (it used to include the ~95 MB local server/.venv dev virtualenv).
 data "archive_file" "lambda" {
   type        = "zip"
   source_dir  = "${path.module}/../server"
   output_path = "${path.module}/lambda_function.zip"
-  excludes    = ["__pycache__", "*.pyc", ".pytest_cache", "tests"]
+  excludes    = ["__pycache__", "*.pyc", ".pytest_cache", ".ruff_cache", ".venv", ".env", "storage", "tests"]
 }
 
 resource "aws_lambda_function" "main" {
@@ -396,6 +408,13 @@ resource "aws_lambda_function" "main" {
     aws_cloudwatch_log_group.lambda,
     aws_iam_role_policy.lambda
   ]
+
+  # Code deployment is owned by `make deploy-lambda` (S3-mediated, includes
+  # pip deps, no size cap) — never let `tofu apply` try to push this
+  # dependency-incomplete placeholder archive over it.
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
 
   tags = {
     Name = "Observarium Lambda"
