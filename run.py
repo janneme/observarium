@@ -17,6 +17,12 @@ from datetime import datetime
 # is ever silently dropped from the console.
 BACKEND_LOG_LEVEL_RE = re.compile(r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b")
 
+# Directories to skip while scanning for backend source changes — large,
+# irrelevant, or generated (a .venv walk alone would make the 1s poll
+# noticeably slow).
+BACKEND_WATCH_IGNORE_DIRS = {".venv", "__pycache__", ".ruff_cache", ".git", "storage"}
+BACKEND_WATCH_PATHS = ("server", "python_lib")
+
 
 class Colors:
     """ANSI color codes."""
@@ -36,6 +42,7 @@ class ProcessManager:
         self.backend_log_file = backend_log_file
         self.lock = threading.Lock()
         self.shutdown_event = threading.Event()
+        self.restart_backend_event = threading.Event()
         self.exit_code = 0
 
     def log(self, message, color="", prefix=""):
@@ -118,6 +125,104 @@ class ProcessManager:
             self.exit_code = 1
             self.shutdown_event.set()
 
+    def _scan_backend_py_mtimes(self):
+        """Snapshot of {path: mtime} for every .py file under the watched
+        backend directories — cheap enough to poll every second."""
+        snapshot = {}
+        for base in BACKEND_WATCH_PATHS:
+            for root, dirs, files in os.walk(base):
+                dirs[:] = [d for d in dirs if d not in BACKEND_WATCH_IGNORE_DIRS]
+                for filename in files:
+                    if filename.endswith(".py"):
+                        path = os.path.join(root, filename)
+                        try:
+                            snapshot[path] = os.path.getmtime(path)
+                        except OSError:
+                            pass
+        return snapshot
+
+    def watch_backend_files(self, interval=1.0):
+        """Poll backend .py files for changes and flag a restart.
+
+        `local_server.py` is a plain stdlib HTTP server with no reload
+        support of its own (unlike Vite on the client side), so this
+        polling loop is what makes `make dev` hot-reload the backend too.
+        """
+        mtimes = self._scan_backend_py_mtimes()
+        while not self.shutdown_event.wait(interval):
+            current = self._scan_backend_py_mtimes()
+            if current != mtimes:
+                mtimes = current
+                self.restart_backend_event.set()
+
+    def run_backend_with_reload(self, command, cwd, color, prefix):
+        """Run the backend subprocess, restarting it whenever
+        `restart_backend_event` fires, without tearing down the frontend or
+        the overall dev session."""
+        while not self.shutdown_event.is_set():
+            self.restart_backend_event.clear()
+            self.log_backend(
+                f"Starting: {' '.join(command)}", color=color, prefix=prefix
+            )
+
+            # pylint: disable=consider-using-with
+            process = subprocess.Popen(
+                command,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+                start_new_session=True,
+            )
+            self.processes.append(process)
+
+            stream_thread = threading.Thread(
+                target=self.stream_output,
+                args=(process, color, prefix),
+                kwargs={"is_backend": True},
+                daemon=True,
+            )
+            stream_thread.start()
+
+            while (
+                process.poll() is None
+                and not self.restart_backend_event.is_set()
+                and not self.shutdown_event.is_set()
+            ):
+                time.sleep(0.2)
+
+            if process.poll() is None:
+                # Still running — either a restart was requested, or overall
+                # shutdown started elsewhere; either way, stop this instance.
+                self._kill_group(process, signal.SIGTERM)
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    self._kill_group(process, signal.SIGKILL)
+            stream_thread.join(timeout=1)
+            if process in self.processes:
+                self.processes.remove(process)
+
+            if self.shutdown_event.is_set():
+                self.log_backend("Process exited normally", color=color, prefix=prefix)
+                return
+
+            if self.restart_backend_event.is_set():
+                self.log_backend(
+                    "Backend source changed — restarting...", color=color, prefix=prefix
+                )
+                continue  # respawn
+
+            # Process exited on its own (crash), not because we asked it to.
+            self.log_backend(
+                f"Process exited with code {process.returncode}",
+                color=color,
+                prefix=prefix,
+            )
+            self.exit_code = process.returncode or 1
+            self.shutdown_event.set()
+            return
+
     def start_all(self):
         """Start all development servers."""
         # Clear log files
@@ -125,16 +230,20 @@ class ProcessManager:
             f.write(f"=== Observarium Dev Log Started at {datetime.now()} ===\n\n")
         if self.backend_log_file:
             with open(self.backend_log_file, "w", encoding="utf-8") as f:
-                f.write(f"=== Observarium Backend Log Started at {datetime.now()} ===\n\n")
+                f.write(
+                    f"=== Observarium Backend Log Started at {datetime.now()} ===\n\n"
+                )
 
-        # Start server in separate thread
+        # Start server in separate thread, auto-restarting on backend source changes
         server_thread = threading.Thread(
-            target=self.run_process,
+            target=self.run_backend_with_reload,
             args=(["make", "dev-server"], ".", Colors.CYAN, "[server]"),
-            kwargs={"is_backend": True},
             daemon=True,
         )
         server_thread.start()
+
+        watch_thread = threading.Thread(target=self.watch_backend_files, daemon=True)
+        watch_thread.start()
 
         # Start client in separate thread
         client_thread = threading.Thread(

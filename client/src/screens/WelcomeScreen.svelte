@@ -21,10 +21,10 @@
 
   let objectsProgress = 0
   let imagesProgress = 0
-  let observationsDone = false
+  let userDataDone = false
   let objectsSize = 0
   let imagesSize = 0
-  let observationsSize = 0
+  let userDataSize = 0
 
   function formatSize(bytes) {
     if (bytes >= 1_000_000) return `${+(bytes / 1_000_000).toPrecision(2)} MB`
@@ -61,7 +61,7 @@
     errorMsg = ''
     objectsProgress = 0
     imagesProgress = 0
-    observationsDone = false
+    userDataDone = false
 
     const prevMag = localStorage.getItem('selectedMag')
     const prevMagNum = prevMag ? parseInt(prevMag, 10) : null
@@ -78,13 +78,13 @@
         onImagesProgress: (p) => {
           imagesProgress = p
         },
-        onObservationsDone: () => {
-          observationsDone = true
+        onUserDataDone: () => {
+          userDataDone = true
         },
       })
       objectsSize = result.objectsSize
       imagesSize = result.imagesSize
-      observationsSize = result.observationsSize
+      userDataSize = result.userDataSize
       localStorage.setItem('selectedMag', String(mag))
       step = 'done'
     } catch (err) {
@@ -182,13 +182,13 @@
         </div>
 
         <div class="phase-row">
-          <span class="phase-label">Observations</span>
+          <span class="phase-label">User data</span>
           <div class="progress-track">
-            <div class="progress-bar" style="width: {observationsDone ? 100 : 0}%"></div>
+            <div class="progress-bar" style="width: {userDataDone ? 100 : 0}%"></div>
           </div>
           <span class="phase-pct"
-            >{observationsDone ? '100' : '0'}%{step === 'done' && observationsSize
-              ? ` (${formatSize(observationsSize)})`
+            >{userDataDone ? '100' : '0'}%{step === 'done' && userDataSize
+              ? ` (${formatSize(userDataSize)})`
               : ''}</span
           >
         </div>

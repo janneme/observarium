@@ -4,8 +4,6 @@
 
   export let time = new Date()
 
-  console.log(`@@DTP_INIT time=${time?.toString()}`)
-
   const dispatch = createEventDispatcher()
 
   const today = new Date()
@@ -67,7 +65,6 @@
   }
   function selectDay(d) {
     if (d) selDate = new Date(calYear, calMonth, d)
-    console.log(`@@DTP_SELECT_DAY d=${d} selDate=${selDate?.toString()}`)
     applyLive()
   }
 
@@ -79,13 +76,14 @@
   let minuteIdx = Math.round(time.getMinutes() / 5) % 12
 
   // Arrow-button stepping — the only way to adjust the time; no drum/scroll
-  // gesture, so this works the same with or without a touch screen.
+  // gesture, so this works the same with or without a touch screen. Wraps
+  // around at both ends (23 -> 0, 0 -> 23; last minute step -> 0, 0 -> last).
   function stepHour(delta) {
-    hourIdx = Math.max(0, Math.min(23, hourIdx + delta))
+    hourIdx = (hourIdx + delta + hourOptions.length) % hourOptions.length
     applyLive()
   }
   function stepMinute(delta) {
-    minuteIdx = Math.max(0, Math.min(11, minuteIdx + delta))
+    minuteIdx = (minuteIdx + delta + minuteOptions.length) % minuteOptions.length
     applyLive()
   }
 
@@ -100,12 +98,10 @@
   // without closing the picker, so the user can keep adjusting date/time.
   function applyLive() {
     const result = buildResult()
-    console.log(`@@DTP_APPLY_LIVE selDate=${selDate?.toString()} result=${result.toString()}`)
     dispatch('pick', result)
   }
 
   function close() {
-    console.log('@@DTP_CLOSE')
     dispatch('done')
   }
 
@@ -121,7 +117,6 @@
     calMonth = selDate.getMonth()
     hourIdx = now.getHours()
     minuteIdx = Math.round(now.getMinutes() / 5) % 12
-    console.log('@@DTP_RESUME_LIVE')
     dispatch('resumeLive')
     applyLive()
   }

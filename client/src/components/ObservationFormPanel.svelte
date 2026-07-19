@@ -4,11 +4,19 @@
   import CustomTextarea from './CustomTextarea.svelte'
   import TelescopeUsageEditor from './TelescopeUsageEditor.svelte'
   import OnScreenKeyboard from './OnScreenKeyboard.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
   import { keyboardActive } from '../stores/keyboard.js'
-  import { getMeta, getObservationByDate, putObservation, incrementPendingChanges } from '../lib/db.js'
+  import {
+    getMeta,
+    getObservationByDate,
+    putObservation,
+    getSyncDirtyTotalCount,
+    resolveObservationDateKey,
+  } from '../lib/db.js'
   import { pendingChanges } from '../stores/ui.js'
 
   export let objectId = ''
+  export let time = new Date()
 
   const dispatch = createEventDispatcher()
 
@@ -32,10 +40,6 @@
 
   function localDateTimeString(d) {
     return `${d.getFullYear()}-${fmt2(d.getMonth() + 1)}-${fmt2(d.getDate())} ${fmt2(d.getHours())}:${fmt2(d.getMinutes())}`
-  }
-
-  function toDateKeyLocal(d) {
-    return `${d.getFullYear()}-${fmt2(d.getMonth() + 1)}-${fmt2(d.getDate())}`
   }
 
   function parseDateTimeText(s) {
@@ -112,7 +116,7 @@
   }
 
   async function loadInitialState() {
-    dateTimeText = localDateTimeString(new Date())
+    dateTimeText = localDateTimeString(time)
 
     const [savedTelescopes, savedEyepieces] = await Promise.all([getMeta('telescopes'), getMeta('eyepieces')])
     telescopes = Array.isArray(savedTelescopes)
@@ -128,10 +132,10 @@
       eyepieceIds: [],
     }))
 
-    const todayKey = toDateKeyLocal(new Date())
-    const todayObservation = await getObservationByDate(todayKey)
-    if (todayObservation?.location?.name) locationNameText = String(todayObservation.location.name)
-    const existingObject = todayObservation?.objects?.find((o) => o.id === objectId)
+    const selectedKey = await resolveObservationDateKey(time)
+    const selectedObservation = await getObservationByDate(selectedKey)
+    if (selectedObservation?.location?.name) locationNameText = String(selectedObservation.location.name)
+    const existingObject = selectedObservation?.objects?.find((o) => o.id === objectId)
     if (existingObject) {
       objectNotes = existingObject.notes || ''
       if (Array.isArray(existingObject.telescopeResults)) {
@@ -148,7 +152,7 @@
       }
     }
 
-    if (todayObservation?.notes) sessionNotes = todayObservation.notes
+    if (selectedObservation?.notes) sessionNotes = selectedObservation.notes
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -174,7 +178,7 @@
       return
     }
 
-    const dateKey = toDateKeyLocal(dt)
+    const dateKey = await resolveObservationDateKey(dt)
     const lat = parseMaybeNumber(latText)
     const lon = parseMaybeNumber(lonText)
     const locationName = String(locationNameText || '').trim()
@@ -205,18 +209,21 @@
         }
       })
 
-    const objectEntry = {
-      id: objectId,
-      telescopeResults,
-      notes: objectNotes.trim(),
-    }
-
     saving = true
     try {
       const existing = (await getObservationByDate(dateKey)) || {
         date: dateKey,
         location: null,
         objects: [],
+        startedAt: dt.toISOString(),
+      }
+
+      const priorEntry = (existing.objects || []).find((o) => o.id === objectId)
+      const objectEntry = {
+        id: objectId,
+        telescopeResults,
+        notes: objectNotes.trim(),
+        loggedAt: priorEntry?.loggedAt ?? dt.toISOString(),
       }
 
       const others = (existing.objects || []).filter((o) => o.id !== objectId)
@@ -226,11 +233,11 @@
         location,
         notes: sessionNotes.trim(),
         objects: [...others, objectEntry],
+        startedAt: existing.startedAt ?? dt.toISOString(),
       }
 
       await putObservation(nextRecord)
-      const nextPending = await incrementPendingChanges(1, [dateKey])
-      pendingChanges.set(nextPending)
+      pendingChanges.set(await getSyncDirtyTotalCount())
       dispatch('saved')
     } catch (err) {
       errorMsg = err?.message || 'Failed to save observation.'
@@ -246,7 +253,9 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" on:click={() => dispatch('cancel')}>←</button>
+    <button class="back-btn" on:click={() => dispatch('cancel')} aria-label="Close">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="header-title">Observation</span>
   </div>
 
@@ -337,17 +346,18 @@
     height: 2.75rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(232, 232, 232, 0.15);
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   .back-btn {
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
+    display: flex;
+    align-items: center;
   }
 
   .header-title {

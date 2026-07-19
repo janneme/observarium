@@ -1,7 +1,8 @@
 <script>
   import { createEventDispatcher } from 'svelte'
-  import { getTodayObservation, putObservation, getObjectsInArea } from '../lib/db.js'
+  import { getObservationByDate, putObservation, getObjectsInArea, resolveObservationDateKey } from '../lib/db.js'
   import SkyCanvas from '../components/SkyCanvas.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
 
   export let lat = 0
   export let lon = 0
@@ -346,14 +347,14 @@
   }
 
   async function handleAddToObservation() {
-    const today = new Date().toISOString().slice(0, 10)
+    const dateKey = await resolveObservationDateKey(time)
     try {
       const telName = telescope?.name ?? 'telescope'
       const epName = eyepiece?.name ?? 'eyepiece'
       const starLbl = preferredStarLabel(startStar)
       const constr = startStar?.constellation ? ` (${startStar.constellation})` : ''
       const note = `Visual range (${telName}, ${epName}): mag ${currentMag.toFixed(1)} at ${formatTime(time)} near ${starLbl}${constr}`
-      const obs = (await getTodayObservation()) ?? { date: today, objects: [] }
+      const obs = (await getObservationByDate(dateKey)) ?? { date: dateKey, objects: [], startedAt: time.toISOString() }
       if (!Array.isArray(obs.objects)) obs.objects = []
       obs.notes = obs.notes ? `${obs.notes}\n${note}` : note
       await putObservation(obs)
@@ -369,7 +370,9 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" type="button" on:click={() => dispatch('close')}>←</button>
+    <button class="back-btn" type="button" on:click={() => dispatch('close')} aria-label="Close">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="header-title">Visual Range</span>
   </div>
 
@@ -460,7 +463,7 @@
     height: 2.75rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(200, 0, 0, 0.15);
-    gap: 0.5rem;
+    gap: 0.35rem;
     flex-shrink: 0;
   }
 
@@ -468,10 +471,11 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
+    display: flex;
+    align-items: center;
   }
 
   .back-btn:hover {
@@ -626,7 +630,7 @@
   }
 
   .result-mag {
-    font-size: 3rem;
+    font-size: 3.6rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     line-height: 1;
@@ -634,17 +638,24 @@
   }
 
   .result-label {
-    font-size: 0.75rem;
+    font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 0.07em;
   }
 
   .log-confirm {
-    font-size: 0.76rem;
+    font-size: 0.91rem;
     opacity: 0.65;
     text-align: center;
     margin: 0.25rem 0 0;
     max-width: 20rem;
+  }
+
+  /* Nightly: opacity-based dimming reads as too faint in the dark — force
+     full opacity and a solid dim red instead. */
+  :global([data-theme='nightly']) .log-confirm {
+    opacity: 1;
+    color: rgba(180, 0, 0, 1);
   }
 
   .result-actions {

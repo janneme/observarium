@@ -6,7 +6,8 @@
   import DateTimePicker from '../components/DateTimePicker.svelte'
   import AboutPanel from '../components/AboutPanel.svelte'
   import DataSyncPanel from '../components/DataSyncPanel.svelte'
-  import SyncObservationsPanel from '../components/SyncObservationsPanel.svelte'
+  import SyncSetupScreen from './SyncSetupScreen.svelte'
+  import SyncReportScreen from './SyncReportScreen.svelte'
   import FinderPanel from '../components/FinderPanel.svelte'
   import LoupePanel from '../components/LoupePanel.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
@@ -18,7 +19,7 @@
   import ConstellationQuizScreen from './ConstellationQuizScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
-  import { getObjectsInArea, getPendingChangesCount, getFindingPathsChanges } from '../lib/db.js'
+  import { getObjectsInArea, migrateLegacyPendingToSyncDirty, getSyncDirtyTotalCount } from '../lib/db.js'
   import { getTokenStatus } from '../lib/auth.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
@@ -83,7 +84,13 @@
   let showPicker = false
   let showAbout = false
   let showSync = false
-  let showObservationSync = false
+  let showSyncSetup = false
+  let showSyncReport = false
+  let syncCategories = { observations: true, findingPaths: true, telescopes: true, eyepieces: true }
+  let syncMode = 'merge'
+  let syncSource = 'local'
+  let syncPlan = null
+  let syncReport = null
   let showObservationSyncLogin = false
   let showTelescopes = false
   let showObservations = false
@@ -375,7 +382,7 @@
     if (!valid || nearExpiry) {
       showObservationSyncLogin = true
     } else {
-      showObservationSync = true
+      showSyncSetup = true
     }
   }
 
@@ -386,8 +393,13 @@
         e.preventDefault()
         return
       }
-      if (showObservationSync) {
-        showObservationSync = false
+      if (showSyncReport) {
+        showSyncReport = false
+        e.preventDefault()
+        return
+      }
+      if (showSyncSetup) {
+        showSyncSetup = false
         e.preventDefault()
         return
       }
@@ -588,16 +600,13 @@
   }
 
   onMount(() => {
-    Promise.all([getPendingChangesCount(), getFindingPathsChanges()]).then(([obs, fp]) =>
-      pendingChanges.set((obs || 0) + (fp || 0)),
-    )
+    migrateLegacyPendingToSyncDirty()
+      .then(() => getSyncDirtyTotalCount())
+      .then((count) => pendingChanges.set(count))
     window.addEventListener('keydown', handleKey)
     window.addEventListener('wheel', handleWheel, { passive: false })
     clockInterval = setInterval(() => {
-      if (usingCustomTime) {
-        console.log(`@@MS_TICK skipped usingCustomTime=true time=${time?.toString()}`)
-        return
-      }
+      if (usingCustomTime) return
       time = new Date()
       if (time.getMinutes() !== skyTime.getMinutes()) skyTime = time
     }, 1000)
@@ -720,18 +729,14 @@
   />
 
   {#if showPicker}
-    {console.log(`@@MS_PICKER_OPEN time=${time?.toString()}`)}
     <DateTimePicker
       {time}
       on:pick={(e) => {
-        console.log(`@@MS_ON_PICK before time=${time?.toString()} detail=${e.detail?.toString()}`)
         time = e.detail
         skyTime = e.detail
         usingCustomTime = e.detail.toDateString() !== new Date().toDateString()
-        console.log(`@@MS_ON_PICK after time=${time?.toString()} usingCustomTime=${usingCustomTime}`)
       }}
       on:resumeLive={() => {
-        console.log('@@MS_RESUME_LIVE')
         usingCustomTime = false
       }}
       on:done={() => {
@@ -769,7 +774,7 @@
     <LoginScreen
       on:loggedin={() => {
         showObservationSyncLogin = false
-        showObservationSync = true
+        showSyncSetup = true
       }}
       on:close={() => {
         showObservationSyncLogin = false
@@ -777,19 +782,44 @@
     />
   {/if}
 
-  {#if showObservationSync}
-    <SyncObservationsPanel
+  {#if showSyncSetup}
+    <SyncSetupScreen
+      bind:categories={syncCategories}
+      bind:mode={syncMode}
+      bind:source={syncSource}
       on:close={() => {
-        showObservationSync = false
+        showSyncSetup = false
       }}
-      on:synced={() => {
-        showObservationSync = false
+      on:analyzed={(e) => {
+        syncPlan = { categories: e.detail.categories, mode: e.detail.mode, source: e.detail.source }
+        syncReport = e.detail.report
+        showSyncSetup = false
+        showSyncReport = true
+      }}
+    />
+  {/if}
+
+  {#if showSyncReport}
+    <SyncReportScreen
+      plan={syncPlan}
+      report={syncReport}
+      on:back={() => {
+        showSyncReport = false
+        showSyncSetup = true
+      }}
+      on:cancel={() => {
+        showSyncReport = false
+      }}
+      on:synced={async () => {
+        showSyncReport = false
+        pendingChanges.set(await getSyncDirtyTotalCount())
       }}
     />
   {/if}
 
   {#if showObservations}
     <ObservationsScreen
+      {time}
       onClose={() => {
         showObservations = false
         returnToObservationsFromObjectDetails = false

@@ -1,9 +1,19 @@
 import JSZip from 'jszip'
-import { getDataHash, getImagesHash, getManifest, getImagesUrl, getObservations } from './api.js'
+import {
+  getDataHash,
+  getImagesHash,
+  getManifest,
+  getImagesUrl,
+  getObservations,
+  getFindingPaths,
+  getTelescopes,
+  getEyepieces,
+} from './api.js'
 import {
   bulkPutObjects,
   bulkPutImages,
   bulkPutObservations,
+  replaceAllFindingPaths,
   setMeta,
   computeZone,
   storeTier1Blob,
@@ -17,6 +27,14 @@ import {
   clearCompletedChunks,
   clearAllStarAndObjectData,
 } from './db.js'
+
+// Pulling the user's previously-synced data (observations, finding paths,
+// telescopes, eyepieces) down during the first-time catalogue download is
+// convenient for normal use (a new install picks up where you left off) but
+// gets in the way when testing the sync feature itself, which wants to
+// start from a genuinely empty profile. Defaults to on; set to the literal
+// string "false" in client/.env.development to disable for local testing.
+const LOAD_USER_DATA_ON_INIT = import.meta.env.VITE_LOAD_USER_DATA_ON_INIT !== 'false'
 
 async function fetchWithProgress(url, onProgress) {
   const res = await fetch(url)
@@ -165,6 +183,38 @@ async function downloadAndStoreImages(onImagesProgress) {
   return imagesSize
 }
 
+// Pulls the user's previously-synced data (all four categories) down and
+// seeds it into local storage. Only meant for a fresh/near-empty profile —
+// this is a plain "put", not a merge, matching what the single-category
+// version of this step always did for observations.
+async function pullUserData() {
+  const [observations, findingPaths, telescopes, eyepieces] = await Promise.all([
+    getObservations(),
+    getFindingPaths(),
+    getTelescopes(),
+    getEyepieces(),
+  ])
+
+  let size = 0
+  if (Array.isArray(observations) && observations.length > 0) {
+    await bulkPutObservations(observations)
+    size += JSON.stringify(observations).length
+  }
+  if (findingPaths && typeof findingPaths === 'object' && Object.keys(findingPaths).length > 0) {
+    await replaceAllFindingPaths(findingPaths)
+    size += JSON.stringify(findingPaths).length
+  }
+  if (Array.isArray(telescopes) && telescopes.length > 0) {
+    await setMeta('telescopes', telescopes)
+    size += JSON.stringify(telescopes).length
+  }
+  if (Array.isArray(eyepieces) && eyepieces.length > 0) {
+    await setMeta('eyepieces', eyepieces)
+    size += JSON.stringify(eyepieces).length
+  }
+  return size
+}
+
 async function maybeRefreshImages(onImagesProgress) {
   const [remoteImagesHash, localImagesHash] = await Promise.all([getImagesHash(), getMeta('imagesHash')])
   if (remoteImagesHash && localImagesHash && remoteImagesHash === localImagesHash) {
@@ -178,19 +228,20 @@ async function maybeRefreshImages(onImagesProgress) {
 }
 
 /**
- * Run the full data sync: objects (T1 + T2), images, observations.
+ * Run the full data sync: objects (T1 + T2), images, user data (observations,
+ * finding paths, telescopes, eyepieces — gated by VITE_LOAD_USER_DATA_ON_INIT).
  *
  * Callbacks (all optional):
  *   onObjectsProgress(fraction)  — 0..1 as objects download
  *   onImagesProgress(fraction)   — 0..1 as images download
- *   onObservationsDone()         — fired when observations are stored
+ *   onUserDataDone()             — fired when user data is stored (or skipped)
  *
- * Returns { objectsSize, imagesSize, observationsSize } in bytes.
+ * Returns { objectsSize, imagesSize, userDataSize } in bytes.
  */
-export async function runSync({ mag, onObjectsProgress, onImagesProgress, onObservationsDone } = {}) {
+export async function runSync({ mag, onObjectsProgress, onImagesProgress, onUserDataDone } = {}) {
   const objProg = onObjectsProgress || (() => {})
   const imgProg = onImagesProgress || (() => {})
-  const obsDone = onObservationsDone || (() => {})
+  const userDataDone = onUserDataDone || (() => {})
 
   await clearCompletedChunks()
 
@@ -229,15 +280,11 @@ export async function runSync({ mag, onObjectsProgress, onImagesProgress, onObse
   // Images
   const { imagesSize } = await maybeRefreshImages(imgProg)
 
-  // Observations
-  const observations = await getObservations()
-  const observationsSize = JSON.stringify(observations).length
-  if (Array.isArray(observations) && observations.length > 0) {
-    await bulkPutObservations(observations)
-  }
-  obsDone()
+  // User data
+  const userDataSize = LOAD_USER_DATA_ON_INIT ? await pullUserData() : 0
+  userDataDone()
 
-  return { objectsSize: totalBytes, imagesSize, observationsSize }
+  return { objectsSize: totalBytes, imagesSize, userDataSize }
 }
 
 /**

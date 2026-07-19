@@ -10,7 +10,8 @@
     getFindingPathsForObject,
     saveFindingPathForObject,
     deleteFindingPathForObject,
-    incrementFindingPathsChanges,
+    markDirty,
+    getSyncDirtyTotalCount,
     getObjectsInArea,
     getSearchIndex,
   } from '../lib/db.js'
@@ -18,6 +19,7 @@
   import { projectToPixel } from '../lib/skymath.js'
   import { toggleTheme } from '../stores/theme.js'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
 
   export let contextObject = null
   export let initialSelectStart = false
@@ -51,7 +53,6 @@
   let expandedStartHip = null
   let activeStepIndex = null
   let statusMsg = ''
-  let overlayBuildDebugSignature = ''
 
   let starsByHip = new Map()
   let labelById = new Map()
@@ -440,8 +441,10 @@
     pathsByStart = { ...pathsByStart, [startHip]: path }
     const steps = path?.steps
     if (Array.isArray(steps) && steps.length > 0 && steps[steps.length - 1]?.final === true) {
-      await incrementFindingPathsChanges()
-      pendingChanges.update((n) => n + 1)
+      // Only final (completed) paths are ever synced — draft steps are saved
+      // locally above but not entered into the sync dirty ledger.
+      await markDirty('findingPaths', `${objectCtx.id}::${startHip}`, 'upsert')
+      pendingChanges.set(await getSyncDirtyTotalCount())
     }
   }
 
@@ -646,8 +649,8 @@
       delete next[startHip]
       pathsByStart = next
       if (wasFinal) {
-        await incrementFindingPathsChanges()
-        pendingChanges.update((n) => n + 1)
+        await markDirty('findingPaths', `${objectCtx.id}::${startHip}`, 'delete')
+        pendingChanges.set(await getSyncDirtyTotalCount())
       }
       if (guideMode) {
         dispatch('close')
@@ -722,44 +725,6 @@
     activeStepIndex
     objectCtx
     overlays = overlayGeometry()
-    const fpDebug =
-      typeof window !== 'undefined' &&
-      (() => {
-        try {
-          return window.localStorage?.getItem('fpDebug') === '1'
-        } catch {
-          return false
-        }
-      })()
-    if (expandedStartHip && fpDebug) {
-      const nextSig = JSON.stringify({
-        expandedStartHip,
-        activeStepIndex,
-        count: overlays.length,
-        overlays: overlays.map((o) => ({
-          fromRa: Number((o.fromRa ?? 0).toFixed(3)),
-          fromDec: Number((o.fromDec ?? 0).toFixed(3)),
-          toRa: Number((o.toRa ?? 0).toFixed(3)),
-          toDec: Number((o.toDec ?? 0).toFixed(3)),
-          label: o.label || '',
-        })),
-      })
-      if (nextSig !== overlayBuildDebugSignature) {
-        overlayBuildDebugSignature = nextSig
-        console.log('@@FP_OVERLAY_BUILD', {
-          expandedStartHip,
-          activeStepIndex,
-          count: overlays.length,
-          overlays: overlays.map((o) => ({
-            fromRa: Number((o.fromRa ?? 0).toFixed(3)),
-            fromDec: Number((o.fromDec ?? 0).toFixed(3)),
-            toRa: Number((o.toRa ?? 0).toFixed(3)),
-            toDec: Number((o.toDec ?? 0).toFixed(3)),
-            label: o.label || '',
-          })),
-        })
-      }
-    }
   }
 
   $: targetInView = (() => {
@@ -801,7 +766,9 @@
 
 <div class="overlay" on:pointerdown|stopPropagation on:wheel={handleFinderWheel}>
   <div class="header">
-    <button class="back-btn" on:click={() => dispatch('close')} aria-label="Back">←</button>
+    <button class="back-btn" on:click={() => dispatch('close')} aria-label="Back">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <div class="title">
       {#if recordingStartHip && recordingStartLabel}
         Path {recordingStartLabel} ⇒ {objectFullLabel(objectCtx)}
@@ -1088,7 +1055,7 @@
     height: 2.6rem;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
     padding: 0 0.65rem;
     border-bottom: 1px solid rgba(232, 232, 232, 0.15);
     flex-shrink: 0;
@@ -1108,16 +1075,12 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 1.8rem;
-    line-height: 1;
     cursor: pointer;
-    padding: 0.1rem 0.15rem 0.1rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    position: relative;
-    top: -0.15em;
   }
 
   .back-btn:hover {

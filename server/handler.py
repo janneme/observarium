@@ -180,9 +180,7 @@ def handle_login(event: dict) -> dict:
         access_token = auth_result.get("AccessToken") or auth_result.get("access_token")
         expires_in = auth_result.get("ExpiresIn") or auth_result.get("expires_in")
         if not access_token:
-            return build_response(
-                500, {"error": "Authentication did not return token"}
-            )
+            return build_response(500, {"error": "Authentication did not return token"})
 
         return build_response(
             200,
@@ -235,6 +233,63 @@ def _get_username_from_event(event: dict) -> str:
 
 def _observations_key_for_user(username: str) -> str:
     return f"observations/{username}.json"
+
+
+def _read_json_or_default(backend, key: str, default):
+    """Read+parse `key` from `backend`, or return `default` if it doesn't exist."""
+    if not backend.exists(key):
+        return default
+    data = backend.read_bytes(key)
+    raw = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+    return json.loads(raw)
+
+
+def _updated_at(record: dict) -> str:
+    return record.get("updatedAt") or "1970-01-01T00:00:00.000Z"
+
+
+def _parse_merge_body(event: dict) -> tuple[list, list] | None:
+    """Parse a `{upserts: [...], deletes: [...]}` merge request body.
+
+    Returns (upserts, deletes) or None if the body is malformed.
+    """
+    body = event.get("body") or ""
+    try:
+        data = json.loads(body) if isinstance(body, str) else body
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    upserts = data.get("upserts")
+    deletes = data.get("deletes")
+    if not isinstance(upserts, list) or not isinstance(deletes, list):
+        return None
+    return upserts, deletes
+
+
+def _merge_flat_list(
+    current: list, id_field: str, upserts: list, deletes: list
+) -> list:
+    """Apply a delta to a flat array of records keyed by `id_field`.
+
+    Deletes always win (even against a newer server-side record); upserts
+    only replace an existing record when their `updatedAt` is at least as
+    new (newest wins, ties go to the incoming client).
+    """
+    by_key = {item.get(id_field): item for item in current if isinstance(item, dict)}
+    delete_set = {str(d) for d in deletes}
+    for d in delete_set:
+        by_key.pop(d, None)
+    for item in upserts:
+        if not isinstance(item, dict):
+            continue
+        k = item.get(id_field)
+        if k is None or str(k) in delete_set:
+            continue
+        existing = by_key.get(k)
+        if existing is None or _updated_at(item) >= _updated_at(existing):
+            by_key[k] = item
+    return list(by_key.values())
 
 
 def handle_get_observations(event: dict) -> dict:
@@ -311,6 +366,38 @@ def handle_delete_observation(event: dict, date: str) -> dict:
     except Exception:
         traceback.print_exc()
         return build_response(500, {"error": "Could not save observations"})
+
+
+def handle_merge_observations(event: dict) -> dict:
+    """Apply a {upserts, deletes} delta to the stored observations array.
+
+    Deletes always win, even against a concurrently modified server copy;
+    upserts only replace an existing record when at least as new
+    (`updatedAt`). Returns the full resulting array, which the client
+    replaces its local copy with.
+    """
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    parsed = _parse_merge_body(event)
+    if parsed is None:
+        return build_response(
+            400, {"error": "Body must be {upserts: [...], deletes: [...]}"}
+        )
+    upserts, deletes = parsed
+
+    key = _observations_key_for_user(username)
+    try:
+        backend = storage_backend.get_backend()
+        current = _read_json_or_default(backend, key, [])
+        merged = _merge_flat_list(current, "date", upserts, deletes)
+        backend.write_bytes(key, json.dumps(merged).encode("utf-8"))
+        return build_response(200, merged)
+    except Exception:
+        traceback.print_exc()
+        return build_response(500, {"error": "Could not merge observations"})
 
 
 def _route_preflight(_path: str, method: str, _event: dict):
@@ -452,11 +539,172 @@ def handle_save_finding_paths(event: dict) -> dict:
         return build_response(500, {"error": "Could not save finding paths"})
 
 
+def handle_merge_finding_paths(event: dict) -> dict:
+    """Apply a {upserts, deletes} delta to the stored finding-paths object.
+
+    Upserts are flat `{objectId, startHip, steps, updatedAt}` records (the
+    nested `{objectId: {startHip: {...}}}` storage shape is reconstructed
+    here); deletes are flat `"objectId::startHip"` keys. Same delete-always-
+    wins / newest-upsert-wins semantics as `_merge_flat_list`.
+    """
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    parsed = _parse_merge_body(event)
+    if parsed is None:
+        return build_response(
+            400, {"error": "Body must be {upserts: [...], deletes: [...]}"}
+        )
+    upserts, deletes = parsed
+
+    key = _finding_paths_key_for_user(username)
+    try:
+        backend = storage_backend.get_backend()
+        current = _read_json_or_default(backend, key, {})
+        if not isinstance(current, dict):
+            current = {}
+
+        delete_set = {str(d) for d in deletes}
+        _apply_finding_path_deletes(current, delete_set)
+        _apply_finding_path_upserts(current, upserts, delete_set)
+
+        backend.write_bytes(key, json.dumps(current).encode("utf-8"))
+        return build_response(200, current)
+    except Exception:
+        traceback.print_exc()
+        return build_response(500, {"error": "Could not merge finding paths"})
+
+
+def _apply_finding_path_deletes(current: dict, delete_set: set) -> None:
+    for d in delete_set:
+        if "::" not in d:
+            continue
+        object_id, start_hip = d.split("::", 1)
+        by_start = current.get(object_id)
+        if isinstance(by_start, dict) and start_hip in by_start:
+            del by_start[start_hip]
+            if not by_start:
+                del current[object_id]
+
+
+def _apply_finding_path_upserts(current: dict, upserts: list, delete_set: set) -> None:
+    for item in upserts:
+        if not isinstance(item, dict):
+            continue
+        object_id = item.get("objectId")
+        start_hip = item.get("startHip")
+        if object_id is None or start_hip is None:
+            continue
+        start_hip = str(start_hip)
+        if f"{object_id}::{start_hip}" in delete_set:
+            continue
+        record = {"steps": item.get("steps") or [], "updatedAt": item.get("updatedAt")}
+        by_start = current.setdefault(object_id, {})
+        existing = by_start.get(start_hip)
+        if existing is None or _updated_at(record) >= _updated_at(existing):
+            by_start[start_hip] = record
+
+
 def _route_finding_paths(path: str, method: str, event: dict):
     if path == "/finding-paths" and method == "GET":
         return handle_get_finding_paths(event)
     if path == "/finding-paths" and method == "POST":
         return handle_save_finding_paths(event)
+    if path == "/finding-paths/merge" and method == "POST":
+        return handle_merge_finding_paths(event)
+    return None
+
+
+def _telescopes_key_for_user(username: str) -> str:
+    return f"telescopes/{username}.json"
+
+
+def _eyepieces_key_for_user(username: str) -> str:
+    return f"eyepieces/{username}.json"
+
+
+def _handle_get_flat_list(event: dict, key_fn) -> dict:
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+    key = key_fn(username)
+    try:
+        backend = storage_backend.get_backend()
+        return build_response(200, _read_json_or_default(backend, key, []))
+    except Exception:
+        traceback.print_exc()
+        return build_response(500, {"error": "Could not read data"})
+
+
+def _handle_save_flat_list(event: dict, key_fn, label: str) -> dict:
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+    body = event.get("body") or ""
+    try:
+        data = json.loads(body) if isinstance(body, str) else body
+    except Exception:
+        return build_response(400, {"error": "Invalid JSON body"})
+    if not isinstance(data, list):
+        return build_response(400, {"error": f"{label} must be a JSON array"})
+    key = key_fn(username)
+    try:
+        backend = storage_backend.get_backend()
+        backend.write_bytes(key, json.dumps(data).encode("utf-8"))
+        return build_response(200, {"ok": True})
+    except Exception:
+        traceback.print_exc()
+        return build_response(500, {"error": f"Could not save {label.lower()}"})
+
+
+def _handle_merge_flat_list(event: dict, key_fn, id_field: str, label: str) -> dict:
+    try:
+        username = _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+    parsed = _parse_merge_body(event)
+    if parsed is None:
+        return build_response(
+            400, {"error": "Body must be {upserts: [...], deletes: [...]}"}
+        )
+    upserts, deletes = parsed
+    key = key_fn(username)
+    try:
+        backend = storage_backend.get_backend()
+        current = _read_json_or_default(backend, key, [])
+        merged = _merge_flat_list(current, id_field, upserts, deletes)
+        backend.write_bytes(key, json.dumps(merged).encode("utf-8"))
+        return build_response(200, merged)
+    except Exception:
+        traceback.print_exc()
+        return build_response(500, {"error": f"Could not merge {label.lower()}"})
+
+
+def _route_telescopes(path: str, method: str, event: dict):
+    if path == "/telescopes" and method == "GET":
+        return _handle_get_flat_list(event, _telescopes_key_for_user)
+    if path == "/telescopes" and method == "POST":
+        return _handle_save_flat_list(event, _telescopes_key_for_user, "Telescopes")
+    if path == "/telescopes/merge" and method == "POST":
+        return _handle_merge_flat_list(
+            event, _telescopes_key_for_user, "id", "Telescopes"
+        )
+    return None
+
+
+def _route_eyepieces(path: str, method: str, event: dict):
+    if path == "/eyepieces" and method == "GET":
+        return _handle_get_flat_list(event, _eyepieces_key_for_user)
+    if path == "/eyepieces" and method == "POST":
+        return _handle_save_flat_list(event, _eyepieces_key_for_user, "Eyepieces")
+    if path == "/eyepieces/merge" and method == "POST":
+        return _handle_merge_flat_list(
+            event, _eyepieces_key_for_user, "id", "Eyepieces"
+        )
     return None
 
 
@@ -465,6 +713,8 @@ def _route_observations(path: str, method: str, event: dict):
         return handle_get_observations(event)
     if path == "/observations" and method == "POST":
         return handle_save_observations(event)
+    if path == "/observations/merge" and method == "POST":
+        return handle_merge_observations(event)
     if path.startswith("/observations/") and method == "DELETE":
         date = path.removeprefix("/observations/")
         return handle_delete_observation(event, date)
@@ -489,6 +739,8 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
         _route_data_hash,
         _route_observations,
         _route_finding_paths,
+        _route_telescopes,
+        _route_eyepieces,
     )
 
     for fn in route_funcs:

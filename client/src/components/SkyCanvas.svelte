@@ -56,7 +56,6 @@
   let solarSystem = null
   let solarSystemBodies = []
   let planetImages = new Map()
-  let overlayArrowDebugSignature = ''
 
   const unsubTheme = theme.subscribe((v) => {
     currentTheme = v
@@ -1118,17 +1117,6 @@
       const nightly = currentTheme === 'nightly'
       const arrowColor = nightly ? '#0000ff' : 'rgba(255,255,255,0.45)'
       const labelColor = nightly ? '#0000ff' : 'rgba(255,255,255,0.55)'
-      const fpDebug =
-        finderMode &&
-        typeof window !== 'undefined' &&
-        (() => {
-          try {
-            return window.localStorage?.getItem('fpDebug') === '1'
-          } catch {
-            return false
-          }
-        })()
-      const overlayDebugRows = fpDebug ? [] : null
       const _cR = Math.min(W, H) / 2
       const _cx = W / 2
       const _cy = H / 2
@@ -1157,14 +1145,6 @@
           ctx.lineTo(px, py + arm + gap)
           ctx.stroke()
           ctx.restore()
-          if (overlayDebugRows) {
-            overlayDebugRows.push({
-              i: arrIdx,
-              marker: true,
-              px: Number(px.toFixed(1)),
-              py: Number(py.toFixed(1)),
-            })
-          }
           continue
         }
         if (arr.boundaryDirRa != null && arr.boundaryDirDec != null) {
@@ -1190,31 +1170,12 @@
         const from = projectToPixel(arr.fromRa, arr.fromDec, ra0, dec0, W, H, fov, rotation)
         const to = projectToPixel(arr.toRa, arr.toDec, ra0, dec0, W, H, fov, rotation)
         if (!from || !to) {
-          if (overlayDebugRows) {
-            overlayDebugRows.push({
-              i: arrIdx,
-              missingProjection: true,
-              hasFrom: !!from,
-              hasTo: !!to,
-              fromRa: Number((arr.fromRa ?? 0).toFixed(3)),
-              fromDec: Number((arr.fromDec ?? 0).toFixed(3)),
-              toRa: Number((arr.toRa ?? 0).toFixed(3)),
-              toDec: Number((arr.toDec ?? 0).toFixed(3)),
-            })
-          }
           continue
         }
         const dx = to.px - from.px
         const dy = to.py - from.py
         const len = Math.hypot(dx, dy)
         if (len < 2) {
-          if (overlayDebugRows) {
-            overlayDebugRows.push({
-              i: arrIdx,
-              tooShort: true,
-              len: Number(len.toFixed(2)),
-            })
-          }
           continue
         }
         const ux = dx / len
@@ -1261,44 +1222,8 @@
           const my = (startY + tipY) / 2
           ctx.fillText(arr.label, mx - uy * 11, my + ux * 11)
         }
-        if (overlayDebugRows) {
-          overlayDebugRows.push({
-            i: arrIdx,
-            fromIn: startIn,
-            toIn: endIn,
-            cR: Number(_cR.toFixed(2)),
-            lineLen: Number(len.toFixed(2)),
-            startX: Number(startX.toFixed(1)),
-            startY: Number(startY.toFixed(1)),
-            tipX: Number(tipX.toFixed(1)),
-            tipY: Number(tipY.toFixed(1)),
-            trimmed,
-            t0: Number(clipped.t0.toFixed(4)),
-            t1: Number(clipped.t1.toFixed(4)),
-            label: arr.label || '',
-          })
-        }
       }
       ctx.restore()
-      if (overlayDebugRows) {
-        const nextSig = JSON.stringify({
-          ra0: Number(ra0.toFixed(3)),
-          dec0: Number(dec0.toFixed(3)),
-          fov: Number(fov.toFixed(3)),
-          count: overlayArrows.length,
-          rows: overlayDebugRows,
-        })
-        if (nextSig !== overlayArrowDebugSignature) {
-          overlayArrowDebugSignature = nextSig
-          console.log('@@FP_ARROW_RENDER', {
-            ra0: Number(ra0.toFixed(3)),
-            dec0: Number(dec0.toFixed(3)),
-            fov: Number(fov.toFixed(3)),
-            count: overlayArrows.length,
-            rows: overlayDebugRows,
-          })
-        }
-      }
     }
 
     // Pass 1: DSOs (rendered first so stars paint on top)

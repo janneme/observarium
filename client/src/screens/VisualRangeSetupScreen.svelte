@@ -10,6 +10,7 @@
   import SearchPanel from '../components/SearchPanel.svelte'
   import CustomSelect from '../components/CustomSelect.svelte'
   import VisualRangeMeasureScreen from './VisualRangeMeasureScreen.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
 
   export let lat = 0
   export let lon = 0
@@ -208,7 +209,9 @@
 {:else}
   <div class="overlay" on:pointerdown|stopPropagation>
     <div class="header">
-      <button class="back-btn" type="button" on:click={() => dispatch('close')}>←</button>
+      <button class="back-btn" type="button" on:click={() => dispatch('close')} aria-label="Close">
+        <BackIcon size="1.2rem" aria-hidden="true" />
+      </button>
       <span class="header-title">Visual Range</span>
     </div>
 
@@ -320,7 +323,7 @@
     height: 2.75rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(200, 0, 0, 0.15);
-    gap: 0.5rem;
+    gap: 0.35rem;
     flex-shrink: 0;
   }
 
@@ -328,10 +331,11 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
+    display: flex;
+    align-items: center;
   }
 
   .back-btn:hover {

@@ -1,18 +1,27 @@
 <script>
   import { createEventDispatcher } from 'svelte'
   import LoginForm from '../components/LoginForm.svelte'
+  import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
+  import { keyboardActive } from '../stores/keyboard.js'
 
   const dispatch = createEventDispatcher()
 </script>
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" type="button" on:click={() => dispatch('close')}>←</button>
+    <button class="back-btn" type="button" on:click={() => dispatch('close')} aria-label="Close">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="header-title">Log In</span>
   </div>
   <div class="content">
     <LoginForm submitLabel="Log In" on:loggedin={() => dispatch('loggedin')} />
   </div>
+
+  {#if $keyboardActive}
+    <OnScreenKeyboard />
+  {/if}
 </div>
 
 <style>
@@ -36,17 +45,18 @@
     height: 2.75rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(232, 232, 232, 0.15);
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   .back-btn {
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
+    display: flex;
+    align-items: center;
   }
 
   .header-title {

@@ -1,13 +1,15 @@
 <script>
   import { onMount } from 'svelte'
-  import { getMeta, setMeta, getAllObservations } from '../lib/db.js'
+  import { getMeta, setMeta, getAllObservations, markDirty, getSyncDirtyTotalCount } from '../lib/db.js'
   import CustomInput from '../components/CustomInput.svelte'
   import CustomCheckbox from '../components/CustomCheckbox.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import { keyboardActive } from '../stores/keyboard.js'
+  import { pendingChanges } from '../stores/ui.js'
   import EditIcon from '../icons/EditIcon.svelte'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
 
   export let onClose = () => {}
 
@@ -67,6 +69,16 @@
     await setMeta('eyepieces', eyepieces)
   }
 
+  async function markTelescopeDirty(id, op) {
+    await markDirty('telescopes', id, op)
+    pendingChanges.set(await getSyncDirtyTotalCount())
+  }
+
+  async function markEyepieceDirty(id, op) {
+    await markDirty('eyepieces', id, op)
+    pendingChanges.set(await getSyncDirtyTotalCount())
+  }
+
   async function inUseIds() {
     const observations = await getAllObservations()
     const telescopeIds = new Set()
@@ -108,9 +120,11 @@
       focalLengthMm,
       diameterInches,
       needsEyepiece: !!newTelescope.needsEyepiece,
+      updatedAt: new Date().toISOString(),
     }
     telescopes = sortByName([...telescopes, item])
     await persistTelescopes()
+    await markTelescopeDirty(item.id, 'upsert')
     saveMsg = 'Telescope added.'
     newTelescope = { name: '', focalLengthMm: '', diameterInches: '', needsEyepiece: true }
   }
@@ -124,9 +138,10 @@
       warningMsg = 'Fill eyepiece name, focal length (mm), and FOV (degrees).'
       return
     }
-    const item = { id: newUuid(), name, focalLengthMm, fovDeg }
+    const item = { id: newUuid(), name, focalLengthMm, fovDeg, updatedAt: new Date().toISOString() }
     eyepieces = sortByName([...eyepieces, item])
     await persistEyepieces()
+    await markEyepieceDirty(item.id, 'upsert')
     saveMsg = 'Eyepiece added.'
     newEyepiece = { name: '', focalLengthMm: '', fovDeg: '' }
   }
@@ -159,11 +174,19 @@
     telescopes = sortByName(
       telescopes.map((t) =>
         t.id === itemId
-          ? { ...t, name, focalLengthMm, diameterInches, needsEyepiece: !!telescopeDraft.needsEyepiece }
+          ? {
+              ...t,
+              name,
+              focalLengthMm,
+              diameterInches,
+              needsEyepiece: !!telescopeDraft.needsEyepiece,
+              updatedAt: new Date().toISOString(),
+            }
           : t,
       ),
     )
     await persistTelescopes()
+    await markTelescopeDirty(itemId, 'upsert')
     saveMsg = 'Telescope updated.'
     cancelEditTelescope()
   }
@@ -192,8 +215,13 @@
       warningMsg = 'Fill eyepiece name, focal length (mm), and FOV (degrees).'
       return
     }
-    eyepieces = sortByName(eyepieces.map((e) => (e.id === itemId ? { ...e, name, focalLengthMm, fovDeg } : e)))
+    eyepieces = sortByName(
+      eyepieces.map((e) =>
+        e.id === itemId ? { ...e, name, focalLengthMm, fovDeg, updatedAt: new Date().toISOString() } : e,
+      ),
+    )
     await persistEyepieces()
+    await markEyepieceDirty(itemId, 'upsert')
     saveMsg = 'Eyepiece updated.'
     cancelEditEyepiece()
   }
@@ -214,6 +242,7 @@
   async function deleteTelescope(item) {
     telescopes = sortByName(telescopes.filter((t) => t.id !== item.id))
     await persistTelescopes()
+    await markTelescopeDirty(item.id, 'delete')
     saveMsg = 'Telescope deleted.'
     if (editingTelescopeId === item.id) cancelEditTelescope()
   }
@@ -234,6 +263,7 @@
   async function deleteEyepiece(item) {
     eyepieces = sortByName(eyepieces.filter((e) => e.id !== item.id))
     await persistEyepieces()
+    await markEyepieceDirty(item.id, 'delete')
     saveMsg = 'Eyepiece deleted.'
     if (editingEyepieceId === item.id) cancelEditEyepiece()
   }
@@ -261,7 +291,9 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" on:click={onClose}>←</button>
+    <button class="back-btn" on:click={onClose} aria-label="Close">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="header-title">Telescopes</span>
   </div>
 
@@ -460,17 +492,18 @@
     height: 2.75rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(232, 232, 232, 0.15);
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   .back-btn {
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
+    display: flex;
+    align-items: center;
   }
 
   .header-title {

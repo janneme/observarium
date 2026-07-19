@@ -3,9 +3,11 @@
   import {
     getAllFindingPaths,
     deleteFindingPathForObject,
-    incrementFindingPathsChanges,
+    markDirty,
+    getSyncDirtyTotalCount,
     getSearchIndex,
   } from '../lib/db.js'
+  import { pendingChanges } from '../stores/ui.js'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
@@ -15,6 +17,7 @@
   import DraftIcon from '../icons/DraftIcon.svelte'
   import EditIcon from '../icons/EditIcon.svelte'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
 
   export let initialTargetChip = null
   export let initialStartChip = null
@@ -294,14 +297,17 @@
     pendingDeleteObjectId = null
     pendingDeleteStartHip = null
     await deleteFindingPathForObject(objId, hip)
-    await incrementFindingPathsChanges()
+    await markDirty('findingPaths', `${objId}::${hip}`, 'delete')
+    pendingChanges.set(await getSyncDirtyTotalCount())
     allPaths = await getAllFindingPaths()
   }
 </script>
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" type="button" on:click={() => dispatch('close')}>←</button>
+    <button class="back-btn" type="button" on:click={() => dispatch('close')} aria-label="Close">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="header-title">Finding Paths</span>
     <button class="icon-btn add-btn" type="button" on:click={() => (addSearchOpen = true)} title="Add finding path">
       <PlusIcon size="1rem" />
@@ -538,7 +544,7 @@
     height: 2.75rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(232, 232, 232, 0.15);
-    gap: 0.5rem;
+    gap: 0.35rem;
     flex-shrink: 0;
   }
 
@@ -546,10 +552,8 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 1.5rem;
-    line-height: 1;
     cursor: pointer;
-    padding: 0.1rem 0.15rem 0.1rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
     display: flex;
     align-items: center;

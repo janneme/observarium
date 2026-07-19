@@ -6,6 +6,7 @@
   import QuizProgress from '../components/QuizProgress.svelte'
   import ThumbUpIcon from '../icons/ThumbUpIcon.svelte'
   import ThumbDownIcon from '../icons/ThumbDownIcon.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
   import { getMeta, getObjectsInArea, getSearchIndex } from '../lib/db.js'
   import {
     applyQuizAnswer,
@@ -521,7 +522,9 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" type="button" on:click={handleBack} aria-label="Back">←</button>
+    <button class="back-btn" type="button" on:click={handleBack} aria-label="Back">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="title">Constellation Quiz</span>
   </div>
 
@@ -636,7 +639,7 @@
   .header {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.35rem;
     padding: 0.5rem 0.65rem;
     border-bottom: 1px solid rgba(180, 0, 0, 0.35);
   }
@@ -645,15 +648,13 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 1.3rem;
     cursor: pointer;
-    padding: 0 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    line-height: 0;
   }
 
   .back-btn:hover {

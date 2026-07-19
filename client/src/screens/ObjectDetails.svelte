@@ -12,10 +12,11 @@
   } from 'astronomy-engine'
   import { selectedObject } from '../stores/selectedObject.js'
   import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
-  import { getTodayObservation, getObjectImage, getDoubleStarNear } from '../lib/db.js'
+  import { getObservationByDate, getObjectImage, getDoubleStarNear, resolveObservationDateKey } from '../lib/db.js'
   import { applyDsPatch } from '../lib/customObjects.js'
   import ObservationFormPanel from '../components/ObservationFormPanel.svelte'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
 
   export let lat = 48.2
   export let lon = 16.37
@@ -294,9 +295,12 @@
   async function loadData(o) {
     if (!o) return
 
-    // Observation status
-    const todayObs = await getTodayObservation()
-    isObservedToday = todayObs?.objects?.some((x) => x.id === o.id) ?? false
+    // Observation status — for the currently selected date/time, not
+    // necessarily the real "today" if the user picked a different date.
+    // resolveObservationDateKey folds early-morning entries into the
+    // previous evening's still-open session rather than starting a new one.
+    const selectedObs = await getObservationByDate(await resolveObservationDateKey(time))
+    isObservedToday = selectedObs?.objects?.some((x) => x.id === o.id) ?? false
 
     // Image
     const imgRecord = await getObjectImage(o.id)
@@ -455,7 +459,10 @@
     if (blobUrlToRevoke) URL.revokeObjectURL(blobUrlToRevoke)
   })
 
-  $: if (obj) loadData(obj)
+  // `time` is referenced directly here (not just inside loadData's body) so
+  // that picking a different date while this screen is already open also
+  // re-triggers the observed-status lookup for the newly selected date.
+  $: if (obj && time) loadData(obj)
 
   $: if (obj?.type === 'star' && obj.dbl) {
     linkedDs = null
@@ -469,7 +476,9 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" on:click={close}>←</button>
+    <button class="back-btn" on:click={close} aria-label="Close">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="type-symbol"><ObservationObjectSymbol kind={objectSymbolKind(obj)} /></span>
     <span class="header-title">{objLabel(obj)}</span>
     <button
@@ -662,6 +671,7 @@
   {#if showObservationForm && obj}
     <ObservationFormPanel
       objectId={obj.id}
+      {time}
       on:saved={async () => {
         showObservationForm = false
         await loadData(obj)
@@ -695,23 +705,20 @@
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(232, 232, 232, 0.15);
     flex-shrink: 0;
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   .back-btn {
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 1.3rem;
     cursor: pointer;
-    padding: 0 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100%;
-    line-height: 0;
   }
 
   .back-btn:hover {

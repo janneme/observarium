@@ -229,7 +229,7 @@
         </div>
 
         <div class="phase-row">
-          <span class="phase-label">Observations</span>
+          <span class="phase-label">User data</span>
           <span class="phase-up-to-date">Up to date</span>
         </div>
       </div>

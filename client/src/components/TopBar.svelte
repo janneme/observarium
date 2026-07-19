@@ -118,7 +118,6 @@
   }
 
   $: isToday = time.toDateString() === new Date().toDateString()
-  $: console.log(`@@TB_TIME time=${time?.toString()} isToday=${isToday}`)
 
   function formatFov(f) {
     if (f >= 1) return `${parseFloat(f.toPrecision(2))}°`

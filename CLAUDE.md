@@ -16,3 +16,5 @@ Never run `git commit`. The user commits all changes themselves.
 - **Frontend**: `/tmp/observarium-fe.log` — browser `console.log/info/warn/error/debug` calls are mirrored here (in addition to still printing to the browser devtools console as normal) via a dev-only shim (`client/src/lib/devConsoleLog.js`) that POSTs to a Vite dev-server middleware (`consoleForwardPlugin` in `client/vite.config.mjs`). Dev-server only — inert in production builds.
 
 Both log file paths come from `BACKEND_LOG_FILE`/`FRONTEND_LOG_FILE` env vars set in the root `Makefile`'s `dev` target — never hardcode these paths in Python or JS source.
+
+**Claude must NEVER start or kill the app itself** — no `make dev`, no launching `run.py`/`local_server.py`/`vite` directly, no `kill`/`pkill`/`SIGINT` against those processes, under any circumstance. This holds even if the app appears not to be running, looks stale, or you suspect it needs a restart: always ask the user to start/stop/restart it themselves instead of doing it yourself. The app runs in a dedicated terminal the user watches directly for live log output; Claude touching that process undermines it.

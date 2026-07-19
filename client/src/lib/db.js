@@ -347,7 +347,11 @@ export async function saveFindingPathForObject(objectId, startHip, pathValue) {
     ...all,
     [objectId]: {
       ...(all[objectId] || {}),
-      [key]: { steps: _cloneSteps(pathValue?.steps) },
+      // updatedAt is stamped on every save (including in-progress drafts) so
+      // it's accurate once the path becomes final; whether this particular
+      // save is dirty-tracked for sync is the caller's call (only final
+      // paths are ever uploaded — see markDirty callers).
+      [key]: { steps: _cloneSteps(pathValue?.steps), updatedAt: new Date().toISOString() },
     },
   }
   await setMeta('findingPaths', next)
@@ -723,25 +727,130 @@ export async function getSearchIndex() {
   })
 }
 
-export async function getTodayObservation() {
-  const db = await getDB()
-  const today = new Date().toISOString().slice(0, 10)
-  return db.get('observations', today)
-}
-
 export async function getObservationByDate(date) {
   const db = await getDB()
   return db.get('observations', date)
 }
 
+// --------------------------------------------------------------------------
+// Sync dirty-tracking (see SYNC_ENHANCEMENT.md)
+//
+// One ledger per syncable category, tracking every record added/modified/
+// deleted locally since the last successful sync push, keyed by that
+// record's sync key (observation date, `${objectId}::${startHip}` for
+// finding paths, or telescope/eyepiece id). Replaces the old
+// pendingChanges/pendingObservationDates/findingPathsChanges counters.
+// --------------------------------------------------------------------------
+
+export const SYNC_EPOCH_ISO = '1970-01-01T00:00:00.000Z'
+const SYNC_CATEGORIES = ['observations', 'findingPaths', 'telescopes', 'eyepieces']
+
+export async function getSyncDirty() {
+  const dirty = (await getMeta('syncDirty')) || {}
+  const out = {}
+  for (const cat of SYNC_CATEGORIES) out[cat] = dirty[cat] && typeof dirty[cat] === 'object' ? dirty[cat] : {}
+  return out
+}
+
+export async function markDirty(category, key, op) {
+  const dirty = await getSyncDirty()
+  dirty[category] = { ...dirty[category], [key]: { op, updatedAt: new Date().toISOString() } }
+  await setMeta('syncDirty', dirty)
+  return dirty
+}
+
+export async function clearSyncDirtyKeys(category, keys) {
+  const dirty = await getSyncDirty()
+  const cat = { ...dirty[category] }
+  for (const k of keys) delete cat[k]
+  dirty[category] = cat
+  await setMeta('syncDirty', dirty)
+  return dirty
+}
+
+export async function getSyncDirtyTotalCount() {
+  const dirty = await getSyncDirty()
+  return SYNC_CATEGORIES.reduce((sum, cat) => sum + Object.keys(dirty[cat]).length, 0)
+}
+
+// One-time migration from the old ad hoc pending-change tracking (a bare
+// counter for finding paths, a touched-dates list for observations) into the
+// new per-record dirty ledger. Best-effort: the old scheme couldn't tell add
+// from update, or record which specific object/date was touched beyond
+// "some observation date changed", so everything still present locally is
+// folded in as an 'upsert' entry.
+export async function migrateLegacyPendingToSyncDirty() {
+  if (await getMeta('syncDirtyMigrated')) return
+  const dirty = await getSyncDirty()
+  const nowIso = new Date().toISOString()
+
+  const obsDates = await getPendingObservationDates()
+  if (obsDates.length > 0) {
+    const allObs = await getAllObservations()
+    const existingDates = new Set(allObs.map((o) => o.date))
+    for (const d of obsDates) {
+      if (existingDates.has(d)) dirty.observations[d] = { op: 'upsert', updatedAt: nowIso }
+    }
+  }
+
+  const fpChanges = await getFindingPathsChanges()
+  if (fpChanges != null && fpChanges > 0) {
+    const all = await getAllFindingPaths()
+    for (const [objectId, byStart] of Object.entries(all)) {
+      for (const [startHip, path] of Object.entries(byStart || {})) {
+        const steps = path?.steps
+        if (Array.isArray(steps) && steps.length > 0 && steps[steps.length - 1]?.final === true) {
+          dirty.findingPaths[`${objectId}::${startHip}`] = { op: 'upsert', updatedAt: nowIso }
+        }
+      }
+    }
+  }
+
+  await setMeta('syncDirty', dirty)
+  await setMeta('syncDirtyMigrated', true)
+}
+
+// An observing session commonly spans midnight (e.g. starts 21:00, runs to
+// 01:30 the next day) but is still one session. Hours below MORNING_CUTOFF_HOUR
+// are treated as "morning" — if yesterday's observation record exists and
+// began at/after EVENING_START_HOUR, new data logged during those morning
+// hours is folded into that session instead of starting a new one.
+const MORNING_CUTOFF_HOUR = 12
+const EVENING_START_HOUR = 18
+
+function dateKeyForDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export async function resolveObservationDateKey(time) {
+  const todayKey = dateKeyForDate(time)
+  if (time.getHours() >= MORNING_CUTOFF_HOUR) return todayKey
+
+  const yesterday = new Date(time)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayKey = dateKeyForDate(yesterday)
+  const yesterdayObs = await getObservationByDate(yesterdayKey)
+  if (yesterdayObs?.startedAt != null && new Date(yesterdayObs.startedAt).getHours() >= EVENING_START_HOUR) {
+    return yesterdayKey
+  }
+  return todayKey
+}
+
+// Stamps `updatedAt` and marks the record dirty for sync — the single write
+// path for local observation edits (as opposed to `bulkPutObservations`/
+// `replaceAllObservations`, which write incoming synced data verbatim and
+// must NOT be treated as local edits).
 export async function putObservation(record) {
   const db = await getDB()
-  await db.put('observations', record)
+  const stamped = { ...record, updatedAt: new Date().toISOString() }
+  await db.put('observations', stamped)
+  await markDirty('observations', stamped.date, 'upsert')
 }
 
 export async function deleteObservationByDate(date) {
   const db = await getDB()
   await db.delete('observations', date)
+  await markDirty('observations', date, 'delete')
 }
 
 export async function getPendingChangesCount() {
@@ -798,8 +907,7 @@ export async function toggleObjectObserved(objectId) {
   } else {
     existing.objects.splice(idx, 1)
   }
-  await db.put('observations', existing)
-  await incrementPendingChanges(1, [today])
+  await putObservation(existing)
   return existing.objects.some((o) => o.id === objectId)
 }
 

@@ -5,7 +5,7 @@
     getSearchIndex,
     getMeta,
     putObservation,
-    incrementPendingChanges,
+    getSyncDirtyTotalCount,
     deleteObservationByDate,
   } from '../lib/db.js'
   import { pendingChanges } from '../stores/ui.js'
@@ -16,6 +16,7 @@
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
   import PlusIcon from '../icons/PlusIcon.svelte'
   import EditIcon from '../icons/EditIcon.svelte'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
@@ -24,6 +25,7 @@
 
   export let onClose = () => {}
   export let onOpenObject = () => {}
+  export let time = new Date()
 
   let observations = []
   let expandedDates = new Set()
@@ -53,7 +55,7 @@
   }
 
   function trimList(items, maxLen = 46) {
-    if (!items.length) return 'no objects'
+    if (!items.length) return ''
     let out = ''
     for (let i = 0; i < items.length; i += 1) {
       const part = i === 0 ? items[i] : `, ${items[i]}`
@@ -136,12 +138,32 @@
     }
   }
 
+  function fmtHM(d) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+
+  function observationTimeLabel(obs) {
+    const times = [obs.startedAt, ...(obs.objects || []).map((entry) => entry.loggedAt)]
+      .filter(Boolean)
+      .map((iso) => new Date(iso))
+      .filter((d) => !Number.isNaN(d.getTime()))
+      .sort((a, b) => a - b)
+    if (times.length === 0) return ''
+    const first = fmtHM(times[0])
+    const last = fmtHM(times[times.length - 1])
+    return first === last ? first : `${first}-${last}`
+  }
+
   function observationHeaderLabel(obs) {
     const names = (obs.objects || []).map((entry) => labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id))
     const locationName = String(obs?.location?.name || '').trim()
-    const datePart = normalizeDate(obs.date)
-    if (locationName) return `${datePart}, ${locationName} (${trimList(names)})`
-    return `${datePart} (${trimList(names)})`
+    const timeLabel = observationTimeLabel(obs)
+    const datePart = timeLabel ? `${normalizeDate(obs.date)} ${timeLabel}` : normalizeDate(obs.date)
+    const objectsPart = trimList(names)
+    let label = datePart
+    if (locationName) label += `, ${locationName}`
+    if (objectsPart) label += ` (${objectsPart})`
+    return label
   }
 
   function observationLocationLabel(obs) {
@@ -155,19 +177,6 @@
 
   function sortedObservations(items) {
     return [...items].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-  }
-
-  function isObjectEditing(date, objectId) {
-    return objectEdit?.date === date && String(objectEdit?.objectId) === String(objectId)
-  }
-
-  function editedEntryForObservation(obs) {
-    if (!objectEdit || objectEdit.date !== obs?.date) return null
-    return (obs.objects || []).find((entry) => String(entry.id) === String(objectEdit.objectId)) || null
-  }
-
-  function isObservationEditing(date) {
-    return observationEdit?.date === date
   }
 
   function toggleDate(date) {
@@ -242,9 +251,10 @@
     return used.map((r) => telescopeResultLabel(r)).join(' | ')
   }
 
-  async function bumpPending(dates = []) {
-    const nextPending = await incrementPendingChanges(1, dates)
-    pendingChanges.set(nextPending)
+  // Refreshes the menu badge — putObservation/deleteObservationByDate already
+  // updated the sync dirty ledger itself, so this just re-reads the total.
+  async function bumpPending() {
+    pendingChanges.set(await getSyncDirtyTotalCount())
   }
 
   function startObjectEdit(date, entry) {
@@ -401,7 +411,7 @@
     observations = sortedObservations(next)
     objectEdit = null
     objectEditError = ''
-    await bumpPending([date])
+    await bumpPending()
   }
 
   function startObservationEdit(obs) {
@@ -474,7 +484,7 @@
     objectEdit = null
     observationEdit = null
     errorMsg = ''
-    await bumpPending([nextDate])
+    await bumpPending()
   }
 
   function openDeleteObject(date, entry) {
@@ -522,7 +532,7 @@
       if (objectEdit?.date === task.date && objectEdit?.objectId === task.objectId) objectEdit = null
     }
 
-    await bumpPending([task.date])
+    await bumpPending()
   }
 
   async function openAddObject(date) {
@@ -577,11 +587,11 @@
       errorMsg = 'Cannot find free date for a new observation.'
       return
     }
-    const record = { date, location: null, notes: '', objects: [] }
+    const record = { date, location: null, notes: '', objects: [], startedAt: time.toISOString() }
     await putObservation(record)
     observations = sortedObservations([...observations, record])
     startObservationEdit(record)
-    await bumpPending([date])
+    await bumpPending()
   }
 
   async function addObjectToObservation(date, objectId) {
@@ -589,7 +599,7 @@
     const next = observations.map((obs) => {
       if (obs.date !== date) return obs
       if ((obs.objects || []).some((entry) => entry.id === objectId)) return obs
-      createdEntry = { id: objectId, telescopeResults: [], notes: '' }
+      createdEntry = { id: objectId, telescopeResults: [], notes: '', loggedAt: time.toISOString() }
       return {
         ...obs,
         objects: [...(obs.objects || []), createdEntry],
@@ -601,7 +611,7 @@
     observations = sortedObservations(next)
     closeAddObject()
     if (createdEntry) startObjectEdit(date, createdEntry)
-    await bumpPending([date])
+    await bumpPending()
   }
 
   async function loadData() {
@@ -655,7 +665,9 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" type="button" on:click={onClose}>←</button>
+    <button class="back-btn" type="button" on:click={onClose} aria-label="Close">
+      <BackIcon size="1.2rem" aria-hidden="true" />
+    </button>
     <span class="header-title">Observations</span>
     <button class="icon-btn add-observation" type="button" on:click={addObservation} title="Add observation">
       <PlusIcon size="1rem" aria-hidden="true" />
@@ -676,8 +688,8 @@
         <section class="obs-card">
           <div class="obs-header">
             <button class="obs-toggle" on:click={() => toggleDate(obs.date)}>
-              <span class="obs-title">{observationHeaderLabel(obs)}</span>
               <span class="caret">{expandedDates.has(obs.date) ? '▾' : '▸'}</span>
+              <span class="obs-title">{observationHeaderLabel(obs)}</span>
             </button>
             <span class="header-actions">
               <button
@@ -701,7 +713,7 @@
 
           {#if expandedDates.has(obs.date)}
             <div class="obs-details">
-              {#if isObservationEditing(obs.date)}
+              {#if observationEdit && observationEdit.date === obs.date}
                 <div class="edit-observation">
                   <div class="date-location-row">
                     <div class="field-row">
@@ -805,7 +817,12 @@
               {#if Array.isArray(obs.objects) && obs.objects.length > 0}
                 <div class="objects-list">
                   {#each obs.objects as entry}
-                    <div class="object-row" class:editing={isObjectEditing(obs.date, entry.id)}>
+                    <div
+                      class="object-row"
+                      class:editing={objectEdit &&
+                        objectEdit.date === obs.date &&
+                        String(objectEdit.objectId) === String(entry.id)}
+                    >
                       <div class="object-main">
                         <span class="obj-symbol"
                           ><ObservationObjectSymbol kind={objectSymbolKind(objectById.get(entry.id))} /></span
@@ -848,7 +865,10 @@
                   {/each}
                 </div>
 
-                {@const editedEntry = editedEntryForObservation(obs)}
+                {@const editedEntry =
+                  objectEdit && objectEdit.date === obs.date
+                    ? (obs.objects || []).find((oEntry) => String(oEntry.id) === String(objectEdit.objectId)) || null
+                    : null}
                 {#if editedEntry}
                   <div class="object-edit">
                     <div class="field-label object-edit-title">
@@ -924,7 +944,7 @@
     height: 2.75rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid rgba(232, 232, 232, 0.15);
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   .add-observation {
@@ -935,10 +955,11 @@
     background: none;
     border: none;
     color: var(--fg);
-    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.15rem 0.25rem 0.5rem;
     border-radius: 4px;
+    display: flex;
+    align-items: center;
   }
 
   .header-title {
@@ -982,7 +1003,7 @@
     background: none;
     color: var(--fg);
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 0.5rem;
     align-items: center;
     text-align: left;
@@ -1003,6 +1024,8 @@
   }
 
   .caret {
+    font-size: 1.3rem;
+    line-height: 1;
     opacity: 0.7;
     flex-shrink: 0;
   }
