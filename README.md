@@ -533,11 +533,37 @@ Difficulty levels:
 
 ## 5.11 Moon Quiz
 
-A Moon is rendered and a set of quiz objects is randomly selected. In each step
-a crater or a mare is highlighted, four possible names of the highlighted
-feature are displayed and the user is expected to select the right name. In
-global mode all objects are taken into account, in local mode only the objects
-near to the actual Moon terminator.
+The Moon is rendered as a schematic 2D map (feature positions and
+approximate sizes, not a photorealistic view) and a set of quiz objects
+(craters, maria and other named features) is selected according to the
+difficulty level. In each step one feature is highlighted and four possible
+names are displayed; the user is expected to select the right one. The
+correct answer is outlined in blue.
+
+At Easy difficulty the full Moon disc is always shown, and no zooming is
+needed. From Medium difficulty upward the user may additionally choose
+between two scopes:
+
+- Global: the full disc is still shown; the viewing angle (libration) changes
+  randomly with every question, for variety.
+- Local: the view is restricted to the current terminator, computed from the
+  actually selected date and time (matching the currently displayed sky), so
+  the quiz only asks about features that would really be visible near the
+  terminator tonight. The terminator/viewing angle stays fixed for the whole
+  quiz session. Features near the terminator are rendered more prominently,
+  approximating how long shadows make surface detail stand out there.
+
+Zooming into the map is supported, and required from Medium difficulty
+upward, where smaller features are included in the quiz pool.
+
+Difficulty levels:
+
+- Easy: only the Moon's largest, most prominent features (maria and the
+  largest named craters); full disc, no terminator, no zoom needed.
+- Medium: adds a wider range of medium-sized craters; terminator restriction
+  available via Local scope.
+- Hard: all eligible named features down to the smallest catalogued size;
+  terminator restriction available via Local scope.
 
 ## 5.12 Object Finding Paths
 

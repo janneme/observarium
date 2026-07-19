@@ -4,11 +4,12 @@
 Never run `git commit`. The user commits all changes themselves.
 
 ## UI / Color rules
-**NO GREEN.** The app is used for nightly astronomical observation. Green light destroys dark adaptation.
-- Never use green or green-tinted colors in any UI element (buttons, badges, indicators, success states, SVG strokes/fills, CSS variables).
-- !!! STRICT: The green channel — the middle byte in hex `#RRGGBB` — MUST be `00` in every color, with no exceptions. Examples of ALLOWED colors: `#cc0000` (red), `#0000cc` (blue), `#cc00cc` (magenta), `#000000` (black). Examples of FORBIDDEN: `#9dda9d` (G=218 ✗), `#4a9eff` (G=158 ✗), `rgba(255,255,255,…)` (G=255 ✗), `rgba(232,232,232,…)` (G=232 ✗). The only exemption is the CSS variable `var(--fg)` (the app-wide foreground text color, already established in styles.css).
-- For "success" or "found" states use a pure blue with G=00 (e.g. `#0000cc`) or black `#000000`.
-- Warnings and errors → red with G=00 (e.g. `#cc0000`, `rgba(200,0,0,…)`). Amber/orange is impossible with G=00 — never use it.
+**NO GREEN — nightly theme only.** The app is used for nightly astronomical observation, and while the nightly theme (`data-theme="nightly"`) is active, green light destroys dark adaptation. This rule does NOT apply to the daily theme — daily-mode colors are unrestricted (yellow, green, white, whatever suits the design); only nightly-mode colors are constrained.
+- Never use green or green-tinted colors in any **nightly-theme** UI element (buttons, badges, indicators, success states, SVG strokes/fills, CSS variables scoped under `:global([data-theme='nightly'])` or a `nightly`/`$theme === 'nightly'` branch).
+- !!! STRICT, nightly theme only: The green channel — the middle byte in hex `#RRGGBB` — MUST be `00` in every color used while nightly theme is active, with no exceptions. Examples of ALLOWED nightly colors: `#cc0000` (red), `#0000cc` (blue), `#cc00cc` (magenta), `#000000` (black). Examples of FORBIDDEN in nightly: `#9dda9d` (G=218 ✗), `#4a9eff` (G=158 ✗), `rgba(255,255,255,…)` (G=255 ✗), `rgba(232,232,232,…)` (G=232 ✗). The only exemption is the CSS variable `var(--fg)` (the app-wide foreground text color, already established in styles.css).
+- In nightly theme, for "success" or "found" states use a pure blue with G=00 (e.g. `#0000cc`) or black `#000000`.
+- In nightly theme, warnings and errors → red with G=00 (e.g. `#cc0000`, `rgba(200,0,0,…)`). Amber/orange is impossible with G=00 — never use it in nightly theme.
+- Code that branches on theme (e.g. `const x = nightly ? colorA : colorB`) only needs the nightly-side (`colorA`) value to obey the G=00 constraint — the daily-side value is free.
 
 ## Dev logging
 `make dev` runs both servers via `run.py` and writes two separate log files, in addition to the console and the combined `/tmp/observarium.log`:

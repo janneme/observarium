@@ -5,12 +5,18 @@
   export let hasSaved = false
   export let initialDifficulty = 'medium'
   export let initialScope = 'global'
+  // Some quizzes (e.g. Moon Quiz) only support Local scope from a certain
+  // difficulty upward. When false, the Local button is disabled and scope
+  // is forced back to 'global' — kept generic here (the calling quiz screen
+  // decides the actual rule) so other quizzes are unaffected by default.
+  export let allowLocal = true
 
   const dispatch = createEventDispatcher()
   let difficulty = initialDifficulty
   let scope = initialScope
   let prevInitialDifficulty = initialDifficulty
   let prevInitialScope = initialScope
+  let prevAllowLocal = allowLocal
 
   $: if (initialDifficulty !== prevInitialDifficulty) {
     prevInitialDifficulty = initialDifficulty
@@ -22,7 +28,16 @@
     scope = initialScope
   }
 
+  $: if (allowLocal !== prevAllowLocal) {
+    prevAllowLocal = allowLocal
+    if (!allowLocal && scope === 'local') {
+      scope = 'global'
+      dispatch('change', { difficulty, scope })
+    }
+  }
+
   function setScope(next) {
+    if (next === 'local' && !allowLocal) return
     scope = next
     dispatch('change', { difficulty, scope })
   }
@@ -44,7 +59,12 @@
     <div class="label">Scope</div>
     <div class="row">
       <button class:selected={scope === 'global'} on:click={() => setScope('global')}>Global</button>
-      <button class:selected={scope === 'local'} on:click={() => setScope('local')}>Local</button>
+      <button
+        class:selected={scope === 'local'}
+        disabled={!allowLocal}
+        title={allowLocal ? '' : 'Not available at this difficulty'}
+        on:click={() => setScope('local')}>Local</button
+      >
     </div>
   </div>
 
@@ -107,6 +127,11 @@
   .row button.selected {
     border-color: rgba(0, 0, 200, 0.85);
     box-shadow: 0 0 0 1px rgba(0, 0, 200, 0.6) inset;
+  }
+
+  .row button:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .actions {

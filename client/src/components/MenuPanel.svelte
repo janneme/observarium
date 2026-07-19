@@ -201,7 +201,14 @@
 
       <!-- Section 4: Quizzes -->
       <div class="section-row">
-        <button class="grid-item" on:click={stub} aria-label="Moon quiz">
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('moonquiz')
+            close()
+          }}
+          aria-label="Moon quiz"
+        >
           <div class="icon-wrap">
             <MoonQuizIcon size="42" />
           </div>

@@ -23,6 +23,11 @@ client/.svelte-kit/
 client/.env.local
 client/.env.development.local
 
+# Vite's programmatic build() (used by client/scripts/render_moon.mjs) writes
+# a transpiled copy of vite.config.mjs next to the original when loading it
+# via `configFile`, and doesn't always clean it up.
+client/vite.config.mjs.timestamp-*.mjs
+
 # Terraform state (local backend — keep tfstate out of source control)
 infra/.terraform/
 infra/terraform.tfstate

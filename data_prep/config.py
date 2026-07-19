@@ -69,15 +69,13 @@ GAIA_FILENAME_TEMPLATE: str = "gaia_dr3_m{max_mag:g}_d{min_dec:g}.csv.gz"
 
 #: OpenNGC main catalogue CSV.
 DSO_MAIN_URL: str = (
-    "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master"
-    "/database_files/NGC.csv"
+    "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/NGC.csv"
 )
 DSO_MAIN_FILENAME: str = "openngc_ngc.csv"
 
 #: OpenNGC addendum CSV (non-NGC objects and updates).
 DSO_ADDENDUM_URL: str = (
-    "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master"
-    "/database_files/addendum.csv"
+    "https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/addendum.csv"
 )
 DSO_ADDENDUM_FILENAME: str = "openngc_addendum.csv"
 
@@ -92,8 +90,7 @@ DSO_MAX_MAG: float = round(0.8 * GAIA_DEFAULT_MAX_MAG, 1)
 
 #: Stellarium modern skyculture index with lines, names and B1875 boundaries.
 CONSTELLATIONS_IAU_URL: str = (
-    "https://raw.githubusercontent.com/Stellarium/stellarium/master"
-    "/skycultures/modern/index.json"
+    "https://raw.githubusercontent.com/Stellarium/stellarium/master/skycultures/modern/index.json"
 )
 CONSTELLATIONS_IAU_FILENAME: str = "stellarium_modern_index.json"
 
@@ -135,8 +132,7 @@ MOON_FEATURE_TYPES: tuple[str, ...] = (
 
 #: USGS/IAU Gazetteer Moon nomenclature KMZ with centre points.
 MOON_FEATURES_URL: str = (
-    "https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/"
-    "MOON_nomenclature_center_pts.kmz"
+    "https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/MOON_nomenclature_center_pts.kmz"
 )
 MOON_FEATURES_FILENAME: str = "MOON_nomenclature_center_pts.kmz"
 
@@ -150,6 +146,30 @@ MEAN_MOON_DISTANCE_KM: float = 384_400.0
 #: Circularity threshold for Moon features based on width/height axis ratio.
 #: ratio <= 1.05 is treated as circular.
 MOON_CIRCULAR_TOLERANCE: float = 1.05
+
+#: Moon feature types that are "areas" (seas) rather than point-like
+#: features — mirrors client/src/components/MoonCanvas.svelte's AREA_TYPES.
+#: Only these types are eligible for real LROC outline geometry below;
+#: e.g. crater "Grimaldi" must never pick up the LROC mare-fill patch also
+#: named "Grimaldi" (the dark floor material inside that crater, a
+#: different and much smaller shape than the crater rim itself).
+MOON_AREA_TYPES: frozenset[str] = frozenset({"mare", "oceanus", "lacus", "palus", "sinus"})
+
+#: LROC (Lunar Reconnaissance Orbiter Camera) team's digitized mare boundary
+#: shapefile — real outlines (not bounding boxes), covering named maria,
+#: oceani, lacus and palus between 65°N/S. -180..180 domain, matching this
+#: pipeline's own longitude convention. Public NASA/PDS data.
+#: https://data.lroc.im-ldi.com/lroc/view_rdr/SHAPEFILE_LROC_GLOBAL_MARE
+LROC_MARE_URL: str = (
+    "https://pds.lroc.im-ldi.com/data/LRO-L-LROC-5-RDR-V1.0/LROLRC_2001/"
+    "EXTRAS/SHAPEFILE/LROC_GLOBAL_MARE/LROC_GLOBAL_MARE_180.ZIP"
+)
+LROC_MARE_FILENAME: str = "LROC_GLOBAL_MARE_180.zip"
+
+#: Cap on outline vertices per feature after simplification — keeps
+#: moon_features.json compact and canvas rendering cheap; a schematic map
+#: doesn't need cartographic-grade vertex density.
+MOON_OUTLINE_MAX_POINTS: int = 140
 
 # ---------------------------------------------------------------------------
 # Asteroids (MPC Orbit Database)

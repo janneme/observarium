@@ -1621,15 +1621,71 @@ Technical notes:
 ### Step 40: Moon Quiz
 
 **README refs:** §5.11  
-**Deliverable:** Quiz that highlights Moon features and asks for their name.
+**Deliverable:** Quiz that renders a schematic 2D vector Moon map (from
+`moon_features.json`) and asks the user to name a highlighted feature from 4
+options.
+
+Rendering realistic telescope-view shading near the terminator was
+considered and rejected — it would need a lunar DEM (elevation data we don't
+have and have no source for) plus per-pixel raytraced shadowing, which is a
+small planetary-rendering engine, not a data_prep step. Instead this is a
+deliberately schematic vector diagram (labeled positions/sizes, not true
+crater-rim geometry — the source data doesn't have boundary polygons, only
+`{lat, lon, size}` for round features and a 4-corner `geom` box for elongated
+ones like maria). It teaches feature name/location recognition and "what's
+worth looking at near tonight's terminator," not what a crater's shadow will
+actually look like in the eyepiece. This framing should be visible in the UI
+copy, not just implied.
 
 Technical notes:
 
-- Render the schematic Moon map (from `moon_features.json`, Step 6) as an SVG
-  or canvas element.
-- Highlight a feature by drawing a coloured circle at its `(lat, lon)` mapped
-  to the map's pixel coordinate system.
-- **Local mode:** filter to features within ±30° of the current terminator
-  longitude, computed from `Astronomy.MoonPhase()`.
-- Four option buttons render feature names; correct answer outlined in green
-  (daily mode) or blue (nightly mode — no green allowed, README §2.2a).
+- **Rendering:** Canvas-based, consistent with `SkyCanvas` and reusing its
+  zoom/pan conventions (`FinderPanel`/`LoupePanel`) rather than SVG.
+  Selenographic `(lat, lon)` → apparent-disc projection is a standard
+  orthographic projection anchored at the sub-Earth point, using
+  `astronomy-engine`'s `Libration(date)` (`elat`/`elon` — optical libration
+  in lat/lon is returned directly, no manual libration math needed). Round
+  features render as circles sized from `size`; `geom` features render as a
+  polygon (a fitted ellipse from the 4 corner offsets would look nicer than
+  the raw quad — decide during implementation).
+- **Difficulty** controls the eligible feature pool by apparent size — a
+  client-side threshold on `size` (or the `geom` bounding-box diagonal for
+  elongated features). No data_prep change needed: the existing 599 features
+  (maria down to ~0.01° craters) already span enough range for 3 tiers.
+  Exact thresholds TBD during implementation; roughly: easy = maria + the
+  largest handful of named craters only, medium/hard progressively unlock
+  smaller ones.
+  - **Easy** is always full-disc regardless of scope (see below) — no
+    terminator, no zoom needed, and the Local scope option is hidden/disabled
+    in `QuizSetup` at this difficulty (doesn't apply to "big objects only").
+- **Scope** (Global/Local, the shared `QuizSetup` control used by other
+  quizzes) only meaningfully diverges from medium difficulty upward:
+  - **Global:** always full disc, no terminator crop, any difficulty.
+    Libration is still applied (for a bit of session-to-session variety in
+    apparent feature position/foreshortening) and re-randomized **per
+    question**.
+  - **Local:** terminator-restricted to features actually near the
+    terminator **on the app's currently-selected date/time** — the same
+    `time` value used everywhere else in the app, not a randomly invented
+    one. This is the "prepare for tonight's observation" mode, so the
+    terminator/libration is fixed for the whole quiz session (not
+    re-randomized per question) — the real Moon doesn't move mid-session.
+    Terminator-adjacent features are rendered more prominently (heavier
+    stroke/higher contrast) as a schematic stand-in for "long shadows reveal
+    detail near the terminator" — not simulated shading.
+  - In both scopes, features on the current far/limb side (per whatever
+    libration is in effect that question/session) are excluded from the
+    eligible pool regardless of terminator distance — they're not something
+    the user could plausibly identify edge-on.
+- **Zoom** is required from medium difficulty up, where small craters are
+  sub-pixel at full-disc scale. Initial view auto-centers/zooms on the
+  target's neighbourhood; free pan/zoom from there.
+- Four option buttons render feature names (distractors don't need to be
+  spatially near the target — only the correct feature is highlighted on the
+  map). Correct answer outlined in **blue** (README §2.2a / CLAUDE.md NO
+  GREEN rule).
+
+**Open items to resolve during implementation:** exact size thresholds per
+difficulty tier; exact terminator-proximity and limb-exclusion angular
+cutoffs; whether `geom` features get a fitted-ellipse render or a raw quad
+is acceptable for v1.

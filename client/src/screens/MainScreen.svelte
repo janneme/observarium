@@ -17,6 +17,7 @@
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import VisualRangeSetupScreen from './VisualRangeSetupScreen.svelte'
   import ConstellationQuizScreen from './ConstellationQuizScreen.svelte'
+  import MoonQuizScreen from './MoonQuizScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
   import { getObjectsInArea, migrateLegacyPendingToSyncDirty, getSyncDirtyTotalCount } from '../lib/db.js'
@@ -105,6 +106,7 @@
   let findingPathsListTargetChip = null
   let showVisualRange = false
   let showConstellationQuiz = false
+  let showMoonQuiz = false
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
   let returnToFindingPathsListFromAbout = false
@@ -413,6 +415,11 @@
         e.preventDefault()
         return
       }
+      if (showMoonQuiz) {
+        showMoonQuiz = false
+        e.preventDefault()
+        return
+      }
       if (showFindingPaths) {
         showFindingPaths = false
         findingPathsObject = null
@@ -463,6 +470,7 @@
     if (showFindingPaths) return
     if (showVisualRange) return
     if (showConstellationQuiz) return
+    if (showMoonQuiz) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -726,6 +734,9 @@
     on:constellationquiz={() => {
       showConstellationQuiz = true
     }}
+    on:moonquiz={() => {
+      showMoonQuiz = true
+    }}
   />
 
   {#if showPicker}
@@ -946,6 +957,15 @@
       viewFov={minDimFov}
       on:close={() => {
         showConstellationQuiz = false
+      }}
+    />
+  {/if}
+
+  {#if showMoonQuiz}
+    <MoonQuizScreen
+      time={skyTime}
+      on:close={() => {
+        showMoonQuiz = false
       }}
     />
   {/if}
