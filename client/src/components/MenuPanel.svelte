@@ -215,11 +215,18 @@
           <span class="item-lbl">Moon Quiz</span>
         </button>
 
-        <button class="grid-item" on:click={stub} aria-label="Solar system quiz">
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('starquiz')
+            close()
+          }}
+          aria-label="Star quiz"
+        >
           <div class="icon-wrap">
             <PlanetQuizIcon size="42" />
           </div>
-          <span class="item-lbl">Solar Sys. Quiz</span>
+          <span class="item-lbl">Star Quiz</span>
         </button>
 
         <button

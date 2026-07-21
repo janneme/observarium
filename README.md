@@ -96,26 +96,38 @@ f. Whenever the app is about to contact the server (object data or observation d
 synchronization) and the app does not have a valid token, the user is asked to
 enter their username and password.
 
-g. Before starting of any quiz the user is asked to select between global/local
-quiz (local quiz works only with objects near the center of current view in the
-Main screen) and quiz difficulty (easy/medium/hard) - the higher
-difficulty the less bright objects are included in the quiz. There is no
-score of a quiz — instead the quiz runs until the user has answered every
-question in the quiz correctly at least once. After each incorrect answer in the quiz the
-correct answer is shown. A back button is always available to exit the quiz at any time.
+g. Before starting a quiz the user is shown a setup dialog with a difficulty
+selector (easy/medium/hard) and — for quizzes that support it — a scope
+selector (Global/Local; Local restricts the pool to objects near the centre of
+the current Main-screen view). Quizzes that have no local mode (currently the
+Constellation Quiz) hide the Scope group entirely. Difficulty tightens the
+eligibility filter and, quiz-dependent, also changes what hints or reveals the
+quiz shows after each answer. There is no score of a quiz — instead the quiz
+runs until every question in the pool has been passed. After each incorrect
+answer the correct answer is eventually shown (as the user retries until they
+click it). A Back button is always available to exit the quiz at any time.
 
-In Constellation Quiz, keyboard shortcuts `A`, `B`, `C`, `D` select options 1,
-2, 3, 4.
+Keyboard shortcuts `A`, `B`, `C`, `D` select the four options in the Star Quiz
+and the Constellation Quiz.
 
 A progress indicator is displayed throughout the quiz. It reflects how close
-the user is to completing the quiz: a correct answer increases it, an incorrect
-answer decreases it (it cannot drop below zero). The indicator is calculated as
-a weighted ratio of mastered questions to the total question pool.
+the user is to completing the quiz. The exact formula depends on the quiz:
+
+- **Star Quiz and Moon Quiz** — each question has a mastery score; a correct
+  first-tap adds 0.25, an incorrect first-tap subtracts 0.5 (clamped to ≥ 0).
+  A question is passed once its score reaches 1, and progress is the mean
+  score across the pool.
+- **Constellation Quiz** — each question requires 1 correct first-tap to pass,
+  but the moment it has ever been answered incorrectly its required count
+  becomes 2 (must be answered correctly twice in a row on subsequent
+  presentations, across the pool). Progress is `sum(achieved) / sum(required)`
+  where a wrong first-tap grows only the denominator — so it visibly reduces
+  the progress bar even though no correct answer has been undone.
 
 Quiz state is saved to local storage. If the user exits and later starts a quiz
-of the same type and difficulty, they are presented with the usual global/local
-selection screen plus an additional option: "Continue previous quiz". If the user
-does not choose to continue, the saved state is discarded and a new quiz begins.
+of the same type and difficulty, they are presented with the usual setup screen
+plus an additional option: "Continue previous quiz". If the user does not
+choose to continue, the saved state is discarded and a new quiz begins.
 
 ## 2.3 Storage
 
@@ -272,11 +284,10 @@ The menu has the following items (each one represented by a suitable SVG icon):
 - Search
 - Observations
 - Telescopes
-- Finder scope quiz
+- Moon quiz
+- Star quiz
 - Constellation quiz
 - Deep sky quiz
-- Find planet quiz
-- Moon quiz
 - Update object data
 - Synchronize observation data (when unsynchronized changes exist, shows the count as a badge)
 - About
@@ -380,7 +391,7 @@ When we reach the final step, the position of the target object is marked.
 ### 5.3.2 Record Guide to Find the Object
 
 The button is always rendered (regardless of whether a finding path already exists).
-Clicking it opens the "Object Finding Paths" screen (5.12) in the context of the
+Clicking it opens the "Object Finding Paths" screen (5.13) in the context of the
 currently searched object.
 
 ## 5.4 Search Object
@@ -455,43 +466,105 @@ defined telescopes and eyepieces should be expandable.
 Note: Deletion of an eyepiece or a telescope that is used in an observation
 must be prevented and a warning message should be displayed.
 
-## 5.7 Finder Scope Quiz
+## 5.7 Star Quiz
 
-At the beginning the quiz selects bright named stars. In each step it
-displays star name and renders 4 finder views in a 2x2 matrix, each one
-having a bright star in the center (one of those selected). The user
-must select the finder view that corresponds to the star name. The rotation
-of the view rendered in the finder has to be changed randomly.
+A quiz that highlights one star in a rendered sky fragment and asks the user
+to identify it by name. Before the beginning the quiz selects the pool of
+bright named stars according to the difficulty level (each star is a schema
+star of some constellation — i.e. a star that is connected by that
+constellation's line figure).
 
-Difficulty levels:
+In each question the quiz picks a target star, computes a fixed quiz FOV from
+an anchor constellation's angular span (so zoom stays consistent across
+questions), centres the view on the star's parent constellation and highlights
+the target with an in-canvas marker. Four options are displayed — each showing
+"STAR_NAME (CONSTELLATION_NAME)". If the user answers correctly on the first
+tap, a thumbs-up is drawn on the option; the user then taps the sky (or the
+same option again) to advance to the next question. If the user answers
+incorrectly, a thumbs-down is drawn, the wrong option is struck through, and
+the constellation lines are revealed as a hint; the user retries until they
+find the correct option. Both scopes (Global/Local) are available in the setup
+dialog.
 
-- Easy: stars up to magnitude 2
-- Medium: stars up to magnitude 3
-- Hard: stars up to magnitude 4
+Difficulty levels (brightest-star magnitude cutoffs):
 
-## 5.8 Constellation quiz
-
-Before the beginning of the quiz constellations and constellations stars
-(stars that are connected by the constellation lines) are selected according to
-the difficulty level.
-
-In each step a star from the selected set is chosen and a square sky fragment
-is rendered with fixed quiz FOV (without constellation schemas) centered on the
-target constellation. If needed, the view is recentered so the selected star
-is always visible. The selected star is highlighted and four options
-are displayed — each having a star name and the parent constellation.
-The user is expected to choose the right combination. If the user answers incorrectly,
-along with showing the correct answer the constellation lines are shown.
+- Easy: stars up to magnitude 1.5.
+- Medium: stars up to magnitude 2.5.
+- Hard: stars up to magnitude 4.
 
 The quiz is shown below the main top bar, so the top bar remains visible.
 
-Difficulties:
+## 5.8 Constellation Quiz
 
-- Easy: Only big constellations with bright stars, stars up to magnitude 1.5.
-- Medium: Constellations with one bright star at least, stars up to magnitude 3.
-- Hard: All constellations, stars up to magnitude 4.
+A quiz that renders a fixed-FOV sky fragment centred on one constellation and
+asks the user to identify it by name. Unlike the Star Quiz, no individual star
+is marked — the constellation's IAU boundary is drawn as a solid bold outline,
+and the user must recognise the constellation from its shape, size and stars.
 
-## 5.9 Deep sky quiz
+Rendering rules:
+
+- Fixed FOV `QUIZ_FOV_DEG` (90°), independent of the quizzed constellation's
+  size. The view cannot be zoomed or panned.
+- Random per-question rotation, chosen from an analytically-computed range
+  that guarantees the whole canvas stays within the star catalogue's data
+  region (dec ≥ −35°) and contains the constellation's full IAU boundary.
+- Random per-question visual (limiting) magnitude drawn uniformly from
+  `[max(VISUAL_RANGE_MIN, threshold), VISUAL_RANGE_MAX]` = 3.5 to 5.5, where
+  `threshold` is chosen so ≥ 80 % of the quizzed constellation's schema stars
+  are visible.
+- Four option buttons. Per question, all four buttons randomly show either
+  full constellation names or standard IAU abbreviations (Easy always uses
+  full names).
+
+Constellation eligibility (pool building):
+
+- Easy: constellations with at least one schema star brighter than magnitude
+  2. (Currently 17 constellations.)
+- Medium: constellations with at least one schema star brighter than magnitude
+  3.5. (Currently 33 constellations.)
+- Hard: no brightness filter. (Currently 47 constellations.)
+- All difficulties additionally exclude constellations whose IAU boundary
+  crosses south of dec −35° (the star-catalogue data floor) since no
+  combination of view centre and rotation can then show the full boundary
+  without a missing-data band.
+- The quiz asks up to 20 constellations (`QUIZ_QUESTION_COUNT`) per run, or
+  the entire eligible pool if it has fewer.
+
+Difficulty-specific reveal behaviour after the first tap on an answer button
+(regardless of whether it was correct):
+
+- Easy: other constellations' lines are already drawn from the start; the
+  quizzed constellation's lines are added on reveal.
+- Medium: no lines drawn initially; all constellation lines drawn on reveal.
+- Hard: no lines drawn AND the quizzed constellation's schema stars are
+  hidden from the view; all lines drawn and the previously-hidden stars
+  appear on reveal.
+
+Distractor selection (the three wrong options):
+
+- Easy: three random constellations from the full pool.
+- Medium/Hard: filtered to constellations whose schema angular size differs
+  from the quizzed one by at most a factor of `DISTRACTOR_SIZE_RATIO_MAX` (2.5)
+  AND whose brightest-star magnitude differs by at most
+  `DISTRACTOR_MAG_DELTA_MAX` (1.5). If fewer than three candidates pass, both
+  thresholds are relaxed together (×1.5, repeatedly) until at least three are
+  available.
+
+The Constellation Quiz has no Local scope, so the Scope selector is hidden in
+its setup dialog. Its progress model is the achieved/required-with-doubling
+model described in §2.2g.
+
+## 5.9 Finder Scope Quiz (planned)
+
+Not yet implemented. Envisioned: quiz picks bright named stars, renders four
+Finder views in a 2×2 grid (each centred on a bright candidate at random
+rotation), and asks the user to pick the one that matches the displayed star
+name.
+
+## 5.10 Deep sky quiz (planned)
+
+Not yet implemented (the menu button is currently a stub). Envisioned as
+described below.
 
 At the beginning the quiz selects the deep sky objects used according to
 this guidelines:
@@ -502,21 +575,23 @@ this guidelines:
 
 The quiz combines questions of more types:
 
-### 5.9.1 Finder View
+### 5.10.1 Finder View
 
 Same as the Finder Scope quiz, but for deep sky objects.
 
-### 5.9.2 Image
+### 5.10.2 Image
 
 Renders four deep sky images in a 2x2 matrix and lets the user select the image
 corresponding to the displayed name or catalogue number (here catalogue
 numbers are used only for objects without a nickname).
 
-### 5.9.3 Object types
+### 5.10.3 Object types
 
 Displays an object name and four possible object types.
 
-## 5.10 Find planet quiz
+## 5.11 Find planet quiz (planned)
+
+Not yet implemented (no menu button). Envisioned as described below.
 
 In each step the quiz renders a sky fragment with FIND_PLANET_QUIZ_FOV FOV
 and randomly changing rotation. Then it adds a new point that does not correspond
@@ -531,7 +606,7 @@ Difficulty levels:
 - Medium: Added point is magnitude 2 or brighter
 - Hard: Added point is magnitude 4 or brighter
 
-## 5.11 Moon Quiz
+## 5.12 Moon Quiz
 
 The Moon is rendered as a schematic 2D map (feature positions and
 approximate sizes, not a photorealistic view) and a set of quiz objects
@@ -560,12 +635,12 @@ Difficulty levels:
 
 - Easy: only the Moon's largest, most prominent features (maria and the
   largest named craters); full disc, no terminator, no zoom needed.
-- Medium: adds a wider range of medium-sized craters; terminator restriction
+- Medium: adds a wider range of medium-sized craters or montes; terminator restriction
   available via Local scope.
 - Hard: all eligible named features down to the smallest catalogued size;
   terminator restriction available via Local scope.
 
-## 5.12 Object Finding Paths
+## 5.13 Object Finding Paths
 
 ### Data model
 
@@ -673,7 +748,7 @@ keeps the path internally consistent.
 - A step with a named star as start point: "Step N (STAR_NAME)"
 - The final step (start = target object, no end point): "Step N (TARGET_NAME)"
 
-## 5.13 Update object data
+## 5.14 Update object data
 
 The screen displays date of the last synchronization / check and a
 "Synchronize" button. Before fetching the data the server is asked for a hash
@@ -682,7 +757,7 @@ synchronization is needed. If it is not needed the user is informed. The check
 is done independently for object data and images. If the data are updated,
 the progress bar is displayed during the download like in the Welcome screen.
 
-## 5.14 Synchronize Observation Data
+## 5.15 Synchronize Observation Data
 
 The screen is accessible from the menu at any time. If there are unsynchronized
 changes in local observation data, the menu item shows the count as a badge.
@@ -696,7 +771,7 @@ After pressing "Synchronize", the app:
 
 Operation status is displayed in the screen.
 
-## 5.15 About
+## 5.16 About
 
 The screen consists of:
 
@@ -709,7 +784,7 @@ The screen consists of:
   number of unique observed objects)
 - back button
 
-## 5.16 Object Details
+## 5.17 Object Details
 
 The screen consists of:
 
@@ -751,14 +826,14 @@ The text is entered using the in-app keyboard.
 
 After pressing the "Save" button we are sent to the previous context.
 
-## 5.17 Finding Paths List
+## 5.18 Finding Paths List
 
 A full-screen overlay (menu item "Finding Paths", keyboard shortcut "p", positioned between
 "Observations" and "Telescopes" in the menu).
 
 The screen header shows a back arrow, the title "Finding Paths", and an add icon on the right.
 
-### 5.17.1 Filter bar
+### 5.18.1 Filter bar
 
 Two chip-based filter inputs labelled **target** and **start**:
 
@@ -770,7 +845,7 @@ Two chip-based filter inputs labelled **target** and **start**:
   suggestion list in the other.
 - When both chips are active, the table is filtered by their intersection (AND).
 
-### 5.17.2 Finding paths table
+### 5.18.2 Finding paths table
 
 Columns: **Target** and **Start**.
 
@@ -791,15 +866,15 @@ Start column: **STAR_NAME_OR_CAT_NUMBER** (CONSTELLATION_ABBREVIATION)  OPTIONAL
 - **N steps**: for complete (non-draft) paths, N equals the total number of recorded steps.
 - **Delete icon**: tapping shows a confirmation dialog; on confirm the path is deleted.
   If it was the last path for the object, the target row disappears.
-- Tapping **STAR_NAME_OR_CAT_NUMBER** opens the finding path definition screen (§5.12) for that
+- Tapping **STAR_NAME_OR_CAT_NUMBER** opens the finding path definition screen (§5.13) for that
   target and start star. Back returns to this screen with filters intact.
-- Tapping **TARGET_OBJECT_CAT_NUMBER** opens Object Details (§5.16). Back returns to this screen
+- Tapping **TARGET_OBJECT_CAT_NUMBER** opens Object Details (§5.17). Back returns to this screen
   with filters intact.
 
-### 5.17.3 Adding a new finding path
+### 5.18.3 Adding a new finding path
 
 Tapping the add icon opens a target-selection panel (same SearchPanel component used for
-start-star selection in §5.12, here restricted to objects with catalog numbers). After the user
-picks a target, the app opens the finding path definition screen (§5.12) for that target with
+start-star selection in §5.13, here restricted to objects with catalog numbers). After the user
+picks a target, the app opens the finding path definition screen (§5.13) for that target with
 the start-star selection step shown immediately. Back from that screen returns to this screen
 with filters intact.

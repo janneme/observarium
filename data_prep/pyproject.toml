@@ -11,6 +11,7 @@ dependencies = [
     "boto3>=1.35",
     "httpx[http2]>=0.28.1",
     "pyshp>=3.1.4",
+    "shapely>=2.0",
 ]
 
 [project.optional-dependencies]

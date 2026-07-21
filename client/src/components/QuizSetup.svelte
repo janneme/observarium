@@ -10,6 +10,10 @@
   // is forced back to 'global' — kept generic here (the calling quiz screen
   // decides the actual rule) so other quizzes are unaffected by default.
   export let allowLocal = true
+  // Some quizzes (e.g. the new Constellation Quiz) have no notion of a local
+  // scope at all — hide the whole Scope group in that case rather than showing
+  // a permanently-disabled Local button.
+  export let showScope = true
 
   const dispatch = createEventDispatcher()
   let difficulty = initialDifficulty
@@ -55,18 +59,20 @@
 <div class="quiz-setup" on:pointerdown|stopPropagation>
   <h2>{title}</h2>
 
-  <div class="group">
-    <div class="label">Scope</div>
-    <div class="row">
-      <button class:selected={scope === 'global'} on:click={() => setScope('global')}>Global</button>
-      <button
-        class:selected={scope === 'local'}
-        disabled={!allowLocal}
-        title={allowLocal ? '' : 'Not available at this difficulty'}
-        on:click={() => setScope('local')}>Local</button
-      >
+  {#if showScope}
+    <div class="group">
+      <div class="label">Scope</div>
+      <div class="row">
+        <button class:selected={scope === 'global'} on:click={() => setScope('global')}>Global</button>
+        <button
+          class:selected={scope === 'local'}
+          disabled={!allowLocal}
+          title={allowLocal ? '' : 'Not available at this difficulty'}
+          on:click={() => setScope('local')}>Local</button
+        >
+      </div>
     </div>
-  </div>
+  {/if}
 
   <div class="group">
     <div class="label">Difficulty</div>
@@ -104,7 +110,7 @@
   }
 
   .label {
-    color: rgba(200, 0, 0, 0.9);
+    color: var(--fg);
     font-size: 1.032rem;
     margin-bottom: 0.35rem;
   }

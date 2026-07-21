@@ -4,3 +4,4 @@ skyfield>=1.49
 astropy>=6.1
 requests>=2.32
 pillow>=11.0
+shapely>=2.0

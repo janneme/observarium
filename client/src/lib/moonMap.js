@@ -29,7 +29,6 @@ const TYPE_LABELS = {
   mons: 'Mons',
   lacus: 'Lacus',
   catena: 'Catena',
-  sinus: 'Sinus',
   vallis: 'Vallis',
   palus: 'Palus',
   oceanus: 'Oceanus',
@@ -39,54 +38,78 @@ export function typeLabel(type) {
   return TYPE_LABELS[type] || type
 }
 
-// `geom` is a flat (dLon, dLat) offset list with an even number of values —
-// either a synthetic 4-corner bounding box, or (for features matched
-// against the LROC mare outline dataset) a real N-corner digitized
-// boundary. Either way this is the true bounding-box extent of all of it.
-function geomSizeDeg(geom) {
-  if (!Array.isArray(geom) || geom.length < 8) return 0
-  let minX = Infinity
-  let maxX = -Infinity
-  let minY = Infinity
-  let maxY = -Infinity
-  for (let i = 0; i < geom.length; i += 2) {
-    const x = geom[i]
-    const y = geom[i + 1]
-    if (x < minX) minX = x
-    if (x > maxX) maxX = x
-    if (y < minY) minY = y
-    if (y > maxY) maxY = y
+// `geom` is a list of drawable layers, each a style-tagged path string:
+// "S <STYLE> M<lat>,<lon> L<dlat>,<dlon> ... Z" — the first vertex absolute,
+// every following vertex a delta from the previous one (SVG relative-lineto
+// convention). STYLE tells the client which generic drawing method to use
+// (FILLED: two-pass edge+fill boundary; RAISED: crater-style rim
+// treatment) — chosen pipeline-side from feature type, not re-derived here.
+// See data_prep/moon_features.py's _round_feature / moon_pipeline.md.
+export function parseGeomLayers(geom) {
+  if (!Array.isArray(geom)) return []
+  const layers = []
+  for (const str of geom) {
+    const tokens = String(str).trim().split(/\s+/)
+    if (tokens[0] !== 'S') continue
+    const style = tokens[1]
+    const points = []
+    let lat = 0
+    let lon = 0
+    for (let i = 2; i < tokens.length; i++) {
+      const tok = tokens[i]
+      if (tok === 'Z') break
+      const cmd = tok[0]
+      const [a, b] = tok
+        .slice(1)
+        .split(',')
+        .map(Number)
+      if (cmd === 'M') {
+        lat = a
+        lon = b
+      } else if (cmd === 'L') {
+        lat += a
+        lon += b
+      } else {
+        continue
+      }
+      points.push({ lat, lon })
+    }
+    layers.push({ style, points })
   }
-  return Math.max(maxX - minX, maxY - minY)
+  return layers
 }
 
-// Flattens the raw {type: {name: {lat, lon, size|geom}}} blob (as stored by
-// db.js getMeta('moon_features')) into a flat array.
+// Bounding-box extent (degrees) of a layer's points — used as the
+// feature's apparent size for difficulty filtering and point-feature
+// radius, same role the old flat `size`/`geom` bbox scalar played.
+function layerExtentDeg(points) {
+  let minLat = Infinity
+  let maxLat = -Infinity
+  let minLon = Infinity
+  let maxLon = -Infinity
+  for (const p of points) {
+    if (p.lat < minLat) minLat = p.lat
+    if (p.lat > maxLat) maxLat = p.lat
+    if (p.lon < minLon) minLon = p.lon
+    if (p.lon > maxLon) maxLon = p.lon
+  }
+  return Math.max(maxLat - minLat, maxLon - minLon)
+}
+
+// Flattens the raw {type: {name: {lat, lon, geom}}} blob (as stored by
+// db.js getMeta('moon_features')) into a flat array. `geom` layers are
+// parsed once here (not per canvas frame) since they're pure static data.
 export function flattenMoonFeatures(raw) {
   const list = []
   for (const [type, byName] of Object.entries(raw || {})) {
     for (const [name, rec] of Object.entries(byName || {})) {
       if (!rec || typeof rec.lat !== 'number' || typeof rec.lon !== 'number') continue
-      const sizeDeg = typeof rec.size === 'number' ? rec.size : geomSizeDeg(rec.geom)
-      list.push({ id: `${type}::${name}`, type, name, lat: rec.lat, lon: rec.lon, sizeDeg, geom: rec.geom || null })
+      const layers = parseGeomLayers(rec.geom)
+      const sizeDeg = layers.length ? layerExtentDeg(layers[0].points) : 0
+      list.push({ id: `${type}::${name}`, type, name, lat: rec.lat, lon: rec.lon, sizeDeg, layers })
     }
   }
   return list
-}
-
-// `geom` stores the feature's boundary as a flat list of (dLon, dLat)
-// offset pairs from (feat.lat, feat.lon) — either a synthetic 4-corner
-// bounding box, or a real N-corner outline digitized from the LROC mare
-// boundary dataset (see data_prep/moon_features.py's _round_feature).
-// Resolves those to absolute {lat, lon} corners, or null if the feature
-// only has a circular `size` (see flattenMoonFeatures).
-export function geomCorners(feat) {
-  if (!Array.isArray(feat.geom) || feat.geom.length < 8) return null
-  const corners = []
-  for (let i = 0; i < feat.geom.length; i += 2) {
-    corners.push({ lat: feat.lat + feat.geom[i + 1], lon: feat.lon + feat.geom[i] })
-  }
-  return corners
 }
 
 // Orthographic projection of a selenographic (lat, lon) point onto the
@@ -126,24 +149,6 @@ export function sunLonFromPhase(phaseDeg, subLonDeg) {
   return (((subLonDeg + 180 - phaseDeg) % 360) + 360) % 360
 }
 
-// Solves for the sun's selenographic longitude that places a given object a
-// signed `offsetDeg` from the terminator: positive = that far into the lit
-// side (toward the sub-solar point — larger means flatter, less dramatic
-// lighting), negative = that far into the dark side. The sign also picks
-// which of the two symmetric terminator crossings (east/west of the object)
-// is used — an arbitrary but self-consistent convention (positive = west),
-// since this is a synthesized object-relative view, not a real point in the
-// lunar cycle. Used by render_moon.mjs to preview a specific feature near
-// its own terminator on demand.
-export function terminatorSunLonForObject(latDeg, lonDeg, signedOffsetDeg) {
-  const latRad = latDeg * D2R
-  const offsetRad = Math.abs(signedOffsetDeg) * D2R
-  const ratio = Math.max(-1, Math.min(1, Math.sin(offsetRad) / Math.cos(latRad)))
-  const deltaLonDeg = Math.acos(ratio) / D2R
-  const sign = signedOffsetDeg < 0 ? -1 : 1
-  return lonDeg - sign * deltaLonDeg
-}
-
 // Real "tonight" viewing conditions for Local scope — the actual sub-Earth
 // libration and terminator position for the app's currently-selected date.
 export function realViewingConditions(date) {
@@ -174,15 +179,23 @@ export function meanViewingConditions() {
   return { subLat: 0, subLon: 0, sunLon: null }
 }
 
-// terminatorProminence: 0..1, peaking at the terminator (illumCos == 0) and
-// fading to 0 by TERMINATOR_ABS_COS away from it on the lit side — used to
-// render terminator-adjacent features more prominently (a schematic
-// stand-in for "long shadows reveal detail," not simulated shading).
-export function terminatorProminence(cos) {
-  if (cos <= 0) return 0
-  return Math.max(0, 1 - cos / TERMINATOR_ABS_COS)
-}
-
 export function isNearTerminator(cos) {
   return cos > 0 && cos < TERMINATOR_ABS_COS
+}
+
+// Point features (craters etc.) fade out with distance from the terminator
+// — 1 (fully visible) right at the terminator (illumCos == 0), dropping
+// toward CRATER_FADE_MIN_ALPHA well before the sub-solar point (illumCos ==
+// 1). A schematic stand-in for "long shadows reveal detail near the
+// terminator, washed out under fuller sunlight" — only meaningful when a
+// terminator view is active; MoonCanvas.svelte leaves point features at a
+// fixed alpha otherwise. CRATER_FADE_POWER > 1 makes the drop-off front-
+// loaded (steep near the terminator, tapering as it nears the floor)
+// rather than spread evenly across the whole lit hemisphere.
+export const CRATER_FADE_MIN_ALPHA = 0.12
+const CRATER_FADE_POWER = 3
+
+export function craterFadeAlpha(cos) {
+  const t = Math.max(0, Math.min(1, cos))
+  return CRATER_FADE_MIN_ALPHA + (1 - CRATER_FADE_MIN_ALPHA) * Math.pow(1 - t, CRATER_FADE_POWER)
 }

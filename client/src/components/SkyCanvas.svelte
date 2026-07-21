@@ -43,6 +43,9 @@
   export let targetMarkerColor = 'rgba(120,0,255,0.9)'
   export let lineFallbackByHip = null
   export let constellationLineColorOverride = null
+  export let highlightBoundaryAbbr = null
+  export let lineAbbrsFilter = 'all'
+  export let quizzedConstellationAbbr = null
 
   let canvas
   let W = 0,
@@ -92,6 +95,9 @@
     targetMarkerColor
     lineFallbackByHip
     constellationLineColorOverride
+    highlightBoundaryAbbr
+    lineAbbrsFilter
+    quizzedConstellationAbbr
     dirty = true
   }
 
@@ -832,14 +838,22 @@
   function drawConstellationBoundaries(ctx) {
     if (!constellations) return
     const nightly = currentTheme === 'nightly'
-    ctx.strokeStyle = nightly ? 'rgba(136,0,0,0.45)' : 'rgba(80,100,180,0.45)'
-    ctx.lineWidth = 1.0
-    ctx.setLineDash([3, 6])
+    const highlightOnly = highlightBoundaryAbbr != null
+    if (highlightOnly) {
+      ctx.strokeStyle = nightly ? '#cc0000' : '#cc0000'
+      ctx.lineWidth = 2.5
+      ctx.setLineDash([])
+    } else {
+      ctx.strokeStyle = nightly ? 'rgba(136,0,0,0.45)' : 'rgba(80,100,180,0.45)'
+      ctx.lineWidth = 1.0
+      ctx.setLineDash([3, 6])
+    }
 
     // Subdivide each segment so that when one endpoint is behind the gnomonic
     // projection plane (>90° from view centre), the visible portion still draws.
     const STEPS = 8
-    for (const con of Object.values(constellations)) {
+    for (const [abbr, con] of Object.entries(constellations)) {
+      if (highlightOnly && abbr !== highlightBoundaryAbbr) continue
       for (const seg of con.bounds) {
         const ra1h = seg[0][0],
           dec1 = seg[0][1]
@@ -894,7 +908,9 @@
     ctx.strokeStyle = constellationLineColorOverride || defaultLineColor
     ctx.lineWidth = 1
     ctx.setLineDash([])
-    for (const con of Object.values(constellations)) {
+    for (const [abbr, con] of Object.entries(constellations)) {
+      if (lineAbbrsFilter === 'none') continue
+      if (lineAbbrsFilter === 'exclude-quizzed' && abbr === quizzedConstellationAbbr) continue
       for (const [hip_a, hip_b] of con.lines) {
         const mapPosA = hipMap.get(hip_a)
         const mapPosB = hipMap.get(hip_b)

@@ -525,7 +525,7 @@
     <button class="back-btn" type="button" on:click={handleBack} aria-label="Back">
       <BackIcon size="1.2rem" aria-hidden="true" />
     </button>
-    <span class="title">Constellation Quiz</span>
+    <span class="title">Star Quiz</span>
   </div>
 
   <div class="body">
@@ -533,7 +533,7 @@
       <p class="msg">Loading star index...</p>
     {:else if setupMode}
       <QuizSetup
-        title="Constellation Quiz"
+        title="Star Quiz"
         {hasSaved}
         initialDifficulty={difficulty}
         initialScope={scope}

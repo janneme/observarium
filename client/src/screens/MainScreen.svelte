@@ -16,7 +16,8 @@
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import VisualRangeSetupScreen from './VisualRangeSetupScreen.svelte'
-  import ConstellationQuizScreen from './ConstellationQuizScreen.svelte'
+  import StarQuizScreen from './StarQuizScreen.svelte'
+  import ConstellationIdQuizScreen from './ConstellationIdQuizScreen.svelte'
   import MoonQuizScreen from './MoonQuizScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
@@ -105,7 +106,8 @@
   let showFindingPathsList = false
   let findingPathsListTargetChip = null
   let showVisualRange = false
-  let showConstellationQuiz = false
+  let showStarQuiz = false
+  let showConstellationIdQuiz = false
   let showMoonQuiz = false
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
@@ -410,8 +412,13 @@
         e.preventDefault()
         return
       }
-      if (showConstellationQuiz) {
-        showConstellationQuiz = false
+      if (showStarQuiz) {
+        showStarQuiz = false
+        e.preventDefault()
+        return
+      }
+      if (showConstellationIdQuiz) {
+        showConstellationIdQuiz = false
         e.preventDefault()
         return
       }
@@ -469,7 +476,8 @@
     if (showFindingPathsList) return
     if (showFindingPaths) return
     if (showVisualRange) return
-    if (showConstellationQuiz) return
+    if (showStarQuiz) return
+    if (showConstellationIdQuiz) return
     if (showMoonQuiz) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
@@ -731,8 +739,11 @@
     on:sync={() => {
       openObservationSync()
     }}
+    on:starquiz={() => {
+      showStarQuiz = true
+    }}
     on:constellationquiz={() => {
-      showConstellationQuiz = true
+      showConstellationIdQuiz = true
     }}
     on:moonquiz={() => {
       showMoonQuiz = true
@@ -947,8 +958,8 @@
     />
   {/if}
 
-  {#if showConstellationQuiz}
-    <ConstellationQuizScreen
+  {#if showStarQuiz}
+    <StarQuizScreen
       {lat}
       {lon}
       time={skyTime}
@@ -956,7 +967,18 @@
       viewDec0={dec0}
       viewFov={minDimFov}
       on:close={() => {
-        showConstellationQuiz = false
+        showStarQuiz = false
+      }}
+    />
+  {/if}
+
+  {#if showConstellationIdQuiz}
+    <ConstellationIdQuizScreen
+      {lat}
+      {lon}
+      time={skyTime}
+      on:close={() => {
+        showConstellationIdQuiz = false
       }}
     />
   {/if}

@@ -232,7 +232,7 @@ Implementation notes:
 **Moon features:**
 
 - Source: IAU Gazetteer CSV. Filter: `target = "Moon"`, feature types:
-  `Catena`, `Crater`, `Lacus`, `Mare`, `Mons`, `Oceanus`, `Palus`, `Sinus`,
+  `Catena`, `Crater`, `Lacus`, `Mare`, `Mons`, `Oceanus`, `Palus`,
   `Vallis`. Keep: `name`, `lat`, `lon`, `diam_km`, `feature_type`.
 - Longitude/latitude here are selenographic (Moon surface coordinates) —
   store as-is; the client renders the schematic Moon map directly (no
@@ -1519,16 +1519,22 @@ state persistence and Back button.
 
 Technical notes:
 
-- **Setup modal** (global/local + difficulty) is a reusable `<QuizSetup>`
-  component. If a saved state exists in `localStorage` for this quiz type +
-  difficulty, add a "Continue previous quiz" option.
+- **Setup modal** (Scope Global/Local + difficulty) is a reusable `<QuizSetup>`
+  component. Quizzes that have no local mode pass `showScope={false}` and the
+  Scope group is hidden entirely (currently the Constellation Quiz uses this).
+  Quizzes that support Local scope only at some difficulties can instead pass
+  `allowLocal={…}` — the Scope group stays visible but Local is disabled
+  (Moon Quiz uses this at Easy). If a saved state exists in `localStorage` for
+  this quiz type + difficulty, add a "Continue previous quiz" option.
 - **State persistence:** key = `quiz_{type}_{difficulty}_{global|local}`.
   Value: `{ pool: [objectIds], mastery: {objectId: score}, currentQuestion }`.
   Write to `localStorage` after every answer.
-- **Progress indicator:** `progressPct = sum(min(mastery[id], 1) for id in pool) / pool.length * 100`.
-  On correct answer: `mastery[id] += 0.25` (4 consecutive correct = mastered).
-  On incorrect answer: `mastery[id] = max(0, mastery[id] − 0.5)`.
-  Quiz ends when `progressPct === 100`.
+- **Progress indicator:** the default mastery-based model applies to the Star
+  Quiz and Moon Quiz — `progressPct = sum(min(mastery[id], 1) for id in pool) / pool.length * 100`;
+  on correct first-tap `mastery[id] += 0.25` (4 consecutive correct = mastered),
+  on wrong first-tap `mastery[id] = max(0, mastery[id] − 0.5)`. The
+  Constellation Quiz uses its own achieved/required model (see Step 37b).
+  Quiz ends when every question is passed.
 - **Back button:** always rendered; on press save state to `localStorage` and
   emit quiz close event so `MainScreen` returns to the previous view state.
 
@@ -1562,10 +1568,12 @@ Technical notes:
 
 ---
 
-### Step 37: Constellation Quiz ✅
+### Step 37a: Star Quiz ✅
 
-**README refs:** §5.8  
+**README refs:** §5.7  
 **Deliverable:** Quiz that highlights a star and asks for name + constellation.
+(Formerly named "Constellation Quiz"; renamed to Star Quiz when the true
+Constellation Quiz — Step 37b — was introduced.)
 
 Technical notes:
 
@@ -1577,12 +1585,87 @@ Technical notes:
 
 Implementation notes:
 
-- Implemented in `client/src/screens/ConstellationQuizScreen.svelte` and wired
-  from menu in `client/src/screens/MainScreen.svelte`.
-- Difficulty pools currently use: easy `<= 1.5`, medium `<= 3`, hard `<= 4`.
+- Implemented in `client/src/screens/StarQuizScreen.svelte` and wired from
+  menu in `client/src/screens/MainScreen.svelte` via the `starquiz` event.
+- Difficulty pools currently use: easy `<= 1.5`, medium `<= 2.5`, hard `<= 4`.
 - During reveal phase, constellation line endpoints missing from per-question
   object payload are resolved via fallback HIP-position mapping, so full target
   constellation schemas can still be rendered.
+
+---
+
+### Step 37b: Constellation Quiz ✅
+
+**README refs:** §5.8  
+**Deliverable:** Quiz that renders a constellation with a bold IAU boundary
+outline and asks the user to identify it from four name (or IAU-abbreviation)
+options.
+
+Technical notes:
+
+- Fixed FOV `QUIZ_FOV_DEG = 90°`, no zoom or pan. The rendered view is a
+  square canvas with a random per-question rotation.
+- Random per-question limiting magnitude in `[VISUAL_RANGE_MIN=3.5, VISUAL_RANGE_MAX=5.5]`,
+  constrained so ≥ `SCHEMA_VISIBILITY_MIN_FRACTION` (0.8) of the quizzed
+  constellation's schema stars pass.
+- Rotation is chosen from an analytically-derived valid range that keeps every
+  canvas boundary point (a) within the star catalogue's data region
+  (`dec ≥ EUROPE_MIN_DEC = −35°`) and (b) inside the constellation's IAU
+  boundary extent. The southernmost sky-dec on the canvas boundary is
+  `dec0 − c(R)` where `c(R) = arctan(a / max(|sin R|, |cos R|))` and
+  `a = fovRad / 2`; this gives `c ∈ [arctan(a), arctan(a·√2)] ≈ [38.15°, 48°]`
+  for FOV = 90°. Rotations are drawn by rejection sampling from that range
+  (with a deterministic mid-range fallback if sampling misses).
+- Eligibility filter at pool build time excludes constellations for which no
+  such `(dec0, R)` combination exists — chiefly those whose IAU boundary
+  reaches south of `EUROPE_MIN_DEC` (Sgr, Sco, PsA, Eri, Hya, …).
+- Pool sizes with current data: Easy 17 (schema brightest < 2), Medium 33
+  (< 3.5), Hard 47 (no brightness filter). `QUIZ_QUESTION_COUNT = 20` caps
+  the run.
+- Distractors: Easy = random three from the eligible pool; Medium/Hard =
+  filter by schema-size ratio `≤ DISTRACTOR_SIZE_RATIO_MAX (2.5)` AND
+  brightest-star mag delta `≤ DISTRACTOR_MAG_DELTA_MAX (1.5)`, relaxing both
+  thresholds by ×1.5 up to 6 times if fewer than 3 candidates pass.
+- Difficulty-specific reveal after first tap: Easy = other constellations'
+  lines drawn from the start plus quizzed one on reveal; Medium = all lines
+  drawn on reveal; Hard = quizzed constellation's schema stars hidden until
+  reveal, all lines drawn on reveal.
+- Buttons show full names on Easy; on Medium/Hard the choice between full
+  name vs. IAU abbreviation is randomised per question (same choice for all
+  four buttons within a question).
+
+**Progress model** (Constellation Quiz-specific — different from the shared
+framework):
+
+- Per-question state `{ chain, everWrong }`. `chain` counts consecutive
+  correct first-taps since the last wrong; `everWrong` becomes `true` on any
+  wrong first-tap.
+- `required(state) = state.everWrong ? 2 : 1`. A question is passed when
+  `chain ≥ required`.
+- `progressPct = sum(min(chain, required)) / sum(required) × 100`. A wrong
+  first-tap grows the denominator only, so it visibly reduces the progress
+  bar even though no correct answer has been undone. If a partly-progressed
+  question (`chain = 1` under `required = 2`) is answered wrong again,
+  `chain` resets to 0 — the numerator drops.
+- Next-question selection picks the unpassed question with the lowest score,
+  random tie-break, preferring not to re-ask the just-answered one when other
+  unpassed questions exist (temporal gap).
+
+Implementation notes:
+
+- Implemented in `client/src/screens/ConstellationIdQuizScreen.svelte` and
+  wired from menu in `MainScreen.svelte` via the `constellationquiz` event.
+- Uses `QuizSetup` with `showScope={false}` (this quiz has no Local mode).
+- Uses `quizFramework.js`'s `loadQuizState`/`saveQuizState`/`clearQuizState`
+  for persistence but implements its own scoring/next-question logic — the
+  framework's `applyQuizAnswer` / `computeProgressPct` are bypassed.
+- `SkyCanvas` was extended with three props to support this quiz:
+  `highlightBoundaryAbbr` (draws one boundary bold + solid, red in nightly),
+  `lineAbbrsFilter` (`'all' | 'exclude-quizzed' | 'none'`) and
+  `quizzedConstellationAbbr` (identifies which one to filter).
+- A global `schemaFallbackByHip` (all schema HIPs across all 88 constellations)
+  is passed as `lineFallbackByHip` so lines can still render when an endpoint
+  star is fainter than the random visual-range magnitude.
 
 ---
 
