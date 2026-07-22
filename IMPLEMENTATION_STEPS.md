@@ -333,36 +333,60 @@ Storage backend selection:
 - `STORAGE=s3` stores artifacts in the S3 data bucket (`DATA_BUCKET`).
 - The storage abstraction must be usable from both `data_prep/` and `server/`.
 
-Key namespace (identical across backends):
+Key namespace (identical across backends). Object/star data is bundled
+**per magnitude set** — `data_prep`'s output is auto-detected by scanning for
+`stars_t1.m*.csv` files (one per `--max-mag` run of the star pipeline), and
+each detected magnitude gets its own complete set of artifacts so the client
+can pick which one to download (see Step 30):
 
-- `stars_t1.zip` — T1 star CSV (mag ≤ 9.0), single entry `stars_t1.csv`.
-- `objects.zip` — merged `objects.json` (DSOs, double stars, constellations,
-  solar system, moon features; no star entries).
-- `t2_000.zip`, `t2_001.zip`, … — T2 star chunks (mag > 9.0), one entry per
-  zone named `{zone:04d}.csv`; headerless rows `z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd`.
-- `images.zip` — unchanged; excluded from manifest-driven download.
-- `manifest.json` — describes all payload files (excludes `images.zip`).
+- `stars_t1_mag{N}.zip` — T1 star CSV (mag ≤ 9.0) for magnitude set `N`,
+  single entry `stars_t1.csv`.
+- `objects_mag{N}.zip` — merged `objects.json` for magnitude set `N` (DSOs
+  filtered to that set's magnitude, double stars, constellations, solar
+  system, moon features — moon features are not magnitude-filtered, see
+  `moon_pipeline.md`; no star entries).
+- `t2_000_mag{N}.zip`, `t2_001_mag{N}.zip`, … — T2 star chunks (mag > 9.0)
+  for magnitude set `N`, one entry per zone named `{zone:04d}.csv`;
+  headerless rows `z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd`.
+- `images.zip` — unchanged, not magnitude-tiered; excluded from
+  manifest-driven download.
+- `manifest.json` — describes all payload files across every magnitude set
+  (excludes `images.zip`).
 - `manifest.hash` — hex SHA-256 of `manifest.json`.
 - `observations/{username}.json`.
 
 Technical notes:
 
+- **Magnitude set detection:** `_detect_mags()` globs
+  `data_prep/output/stars_t1.m*.csv` and parses the `N` out of each
+  filename; `make data-upload-local`/`-s3` uploads every detected set unless
+  `MAG=N` is passed (`--mag N` to `data_upload.py`), which uploads only that
+  one set (used to add/refresh a single tier without re-touching the others).
 - **T2 bin-packing:** zones are packed sequentially, accumulating until the
   estimated compressed size (`raw_bytes / 3.0`) exceeds `TARGET_CHUNK_BYTES`
-  (5 MB), then a new chunk starts. Produces `t2_NNN.zip` files of roughly 5 MB
-  each (last chunk smaller).
-- **`manifest.json` format:**
+  (5 MB), then a new chunk starts. Produces `t2_NNN_mag{N}.zip` files of
+  roughly 5 MB each (last chunk smaller), independently per magnitude set.
+- **`manifest.json` format:** a `sets` array, one entry per magnitude:
   ```json
   {
-    "version": "YYYY-MM-DD",
-    "stars_t1": {"filename": "stars_t1.zip", "hash": "sha256:…", "size": 12345},
-    "objects":  {"filename": "objects.zip",  "hash": "sha256:…", "size": 12345},
-    "t2_chunks": [
-      {"filename": "t2_000.zip", "hash": "sha256:…", "size": 12345, "zones": [0,1,…]},
+    "sets": [
+      {
+        "mag": 12,
+        "total_size": 12345,
+        "stats": {"stars_t1": 91862, "variable_t1": 190, "double_t1": 420, "stars_t2": 1300000, "variable_t2": 55},
+        "stars_t1": {"filename": "stars_t1_mag12.zip", "hash": "sha256:…", "size": 12345},
+        "objects":  {"filename": "objects_mag12.zip",  "hash": "sha256:…", "size": 12345},
+        "t2_chunks": [
+          {"filename": "t2_000_mag12.zip", "hash": "sha256:…", "size": 12345, "zones": [0,1,…]},
+          …
+        ]
+      },
       …
     ]
   }
   ```
+  No top-level `version` field — `manifest.hash` (below) is what the client
+  uses to detect any change across the whole manifest.
 - **`manifest.hash`:** plain-text hex SHA-256 of `manifest.json`; used by
   `GET /data-hash` so the client can detect data updates with one small request.
 - Change detection: compare SHA-256 of each local artifact against the
@@ -548,16 +572,24 @@ Technical notes:
 ### Step 13: Lambda — data endpoints ✅
 
 **README refs:** §3.2.1 (read objects, read images), §3.2.2  
-**Deliverable:** `GET /manifest` returns the full manifest with pre-signed
-download URLs; `GET /images-url` returns a pre-signed URL for `images.zip`;
-`GET /data-hash` returns the SHA-256 of `manifest.json`.
+**Deliverable:** `GET /manifest` returns the manifest, optionally with
+pre-signed download URLs for one magnitude set; `GET /images-url` returns a
+pre-signed URL for `images.zip`; `GET /data-hash` returns the SHA-256 of
+`manifest.json`.
 
 Technical notes:
 
-- `GET /manifest` requires a valid Cognito JWT (Step 12). Reads `manifest.json`
-  from the storage backend, then augments each entry (`stars_t1`, `objects`, and
-  every element in `t2_chunks`) with a `url` field pointing to a pre-signed
-  GET URL. Returns the augmented manifest as JSON.
+- `GET /manifest` requires a valid Cognito JWT (Step 12). Reads
+  `manifest.json` from the storage backend. Takes an optional `?mag=N` query
+  parameter:
+  - Omitted — returns the manifest as stored, `sets` entries with no `url`
+    fields (filenames/hashes/sizes/`total_size` only). Cheap; used to list
+    the available magnitude sets in the data-download picker (Steps 17, 30)
+    without presigning every file in every set.
+  - Given — finds the matching entry in `sets` and augments just that one
+    (`stars_t1`, `objects`, and every element in `t2_chunks`) with a `url`
+    field pointing to a pre-signed GET URL; other sets are returned
+    URL-less. Called once the user has picked which magnitude to download.
 - `GET /images-url` requires a valid JWT and returns a pre-signed URL for
   `images.zip` (unchanged from the original design).
 - `GET /data-hash` (no authentication) reads `manifest.hash` from storage and
@@ -731,15 +763,20 @@ Technical notes:
     that modulo arithmetic would otherwise produce at wide FOVs. The same guard
     is present in `_zonesForArea()`.
 - Loading sequence (README §5.1): call `POST /login` → store token in
-  `sessionStorage` → call `GET /manifest` → read `completedChunks` from
-  IDB meta → compute `totalBytes` (sum of `size` for incomplete entries) →
-  fetch and ingest `stars_t1.zip` via `ingestT1` (`storeTier1Blob`) →
-  fetch and ingest `objects.zip` via `ingestObjects` (`bulkPutObjects`, `setMeta`
-  for constellations/solar_system/moon_features) → for each `t2_chunks` entry
-  not already completed: fetch and ingest `t2_NNN.zip` via `ingestChunk`
-  (`bulkPutZoneT2Blobs`, `markChunkComplete`) → call `storeManifest` to persist
-  manifest sans URLs → fetch images via `GET /images-url` → call
-  `GET /observations` → insert into `observations` store.
+  `sessionStorage` → call `GET /manifest` (no `mag`) to list `sets` and show
+  the magnitude picker (mag + `total_size` per option, keyboard `1`-`9`
+  shortcuts) → user picks a set → call `GET /manifest?mag=N` for that set's
+  pre-signed URLs → read `completedChunks` from IDB meta → compute
+  `totalBytes` (sum of `size` for incomplete entries in the chosen set) →
+  fetch and ingest `stars_t1_mag{N}.zip` via `ingestT1` (`storeTier1Blob`) →
+  fetch and ingest `objects_mag{N}.zip` via `ingestObjects` (`bulkPutObjects`,
+  `setMeta` for constellations/solar_system/moon_features) → for each
+  `t2_chunks` entry not already completed: fetch and ingest
+  `t2_NNN_mag{N}.zip` via `ingestChunk` (`bulkPutZoneT2Blobs`,
+  `markChunkComplete`) → call `storeManifest` to persist the chosen set (sans
+  URLs) and remember `N` (`localStorage.selectedMag`) → fetch images via
+  `GET /images-url` → call `GET /observations` → insert into `observations`
+  store.
 - Resume support: `completedChunks` (IDB meta key) tracks finished chunk
   filenames; already-completed chunks are skipped on reload.
 - Progress accuracy: `totalBytes` is known before any download starts (sum of
@@ -1136,7 +1173,7 @@ Technical notes:
 
 ### Step 25: Object Details screen ✅
 
-**README refs:** §5.16, §2.1 fields 1–11  
+**README refs:** §5.17, §2.1 fields 1–11  
 **Deliverable:** Object Details screen with all fields, Observed button state,
 phase display and rise/transit/set times.
 
@@ -1198,7 +1235,7 @@ Technical notes:
 
 ### Step 28: Observation form + Observed button ✅
 
-**README refs:** §5.16 (Observed button and form)  
+**README refs:** §5.17 (Observed button and form)  
 **Deliverable:** The Observed button on Object Details opens a form; saving
 creates/updates today's observation record in IndexedDB and marks the change
 as pending sync.
@@ -1236,31 +1273,54 @@ Technical notes:
 
 ### Step 30: Update object data screen ✅
 
-**README refs:** §5.13  
-**Deliverable:** Hash-check screen that fetches fresh data only when needed.
+**README refs:** §5.14  
+**Deliverable:** Magnitude-set picker + hash-check screen that fetches fresh
+data only when needed.
 
 Technical notes:
 
-- Call `GET /data-hash` — returns `{"hash": "<hex-sha256>"}` of the current
-  `manifest.json`. Compare against the `dataManifest.version` (or recompute
-  from stored manifest bytes) to determine whether any data changed.
-- If the hash differs, call `GET /manifest` and compare each entry's `hash`
-  field (`"sha256:…"`) against the corresponding entry in the stored manifest
-  (`getStoredManifest()`). Only re-download entries whose hash changed.
-  - `stars_t1` or `objects` changed → re-ingest that single ZIP.
-  - Individual `t2_chunks` entries changed → `clearCompletedChunks()` for
-    those filenames, then re-ingest those chunks only.
-- Show separate status per data type ("Object data: up to date",
-  "Star data: update available", "N of M chunks updated").
-- Re-download uses the same `ingestT1`, `ingestObjects`, `ingestChunk` helpers
-  as the Welcome Screen (Step 17); call `storeManifest` after all re-downloads
-  complete.
+- Implemented in `client/src/components/DataSyncPanel.svelte`, opened from
+  `MainScreen.svelte` via the `u` keyboard shortcut. Step machine: `login`
+  (if the token is missing/near expiry) → `picker` → `updating` → `done` /
+  `error`.
+- **Picker step:** calls `GET /manifest` with no `mag` (cheap — no
+  presigning, see Step 13) to list `manifest.sets`; renders one row per
+  magnitude set ("Up to magnitude N (size)"), selectable by click or
+  keyboard `1`-`9`. If a magnitude was previously synced
+  (`localStorage.selectedMag`) and its sync date is known
+  (`getMeta('syncDate')`), the picker label shows "current data are up to
+  magnitude N, synchronized on DATE".
+- **On picking a magnitude `N`:** compares `N` against
+  `localStorage.selectedMag` (the last magnitude actually synced) to decide
+  which path to take:
+  - **Different magnitude (or none synced yet):** treated as a full
+    re-download — `clearAllStarAndObjectData()` first, then `runSync({mag:
+    N, ...})`, the exact same function the Welcome Screen (Step 17) uses for
+    the first-run download.
+  - **Same magnitude:** `runUpdateSync({mag: N, ...})` — an incremental
+    path: checks `GET /data-hash` and `GET /images-hash` against the locally
+    stored hashes first; if both are already current, returns immediately
+    with `{upToDate: true}` and no network transfer beyond the two hash
+    checks. Otherwise re-fetches `GET /manifest?mag=N` for presigned URLs and
+    re-downloads only the `stars_t1`/`objects`/individual `t2_chunks`
+    entries whose hash differs from the stored manifest
+    (`getStoredManifest()`), refreshing images only if the images hash
+    changed. Never touches observations — that's the separate Synchronize
+    Observation Data screen (Step 31).
+- **Progress UI:** three phase rows — "Objects" and "Images" each show a
+  progress bar (or "Up to date" when the incremental path skipped them
+  entirely), "User data" is always shown as "Up to date" since this screen
+  never writes observations.
+- On success, `localStorage.selectedMag` is set to `N` and a `synced` event
+  is dispatched so `MainScreen` can react (e.g. refresh any cached views).
+- Error handling: an auth-expired error clears the session token and routes
+  back to the login step; other errors show the message with Retry/Close.
 
 ---
 
 ### Step 31: Synchronize observations screen ✅
 
-**README refs:** §5.14  
+**README refs:** §5.15  
 **Deliverable:** One-shot observation sync screen.
 
 Technical notes:
@@ -1279,7 +1339,7 @@ Technical notes:
 
 ### Step 32: About screen + full `make deploy` ✅
 
-**README refs:** §5.15, §3.1.4  
+**README refs:** §5.16, §3.1.4  
 **Deliverable:** About screen populated with live stats; `make deploy` runs the
 full four-step sequence end-to-end.
 
@@ -1302,7 +1362,7 @@ Technical notes:
 
 ### Step 33: Object Finding Paths screen (define & edit) ✅
 
-**README refs:** §5.12  
+**README refs:** §5.13  
 **Deliverable:** Full path recording UI with fixed Finder View, expandable step
 list and all editing buttons.
 
@@ -1344,9 +1404,9 @@ Technical notes:
 
 ---
 
-### Step 34b: Finding Paths List Screen (5.17) ✅
+### Step 34b: Finding Paths List Screen (5.18) ✅
 
-**README refs:** §5.17, §5.17.1, §5.17.2, §5.17.3  
+**README refs:** §5.18, §5.18.1, §5.18.2, §5.18.3  
 **Deliverable:** New full-screen overlay accessible from the menu ("p") between
 "Observations" and "Telescopes", showing a filterable table of all defined finding
 paths with add, view, and delete actions.
@@ -1527,14 +1587,15 @@ Technical notes:
   (Moon Quiz uses this at Easy). If a saved state exists in `localStorage` for
   this quiz type + difficulty, add a "Continue previous quiz" option.
 - **State persistence:** key = `quiz_{type}_{difficulty}_{global|local}`.
-  Value: `{ pool: [objectIds], mastery: {objectId: score}, currentQuestion }`.
+  Value: `{ pool: [objectIds], mastery: {objectId: {chain, everWrong}}, currentQuestion }`.
   Write to `localStorage` after every answer.
-- **Progress indicator:** the default mastery-based model applies to the Star
-  Quiz and Moon Quiz — `progressPct = sum(min(mastery[id], 1) for id in pool) / pool.length * 100`;
-  on correct first-tap `mastery[id] += 0.25` (4 consecutive correct = mastered),
-  on wrong first-tap `mastery[id] = max(0, mastery[id] − 0.5)`. The
-  Constellation Quiz uses its own achieved/required model (see Step 37b).
-  Quiz ends when every question is passed.
+- **Progress indicator:** achieved/required, chain-based model — see Step
+  37b's "Progress model" for the exact formula (`required = everWrong ? 3 :
+  2`). All three quizzes (Star, Constellation, Moon) use this same formula;
+  Star Quiz gets it from the shared `quizFramework.js` implementation below,
+  while Constellation and Moon each implement their own local copy (see
+  Steps 37b and 40) rather than depending on the shared module. Quiz ends
+  when every question is passed.
 - **Back button:** always rendered; on press save state to `localStorage` and
   emit quiz close event so `MainScreen` returns to the previous view state.
 
@@ -1542,7 +1603,13 @@ Implementation notes:
 
 - Implemented shared logic in `client/src/lib/quizFramework.js`:
   `loadQuizState`, `saveQuizState`, `clearQuizState`, `applyQuizAnswer`,
-  `computeProgressPct`, and weighted next-question selection.
+  `computeProgressPct`, and weighted next-question selection. Originally a
+  continuous +0.25/−0.5 mastery score; later rewritten in place to the
+  chain/everWrong model (a single lucky guess shouldn't pass a question the
+  user doesn't know) — the exported function names and their `(pool,
+  mastery)`/`(mastery, id, correct)` signatures didn't change, only what
+  `mastery[id]` holds internally (an object instead of a number), so this
+  was a drop-in change for Star Quiz.
 - Implemented reusable UI in `client/src/components/QuizSetup.svelte` and
   `client/src/components/QuizProgress.svelte`.
 - Setup choices (`scope`, `difficulty`) are persisted separately in
@@ -1634,19 +1701,24 @@ Technical notes:
   name vs. IAU abbreviation is randomised per question (same choice for all
   four buttons within a question).
 
-**Progress model** (Constellation Quiz-specific — different from the shared
-framework):
+**Progress model** (same chain/everWrong formula as Step 35's shared default
+and Step 40's Moon Quiz, but implemented as its own local copy here rather
+than depending on `quizFramework.js` — see that step's Implementation notes
+for why):
 
 - Per-question state `{ chain, everWrong }`. `chain` counts consecutive
   correct first-taps since the last wrong; `everWrong` becomes `true` on any
   wrong first-tap.
-- `required(state) = state.everWrong ? 2 : 1`. A question is passed when
-  `chain ≥ required`.
+- `required(state) = state.everWrong ? 3 : 2` — two correct first-taps in a
+  row to pass normally; three in a row once the question has ever been
+  answered wrong (a single lucky guess shouldn't pass a question the user
+  doesn't actually know). A question is passed when `chain ≥ required`.
 - `progressPct = sum(min(chain, required)) / sum(required) × 100`. A wrong
   first-tap grows the denominator only, so it visibly reduces the progress
   bar even though no correct answer has been undone. If a partly-progressed
   question (`chain = 1` under `required = 2`) is answered wrong again,
-  `chain` resets to 0 — the numerator drops.
+  `chain` resets to 0 and `required` rises to 3 — both the numerator drops
+  and the bar to reach 100% gets longer.
 - Next-question selection picks the unpassed question with the lowest score,
   random tie-break, preferring not to re-ask the just-answered one when other
   unpassed questions exist (temporal gap).
@@ -1728,47 +1800,169 @@ Technical notes:
   orthographic projection anchored at the sub-Earth point, using
   `astronomy-engine`'s `Libration(date)` (`elat`/`elon` — optical libration
   in lat/lon is returned directly, no manual libration math needed). Round
-  features render as circles sized from `size`; `geom` features render as a
-  polygon (a fitted ellipse from the 4 corner offsets would look nicer than
-  the raw quad — decide during implementation).
-- **Difficulty** controls the eligible feature pool by apparent size — a
-  client-side threshold on `size` (or the `geom` bounding-box diagonal for
-  elongated features). No data_prep change needed: the existing 599 features
-  (maria down to ~0.01° craters) already span enough range for 3 tiers.
-  Exact thresholds TBD during implementation; roughly: easy = maria + the
-  largest handful of named craters only, medium/hard progressively unlock
-  smaller ones.
-  - **Easy** is always full-disc regardless of scope (see below) — no
-    terminator, no zoom needed, and the Local scope option is hidden/disabled
-    in `QuizSetup` at this difficulty (doesn't apply to "big objects only").
-- **Scope** (Global/Local, the shared `QuizSetup` control used by other
-  quizzes) only meaningfully diverges from medium difficulty upward:
-  - **Global:** always full disc, no terminator crop, any difficulty.
-    Libration is still applied (for a bit of session-to-session variety in
-    apparent feature position/foreshortening) and re-randomized **per
-    question**.
-  - **Local:** terminator-restricted to features actually near the
-    terminator **on the app's currently-selected date/time** — the same
-    `time` value used everywhere else in the app, not a randomly invented
-    one. This is the "prepare for tonight's observation" mode, so the
-    terminator/libration is fixed for the whole quiz session (not
-    re-randomized per question) — the real Moon doesn't move mid-session.
-    Terminator-adjacent features are rendered more prominently (heavier
-    stroke/higher contrast) as a schematic stand-in for "long shadows reveal
-    detail near the terminator" — not simulated shading.
-  - In both scopes, features on the current far/limb side (per whatever
-    libration is in effect that question/session) are excluded from the
-    eligible pool regardless of terminator distance — they're not something
-    the user could plausibly identify edge-on.
-- **Zoom** is required from medium difficulty up, where small craters are
-  sub-pixel at full-disc scale. Initial view auto-centers/zooms on the
-  target's neighbourhood; free pan/zoom from there.
-- Four option buttons render feature names (distractors don't need to be
-  spatially near the target — only the correct feature is highlighted on the
-  map). Correct answer outlined in **blue** (README §2.2a / CLAUDE.md NO
-  GREEN rule).
+  features render as circles; `geom` features render as a polygon (a fitted
+  ellipse from the 4 corner offsets would look nicer than the raw quad —
+  decide during implementation).
+- **Sizing metric:** all pool-construction and distractor logic below uses
+  `sizeDeg` exactly as already computed by `flattenMoonFeatures` in
+  `moonMap.js` (bounding-box extent of the feature's first `geom` layer, in
+  degrees) — the same metric already used by `MoonCanvas`'s zoom-visibility
+  gate and crater draw-order sort. No new size metric is introduced.
+- **Type buckets** used throughout this step (already established groupings
+  from the data_prep pipeline, `MOON_AREA_TYPES` / `MOON_RIDGE_LIKE_TYPES` in
+  `config.py`/`moon_features.py`):
+  - **crater** — type `crater` only.
+  - **sea** — `mare`, `oceanus`, `lacus`, `palus` (47 features total).
+  - **ridge-like** — `mons`, `catena`, `vallis` (241 features total).
 
-**Open items to resolve during implementation:** exact size thresholds per
-difficulty tier; exact terminator-proximity and limb-exclusion angular
-cutoffs; whether `geom` features get a fitted-ellipse render or a raw quad
-is acceptable for v1.
+### Pool construction (Global scope)
+
+Pools are built by ranking each bucket by `sizeDeg` descending and taking a
+fixed top-N slice — not an absolute degree threshold — so the counts below
+are exact, not approximate, and self-adjust if the underlying catalogue
+changes. Counts are named constants (e.g. in a new `client/src/lib/moonQuiz.js`)
+so they stay easy to retune:
+
+| Difficulty | Pool |
+| --- | --- |
+| Easy | top 5 craters ∪ top 15 sea (20 total) |
+| Medium | top 20 craters ∪ top 30 of (sea ∪ ridge-like, ranked together) (50 total) |
+| Hard | top 500 overall, all types ranked together, no per-type split |
+
+With current data this gives Hard a natural mix of ~359 craters + ~141
+other (craters vastly outnumber other types but are individually much
+smaller, so a flat top-500 ranking doesn't collapse to craters-only). Because
+sea/ridge-like features are consistently much larger than even the biggest
+craters, Easy ⊆ Medium ⊆ Hard holds empirically with the current catalogue
+(verified: Medium's 20th-crater and 30th-other are both far above Hard's
+500th-place cutoff) — this nesting is a consequence of the data, not
+enforced by construction, and should be spot-checked again if the catalogue
+changes substantially (e.g. a much larger crater-size floor change).
+
+- **Easy** is always full-disc, Global scope only — no terminator, no zoom
+  needed, and the Local scope option stays hidden/disabled in `QuizSetup` at
+  this difficulty (unchanged from the original design: "big objects only"
+  doesn't have a meaningful local/tonight variant).
+
+### Pool construction (Local scope — Medium/Hard only)
+
+Local scope starts from the **Global Hard pool** (the 500-object set above)
+and narrows it, rather than being built independently:
+
+1. Filter the Global Hard pool to features near the terminator **on the
+   app's currently-selected date/time** (the same `time` value used
+   elsewhere in the app), using the existing `isNearTerminator`/
+   `TERMINATOR_ABS_COS` helper in `moonMap.js`. Fixed for the whole quiz
+   session (not re-randomized per question) — the real Moon doesn't move
+   mid-session.
+2. If that filtered set is too small to be a workable quiz pool, widen the
+   terminator-proximity threshold in steps (relax `TERMINATOR_ABS_COS`
+   toward 0, i.e. accept a wider angular band around the terminator) up to a
+   bounded number of retries, re-checking pool size after each step —
+   mirroring the existing progressive-relaxation pattern already used by the
+   Constellation Quiz's distractor selection (Step 37b: relax by ×1.5 up to
+   6 times). This keeps every included object still meaningfully
+   "near-terminator," just under a wider definition, rather than padding
+   with unrelated far-from-terminator features. Exact minimum viable pool
+   size and relaxation step/retry count: TBD during implementation.
+3. From the (possibly widened) terminator-filtered set, take the top N% by
+   `sizeDeg`: **Medium = 30%**, **Hard = 100%** (Hard uses the entire
+   filtered set, no further size cut). No Local Easy tier (see above).
+
+In both Global and Local scope, features on the current far/limb side (per
+whatever libration is in effect that question/session) are excluded from the
+eligible pool regardless of terminator distance — not something the user
+could plausibly identify edge-on.
+
+### Rendered map contents
+
+The map rendered during the quiz always shows the **Hard-tier pool for the
+current scope**, independent of which difficulty is actually being played:
+
+- Global scope, any difficulty → renders the Global Hard pool (fixed 500).
+- Local scope (Medium/Hard) → renders the (possibly-widened)
+  terminator-filtered set from step 2 above — i.e. Local Hard's own pool —
+  regardless of whether Medium or Hard is being played.
+
+Only features belonging to the **current difficulty's** pool are eligible as
+quiz targets (highlight/correct answer) or distractors; the rest of the
+rendered Hard-tier set is visual context/red herring only. This is a
+deliberate simplification (richer, consistent map regardless of difficulty;
+only the question pool shrinks) and pairs with the next point:
+
+- **Zoom in/out never changes which features are rendered** during the quiz
+  — no progressive reveal of smaller detail on zoom-in, unlike the general
+  Moon-map zoom-visibility behaviour added earlier (`MIN_VISIBLE_RADIUS_PX`
+  gate in `MoonCanvas.svelte`/`render_moon.py`). Implementation: add a
+  boolean prop to `MoonCanvas.svelte` (e.g. `fixedFeatureSet`) that bypasses
+  that gate; `MoonQuizScreen` passes it `true`. Default (prop absent)
+  preserves today's zoom-filtering behaviour, so a future non-quiz
+  Moon-browsing screen (currently `MoonCanvas` has no other consumer) keeps
+  it. `render_moon.py` is a general preview tool, not quiz-aware, so it does
+  not need this prop.
+- **Zoom is still required** from Medium difficulty up (small craters are
+  sub-pixel at full-disc scale) — only the rendered *set* is fixed, pan/zoom
+  of the fixed set is unaffected. Initial view auto-centers/zooms on the
+  target's neighbourhood; free pan/zoom from there.
+- **Easy is locked to a fixed 100% zoom** — `MoonCanvas` gets `forceScale={1}`
+  whenever `difficulty === 'easy'`, overriding the auto-computed
+  per-question zoom entirely. Without this, the auto-zoom formula (based on
+  the target's own `sizeDeg`) still zoomed in further than full-disc for the
+  smaller members of Easy's "top 15 sea" bucket (e.g. Mare Anguis, one of
+  the smallest maria) — full-disc-always is the actual product requirement
+  for Easy, not just "usually full-disc."
+- Terminator-adjacent features are rendered more prominently (heavier
+  stroke/higher contrast) in Local scope, as a schematic stand-in for "long
+  shadows reveal detail near the terminator" — not simulated shading.
+- No manual "recenter" control — `MoonCanvas` already auto-centers/zooms on
+  the highlighted target reactively whenever `highlightId` changes (see
+  `centerOnHighlight()`), so a separate "Center" button was redundant and
+  has been removed.
+
+### Distractors
+
+- Distractors must share the target's **broad type bucket** (crater / sea /
+  ridge-like, as defined above) — e.g. a `vallis` question may draw a `mons`
+  or `catena` distractor (or another `vallis`), never a crater or sea. This
+  applies even where a bucket was merged with another for pool-*counting*
+  purposes only (Medium's "30 other" merges sea+ridge-like just to size the
+  pool; distractor matching still respects the 3 sub-buckets independently).
+- Drawn from the same difficulty+scope's eligible **question** pool first
+  (matching the existing Finder Scope Quiz pattern, Step 36: "distractors
+  are selected from the same difficulty-level pool"). Distractors don't need
+  to be spatially near the target — only the correct feature is highlighted
+  on the map.
+- Fallback if too few same-bucket candidates exist in the question pool
+  (expected to be rare — even Easy's sea bucket has 15 candidates, comfortably
+  enough for 3 distractors): widen to the same bucket within the *rendered*
+  Hard-tier pool for that scope before falling back further.
+- Correct answer outlined in **blue** (README §2.2a / CLAUDE.md NO GREEN
+  rule).
+
+### Question-set size and progress model
+
+- Per-session question count sampled from the difficulty's question pool
+  (`sampleIds`, capped at the pool size if smaller): **Easy 15, Medium 30,
+  Hard 50** — named constants (`QUIZ_QUESTION_COUNTS` in
+  `MoonQuizScreen.svelte`), analogous to the Constellation Quiz's
+  `QUIZ_QUESTION_COUNT`.
+- Same chain/everWrong progress model as Step 35's shared default and Step
+  37b's Constellation Quiz: `required(state) = state.everWrong ? 3 : 2` — a
+  question needs 2 correct first-taps in a row to pass, or 3 in a row once
+  it's ever been answered wrong (so a single lucky guess doesn't pass a
+  question the user doesn't actually know). Implemented as its own local
+  copy in `MoonQuizScreen.svelte` rather than depending on
+  `quizFramework.js`, mirroring Constellation Quiz's approach — see Step
+  35's Implementation notes for why the shared module wasn't reused here.
+- On full completion (`allPassed`), `currentQuestion` is set to `null` and
+  the map/answers are replaced with a "Quiz complete" message, matching the
+  Constellation Quiz's completion UI rather than freezing on the last
+  question.
+
+**Resolved implementation choices** (previously open items): Local-scope
+minimum viable pool size before widening the terminator threshold —
+`LOCAL_MIN_POOL_SIZE = 20`; relaxation factor/retry count —
+`TERMINATOR_RELAX_FACTOR = 1.5`, `TERMINATOR_RELAX_MAX_STEPS = 6` (all in
+`moonQuizPools.js`, mirroring the Constellation Quiz's own ×1.5/6-retry
+distractor relaxation). `geom` features render as their raw polygon (no
+fitted-ellipse smoothing) — acceptable for v1 as originally flagged.

@@ -1,11 +1,12 @@
 <script>
   import { onMount, afterUpdate } from 'svelte'
   import { theme } from '../stores/theme.js'
-  import { projectPoint, illumCos, craterFadeAlpha, LIMB_COS_CUTOFF } from '../lib/moonMap.js'
+  import { projectPoint, illumCos, craterFadeAlpha, LIMB_COS_CUTOFF, SEA_TYPES } from '../lib/moonMap.js'
 
-  // All named features (unfiltered) — the map always shows everything
-  // currently visible, not just the quiz-eligible pool; only `highlightId`
-  // is special-cased.
+  // The features to draw — normally everything currently visible (a future
+  // general Moon-browsing screen); the Moon Quiz instead passes a
+  // pre-computed fixed pool (see `fixedFeatureSet`). Only `highlightId` is
+  // special-cased.
   export let features = []
   export let subLat = 0
   export let subLon = 0
@@ -16,6 +17,13 @@
   // units as the internal `scale` (1 = full disc fills the view, 2 = half
   // the disc's diameter spans the view, etc.).
   export let forceScale = null
+  // When true, `features` is treated as a fixed, pre-computed set (e.g. the
+  // Moon Quiz's Hard-tier pool for the current scope): the zoom-based
+  // visibility gate (MIN_VISIBLE_RADIUS_PX below) is skipped, so panning/
+  // zooming never adds or removes which features are drawn — only their
+  // on-screen size changes. Default false preserves the general-purpose
+  // "detail appears as you zoom in" behaviour.
+  export let fixedFeatureSet = false
 
   let canvasEl
   let wrapEl
@@ -52,13 +60,13 @@
   const CRATER_FLOOR_BAND_END = 0.8
   const CRATER_RIM_BAND_START = 0.95
 
-  // Which real "seas" (mare/oceanus/palus/lacus) a point feature (crater
-  // etc.) overlaps decides its floor colour (see the pointFeats loop
-  // below) — a semantic distinction, not a drawing-style one, so it stays a
-  // small type set here even though FILLED/RAISED (from each feature's own
-  // `geom` layer — see moonMap.js's parseGeomLayers) now drives the actual
-  // drawing method for every feature type, mons included.
-  const SEA_TYPES = new Set(['mare', 'oceanus', 'palus', 'lacus'])
+  // Which real "seas" a point feature (crater etc.) overlaps decides its
+  // floor colour (see the pointFeats loop below) — a semantic distinction,
+  // not a drawing-style one, so it's still checked here even though
+  // FILLED/RAISED (from each feature's own `geom` layer — see moonMap.js's
+  // parseGeomLayers) now drives the actual drawing method for every feature
+  // type, mons included. SEA_TYPES itself is imported from moonMap.js so
+  // this stays in sync with the Moon Quiz's own type-bucket definition.
   // mare/oceanus/palus/lacus/mons (FILLED style) are real large regions (a
   // big blob is the *correct* depiction, mirroring how they read on real
   // lunar maps); point-like features (crater/catena/vallis, RAISED style)
@@ -459,20 +467,20 @@
     // NO-GREEN rule only applies to nightly); nightly stays within the red
     // channel only (green/blue == 00, dark-adaptation) and gets the same
     // brighter/darker relationships purely from R's magnitude.
-    const highlandsColor = nightly ? '#180000' : '#989898'
+    const highlandsColor = nightly ? '#900000' : '#989898'
     // Solid, fully opaque — features overlap a lot (adjacent seas, clustered
     // craters), and any alpha baked into the fill/stroke colour themselves
     // (as opposed to ctx.globalAlpha, which is reset per-shape and doesn't
     // accumulate) stacks at the overlap into a visibly different shade.
-    const mareColor = nightly ? '#0a0000' : '#4a4a4a'
-    const mareEdgeColor = nightly ? '#050000' : '#303030'
-    const monsColor = nightly ? '#280000' : '#b8b8b8'
-    const monsEdgeColor = nightly ? '#1e0000' : '#787878'
+    const mareColor = nightly ? '#400000' : '#4a4a4a'
+    const mareEdgeColor = nightly ? '#200000' : '#303030'
+    const monsColor = nightly ? '#b00000' : '#b8b8b8'
+    const monsEdgeColor = nightly ? '#900000' : '#787878'
     // Catena (crater chains) and vallis (valleys/rilles) are linear
     // depressions, not raised terrain like mons — tonally closer to maria
     // than to highlands, but not as dark as a full sea.
-    const valleyColor = nightly ? '#140000' : '#686868'
-    const valleyEdgeColor = nightly ? '#0d0000' : '#484848'
+    const valleyColor = nightly ? '#700000' : '#686868'
+    const valleyEdgeColor = nightly ? '#500000' : '#484848'
     // The quiz highlight marker is a UI affordance, not part of the lunar
     // scene, so it keeps a colour that stands out against the grayscale
     // terrain rather than going monochrome itself.
@@ -550,7 +558,9 @@
         // Zoom-based visibility filter (see MIN_VISIBLE_RADIUS_PX): skip
         // drawing this crater entirely once it's too small to matter at the
         // current zoom, rather than always flooring it to a visible dot.
-        if (!isHighlight && cappedNorm * r < MIN_VISIBLE_RADIUS_PX) continue
+        // Skipped entirely when `fixedFeatureSet` is set (Moon Quiz) — the
+        // rendered set must not change with zoom there.
+        if (!isHighlight && !fixedFeatureSet && cappedNorm * r < MIN_VISIBLE_RADIUS_PX) continue
 
         // Point features (craters etc.) are drawn as an ellipse, not a
         // circle — orthographic projection foreshortens a circular surface

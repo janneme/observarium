@@ -50,8 +50,11 @@
   //   chain      = consecutive first-attempt-correct answers since the last
   //                incorrect first attempt (or since the quiz began).
   //   everWrong  = whether this question has ever been answered incorrectly
-  //                on the first attempt; once true, needs `chain >= 2` to pass.
-  // A never-wrong question needs `chain >= 1` (one correct attempt) to pass.
+  //                on the first attempt; once true, needs `chain >= 3` to pass
+  //                (a single lucky guess shouldn't pass a question the user
+  //                doesn't actually know).
+  // A never-wrong question needs `chain >= 2` (two correct attempts in a
+  // row) to pass.
   let mastery = {}
   let currentQuestion = null
   let options = []
@@ -73,12 +76,12 @@
     return mastery[abbr] || { chain: 0, everWrong: false }
   }
   function required(state) {
-    return state.everWrong ? 2 : 1
+    return state.everWrong ? 3 : 2
   }
   function questionScore(state) {
-    if (state.chain >= required(state)) return 1
-    if (state.everWrong) return Math.min(1, state.chain / 2)
-    return 0
+    const req = required(state)
+    if (state.chain >= req) return 1
+    return state.chain / req
   }
   function isPassed(abbr) {
     return questionScore(questionState(abbr)) >= 1
@@ -90,19 +93,19 @@
   }
 
   // Progress is achieved / required across the whole pool. Each question's
-  // `required` starts at 1 and becomes 2 as soon as it has been answered
+  // `required` starts at 2 and becomes 3 as soon as it has been answered
   // incorrectly once (a first-attempt wrong flips `everWrong` to true). So a
   // wrong first attempt lowers the whole progress by growing the denominator
-  // without adding to the numerator — 5% (1/20) drops to ~4.76% (1/21), which
-  // shows visibly on the progress bar. References to `pool` and `mastery` are
-  // literal so Svelte's reactivity picks up mutations to either.
+  // without adding to the numerator, which shows visibly on the progress bar.
+  // References to `pool` and `mastery` are literal so Svelte's reactivity
+  // picks up mutations to either.
   $: progressPct = ((m, p) => {
     if (!p.length) return 0
     let achieved = 0
     let totalReq = 0
     for (const abbr of p) {
       const s = m[abbr] || { chain: 0, everWrong: false }
-      const req = s.everWrong ? 2 : 1
+      const req = s.everWrong ? 3 : 2
       totalReq += req
       achieved += Math.min(s.chain, req)
     }
@@ -112,7 +115,7 @@
     pool.length > 0 &&
     pool.every((abbr) => {
       const s = mastery[abbr] || { chain: 0, everWrong: false }
-      return s.chain >= (s.everWrong ? 2 : 1)
+      return s.chain >= (s.everWrong ? 3 : 2)
     })
 
   function updateHasSaved() {

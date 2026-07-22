@@ -18,10 +18,18 @@ export const LIMB_COS_CUTOFF = 0.15
 // (illumCos > 0), within this distance of the terminator (illumCos == 0).
 export const TERMINATOR_ABS_COS = 0.3
 
-// Apparent (selenographic) size thresholds per difficulty, in degrees —
-// picked from the real data's size distribution (599 features span ~2° to
-// 80°+; see IMPLEMENTATION_STEPS.md Step 40 "Open items").
-export const DIFFICULTY_MIN_SIZE_DEG = { easy: 15, medium: 5, hard: 0 }
+// Broad type buckets used by the Moon Quiz's pool construction and
+// distractor matching (IMPLEMENTATION_STEPS.md Step 40) — mirrors
+// data_prep's MOON_AREA_TYPES / MOON_RIDGE_LIKE_TYPES groupings.
+export const SEA_TYPES = new Set(['mare', 'oceanus', 'lacus', 'palus'])
+export const RIDGE_TYPES = new Set(['mons', 'catena', 'vallis'])
+
+export function typeBucket(type) {
+  if (type === 'crater') return 'crater'
+  if (SEA_TYPES.has(type)) return 'sea'
+  if (RIDGE_TYPES.has(type)) return 'ridge'
+  return 'other'
+}
 
 const TYPE_LABELS = {
   crater: 'Crater',
@@ -179,8 +187,8 @@ export function meanViewingConditions() {
   return { subLat: 0, subLon: 0, sunLon: null }
 }
 
-export function isNearTerminator(cos) {
-  return cos > 0 && cos < TERMINATOR_ABS_COS
+export function isNearTerminator(cos, threshold = TERMINATOR_ABS_COS) {
+  return cos > 0 && cos < threshold
 }
 
 // Point features (craters etc.) fade out with distance from the terminator

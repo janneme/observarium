@@ -495,13 +495,13 @@ function draw() {
 
   // Brightness-only, matching how the real Moon reads through a telescope —
   // see MoonCanvas.svelte's draw() for the full palette rationale.
-  const highlandsColor = nightly ? '#180000' : '#989898'
-  const mareColor = nightly ? '#0a0000' : '#4a4a4a'
-  const mareEdgeColor = nightly ? '#050000' : '#303030'
-  const monsColor = nightly ? '#280000' : '#b8b8b8'
-  const monsEdgeColor = nightly ? '#1e0000' : '#787878'
-  const valleyColor = nightly ? '#140000' : '#686868'
-  const valleyEdgeColor = nightly ? '#0d0000' : '#484848'
+  const highlandsColor = nightly ? '#900000' : '#989898'
+  const mareColor = nightly ? '#400000' : '#4a4a4a'
+  const mareEdgeColor = nightly ? '#200000' : '#303030'
+  const monsColor = nightly ? '#b00000' : '#b8b8b8'
+  const monsEdgeColor = nightly ? '#900000' : '#787878'
+  const valleyColor = nightly ? '#700000' : '#686868'
+  const valleyEdgeColor = nightly ? '#500000' : '#484848'
   const highlightColor = nightly ? '#8800ff' : '#ffff00'
 
   const FILLED_COLORS = {

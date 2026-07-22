@@ -10,29 +10,23 @@
   import {
     flattenMoonFeatures,
     projectPoint,
-    illumCos,
-    isNearTerminator,
     realViewingConditions,
     randomViewingConditions,
     meanViewingConditions,
     LIMB_COS_CUTOFF,
-    DIFFICULTY_MIN_SIZE_DEG,
   } from '../lib/moonMap.js'
-  import {
-    applyQuizAnswer,
-    clearQuizState,
-    computeProgressPct,
-    loadQuizState,
-    pickNextQuestion,
-    saveQuizState,
-  } from '../lib/quizFramework.js'
+  import { buildGlobalPools, buildLocalPools, pickDistractors } from '../lib/moonQuizPools.js'
+  import { clearQuizState, loadQuizState, saveQuizState } from '../lib/quizFramework.js'
 
   export let time = new Date()
 
   const dispatch = createEventDispatcher()
   const QUIZ_TYPE = 'moon'
   const QUIZ_SETTINGS_KEY = 'observarium.moonQuiz.settings'
-  const QUIZ_POOL_SIZE = 20
+  // Question-set size per difficulty (like the Constellation Quiz's
+  // QUIZ_QUESTION_COUNT, but tiered — Easy/Medium's pools are themselves
+  // smaller than Hard's, see moonQuizPools.js).
+  const QUIZ_QUESTION_COUNTS = { easy: 15, medium: 30, hard: 50 }
   // How many attempts to re-roll a random (Global scope) libration before
   // giving up and falling back to the mean view — libration's range is
   // small (~±8°), so a size-eligible feature almost always stays visible.
@@ -49,6 +43,20 @@
   let settingsLoaded = false
 
   let pool = []
+  // What MoonCanvas renders — always the Hard-tier pool for the current
+  // scope, independent of `difficulty` (see IMPLEMENTATION_STEPS.md Step 40
+  // "Rendered map contents"). Not persisted; cheap to recompute per session.
+  let renderPool = []
+  // Per-question progress, adapted from the Constellation Quiz's model (Step
+  // 37b) — chain/everWrong tracking is the same, but the pass thresholds are
+  // higher: a single lucky correct guess shouldn't pass a question the user
+  // doesn't actually know. mastery[id] = { chain, everWrong }.
+  //   chain      = consecutive first-attempt-correct answers since the last
+  //                incorrect first attempt (or since the quiz began).
+  //   everWrong  = whether this question has ever been answered incorrectly
+  //                on the first attempt; once true, needs `chain >= 3` to pass.
+  // A never-wrong question needs `chain >= 2` (two correct attempts in a
+  // row) to pass.
   let mastery = {}
   let currentQuestion = null
   let options = []
@@ -56,7 +64,6 @@
   let firstTapMade = false
   let wrongTapped = new Set()
   let feedback = ''
-  let progressPct = 0
 
   // Fixed once per session when scope is 'local' (see IMPLEMENTATION_STEPS.md
   // Step 40 — "the real Moon doesn't move mid-session"), regardless of the
@@ -66,9 +73,60 @@
   let subLat = 0
   let subLon = 0
   let sunLon = null
-  let moonCanvasRef
 
   $: allowLocal = difficulty !== 'easy'
+  $: renderFeatures = renderPool.map((id) => featuresById.get(id)).filter(Boolean)
+
+  function questionState(id) {
+    return mastery[id] || { chain: 0, everWrong: false }
+  }
+  function required(state) {
+    return state.everWrong ? 3 : 2
+  }
+  function questionScore(state) {
+    const req = required(state)
+    if (state.chain >= req) return 1
+    return state.chain / req
+  }
+  function isPassed(id) {
+    return questionScore(questionState(id)) >= 1
+  }
+  function applyAttempt(m, id, correct) {
+    const prev = m[id] || { chain: 0, everWrong: false }
+    if (correct) return { ...m, [id]: { chain: prev.chain + 1, everWrong: prev.everWrong } }
+    return { ...m, [id]: { chain: 0, everWrong: true } }
+  }
+
+  // Adapted from ConstellationIdQuizScreen.svelte's formula: a wrong first
+  // attempt lowers progress by growing the denominator (required jumps to 3)
+  // without adding to the numerator, so it visibly dips the progress bar.
+  $: progressPct = ((m, p) => {
+    if (!p.length) return 0
+    let achieved = 0
+    let totalReq = 0
+    for (const id of p) {
+      const s = m[id] || { chain: 0, everWrong: false }
+      const req = s.everWrong ? 3 : 2
+      totalReq += req
+      achieved += Math.min(s.chain, req)
+    }
+    return totalReq > 0 ? (achieved / totalReq) * 100 : 0
+  })(mastery, pool)
+  $: allPassed = pool.length > 0 && pool.every((id) => isPassed(id))
+
+  // Pick the next unpassed question, preferring the lowest score (so
+  // partly-progressed retries don't dominate), random tie-break, avoiding
+  // the just-answered question when other unpassed ones exist.
+  function pickNextUnpassed(excludeId) {
+    const unpassed = pool.filter((id) => !isPassed(id))
+    if (unpassed.length === 0) return null
+    const others = unpassed.filter((id) => id !== excludeId)
+    const searchIn = others.length > 0 ? others : unpassed
+    const scored = searchIn.map((id) => ({ id, score: questionScore(questionState(id)) }))
+    const minScore = Math.min(...scored.map((s) => s.score))
+    const candidates = scored.filter((s) => s.score === minScore).map((s) => s.id)
+    return candidates[Math.floor(Math.random() * candidates.length)]
+  }
 
   function updateHasSaved() {
     hasSaved = !!loadQuizState(QUIZ_TYPE, difficulty, scope)
@@ -99,33 +157,11 @@
     }
   }
 
-  function isVisibleAtMeanView(feat) {
-    const p = projectPoint(feat.lat, feat.lon, 0, 0)
-    return p.cosC > LIMB_COS_CUTOFF
-  }
-
-  function buildPool(s, d) {
-    const minSize = DIFFICULTY_MIN_SIZE_DEG[d] ?? DIFFICULTY_MIN_SIZE_DEG.medium
-    const sizeEligible = allFeatures.filter((f) => f.sizeDeg >= minSize)
-
-    if (d === 'easy' || s === 'global') {
-      // Easy is always the fixed mean view; Global's per-question libration
-      // stays close enough to the mean view (±~8°) that mean-view visibility
-      // is the right eligibility test — actual per-question visibility is
-      // guaranteed by the retry loop in loadQuestionView().
-      return sizeEligible.filter(isVisibleAtMeanView).map((f) => f.id)
-    }
-
-    // Local: eligible only if actually lit and near the terminator under
-    // this session's fixed real viewing conditions.
-    const vc = sessionViewing
-    return sizeEligible
-      .filter((f) => {
-        const p = projectPoint(f.lat, f.lon, vc.subLat, vc.subLon)
-        if (p.cosC <= LIMB_COS_CUTOFF) return false
-        return isNearTerminator(illumCos(f.lat, f.lon, vc.sunLon))
-      })
-      .map((f) => f.id)
+  function buildPools(s, d) {
+    // Easy is always the fixed mean view/Global-only pool, regardless of the
+    // selected scope (Local is hidden in QuizSetup at this difficulty).
+    if (d === 'easy' || s === 'global') return buildGlobalPools(allFeatures, d)
+    return buildLocalPools(allFeatures, d, sessionViewing)
   }
 
   function loadQuestionView(targetId) {
@@ -164,12 +200,9 @@
   }
 
   function pickOptions(correctId) {
-    const distractors = pool.filter((id) => id !== correctId)
-    for (let i = distractors.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[distractors[i], distractors[j]] = [distractors[j], distractors[i]]
-    }
-    const chosen = [correctId, ...distractors.slice(0, 3)]
+    const target = featuresById.get(correctId)
+    const distractors = pickDistractors(target, pool, renderPool, featuresById, 3)
+    const chosen = [correctId, ...distractors]
     for (let i = chosen.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[chosen[i], chosen[j]] = [chosen[j], chosen[i]]
@@ -188,7 +221,7 @@
       sessionViewing = null
     }
 
-    const freshPool = buildPool(scope, difficulty)
+    const { questionPool: freshPool, renderPool: freshRenderPool } = buildPools(scope, difficulty)
     if (freshPool.length < 4) {
       feedback =
         scope === 'local'
@@ -196,38 +229,46 @@
           : 'Not enough features for this difficulty.'
       return
     }
+    renderPool = freshRenderPool
 
+    const questionCount = QUIZ_QUESTION_COUNTS[difficulty] ?? 30
     const saved = continuePrev ? loadQuizState(QUIZ_TYPE, difficulty, scope) : null
     if (saved?.pool?.length >= 4) {
       const validPool = saved.pool.filter((id) => freshPool.includes(id))
-      pool = validPool.length >= 4 ? validPool : sampleIds(freshPool, QUIZ_POOL_SIZE)
+      pool = validPool.length >= 4 ? validPool : sampleIds(freshPool, questionCount)
       mastery = { ...(saved.mastery || {}) }
-      currentQuestion = pool.includes(saved.currentQuestion) ? saved.currentQuestion : pickNextQuestion(pool, mastery)
+      currentQuestion = pool.includes(saved.currentQuestion) ? saved.currentQuestion : pickNextUnpassed(null)
     } else {
-      pool = sampleIds(freshPool, QUIZ_POOL_SIZE)
+      pool = sampleIds(freshPool, questionCount)
       mastery = {}
-      currentQuestion = pickNextQuestion(pool, mastery)
+      currentQuestion = pool[0]
       clearQuizState(QUIZ_TYPE, difficulty, scope)
     }
 
-    progressPct = computeProgressPct(pool, mastery)
     setupMode = false
     resolved = false
     firstTapMade = false
     wrongTapped = new Set()
     feedback = ''
-    pickOptions(currentQuestion)
-    loadQuestionView(currentQuestion)
+    if (currentQuestion) {
+      pickOptions(currentQuestion)
+      loadQuestionView(currentQuestion)
+    }
     saveState()
   }
 
   function nextQuestion() {
+    const next = pickNextUnpassed(currentQuestion)
+    if (!next) {
+      currentQuestion = null
+      clearQuizState(QUIZ_TYPE, difficulty, scope)
+      return
+    }
+    currentQuestion = next
     resolved = false
     firstTapMade = false
     wrongTapped = new Set()
     feedback = ''
-    currentQuestion = pickNextQuestion(pool, mastery)
-    if (!currentQuestion) return
     pickOptions(currentQuestion)
     loadQuestionView(currentQuestion)
     saveState()
@@ -236,16 +277,14 @@
   function handleAnswer(optionId) {
     if (!currentQuestion) return
     if (resolved) {
-      if (optionId === currentQuestion && progressPct < 100) nextQuestion()
+      if (optionId === currentQuestion && !allPassed) nextQuestion()
       return
     }
     if (wrongTapped.has(optionId)) return
     const correct = optionId === currentQuestion
     if (!firstTapMade) {
       firstTapMade = true
-      mastery = applyQuizAnswer(mastery, currentQuestion, correct)
-      progressPct = computeProgressPct(pool, mastery)
-      if (progressPct >= 100) clearQuizState(QUIZ_TYPE, difficulty, scope)
+      mastery = applyAttempt(mastery, currentQuestion, correct)
     }
     if (correct) {
       resolved = true
@@ -256,12 +295,12 @@
   }
 
   function handleBack() {
-    if (!setupMode) saveState()
+    if (!setupMode && currentQuestion) saveState()
     dispatch('close')
   }
 
   function onGlobalKeyDown(e) {
-    if (setupMode || (resolved && progressPct >= 100) || options.length === 0) return
+    if (setupMode || !currentQuestion || options.length === 0) return
     if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
     const t = e.target
     const tag = String(t?.tagName || '').toLowerCase()
@@ -329,57 +368,48 @@
     {:else}
       <QuizProgress {progressPct} />
 
-      <p class="question">
-        {resolved && progressPct < 100
-          ? 'Tap the highlighted answer again for the next question'
-          : 'What is the name of the highlighted feature?'}
-      </p>
+      {#if allPassed || !currentQuestion}
+        <p class="done">Quiz complete. Every question passed.</p>
+      {:else}
+        <p class="question">
+          {resolved ? 'Tap the highlighted answer again for the next question' : 'What is the name of the highlighted feature?'}
+        </p>
 
-      <div class="moon-wrap">
-        <MoonCanvas
-          bind:this={moonCanvasRef}
-          features={allFeatures}
-          {subLat}
-          {subLon}
-          {sunLon}
-          highlightId={currentQuestion}
-        />
-        <button
-          class="recenter-btn"
-          type="button"
-          on:click={() => moonCanvasRef?.centerOnHighlight()}
-          title="Center on highlighted feature"
-        >
-          Center
-        </button>
-      </div>
+        <div class="moon-wrap">
+          <MoonCanvas
+            features={renderFeatures}
+            fixedFeatureSet={true}
+            forceScale={difficulty === 'easy' ? 1 : null}
+            {subLat}
+            {subLon}
+            {sunLon}
+            highlightId={currentQuestion}
+          />
+        </div>
 
-      <div class="answers">
-        {#each options as oid}
-          {@const feat = featuresById.get(oid)}
-          {@const isCorrect = oid === currentQuestion}
-          {@const isWrongTapped = wrongTapped.has(oid)}
-          {@const isSkipped = resolved && !isCorrect && !isWrongTapped}
-          <button
-            class="answer"
-            class:correct={resolved && isCorrect}
-            class:wrong={isWrongTapped}
-            class:skipped={isSkipped}
-            disabled={isWrongTapped || isSkipped}
-            on:click={() => handleAnswer(oid)}
-          >
-            <span class="answer-label">{feat?.name || 'Unknown'}</span>
-            {#if resolved && isCorrect}
-              <ThumbUpIcon size="1.1rem" aria-hidden="true" />
-            {:else if isWrongTapped}
-              <ThumbDownIcon size="1.1rem" aria-hidden="true" />
-            {/if}
-          </button>
-        {/each}
-      </div>
-
-      {#if progressPct >= 100}
-        <p class="done">Quiz complete. 100% mastery reached.</p>
+        <div class="answers">
+          {#each options as oid}
+            {@const feat = featuresById.get(oid)}
+            {@const isCorrect = oid === currentQuestion}
+            {@const isWrongTapped = wrongTapped.has(oid)}
+            {@const isSkipped = resolved && !isCorrect && !isWrongTapped}
+            <button
+              class="answer"
+              class:correct={resolved && isCorrect}
+              class:wrong={isWrongTapped}
+              class:skipped={isSkipped}
+              disabled={isWrongTapped || isSkipped}
+              on:click={() => handleAnswer(oid)}
+            >
+              <span class="answer-label">{feat?.name || 'Unknown'}</span>
+              {#if resolved && isCorrect}
+                <ThumbUpIcon size="1.1rem" aria-hidden="true" />
+              {:else if isWrongTapped}
+                <ThumbDownIcon size="1.1rem" aria-hidden="true" />
+              {/if}
+            </button>
+          {/each}
+        </div>
       {/if}
     {/if}
   </div>
@@ -458,19 +488,6 @@
     overflow: hidden;
     border: 1px solid rgba(180, 0, 0, 0.45);
     align-self: center;
-  }
-
-  .recenter-btn {
-    position: absolute;
-    right: 0.5rem;
-    bottom: 0.5rem;
-    border: 1px solid rgba(180, 0, 0, 0.5);
-    background: rgba(0, 0, 0, 0.7);
-    color: var(--fg);
-    border-radius: 6px;
-    padding: 0.3rem 0.55rem;
-    font-size: 0.8rem;
-    cursor: pointer;
   }
 
   .answers {

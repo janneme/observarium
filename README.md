@@ -107,22 +107,19 @@ runs until every question in the pool has been passed. After each incorrect
 answer the correct answer is eventually shown (as the user retries until they
 click it). A Back button is always available to exit the quiz at any time.
 
-Keyboard shortcuts `A`, `B`, `C`, `D` select the four options in the Star Quiz
-and the Constellation Quiz.
+Keyboard shortcuts `A`, `B`, `C`, `D` select the four options in the Star
+Quiz, the Constellation Quiz, and the Moon Quiz.
 
 A progress indicator is displayed throughout the quiz. It reflects how close
-the user is to completing the quiz. The exact formula depends on the quiz:
-
-- **Star Quiz and Moon Quiz** — each question has a mastery score; a correct
-  first-tap adds 0.25, an incorrect first-tap subtracts 0.5 (clamped to ≥ 0).
-  A question is passed once its score reaches 1, and progress is the mean
-  score across the pool.
-- **Constellation Quiz** — each question requires 1 correct first-tap to pass,
-  but the moment it has ever been answered incorrectly its required count
-  becomes 2 (must be answered correctly twice in a row on subsequent
-  presentations, across the pool). Progress is `sum(achieved) / sum(required)`
-  where a wrong first-tap grows only the denominator — so it visibly reduces
-  the progress bar even though no correct answer has been undone.
+the user is to completing the quiz, using the same model across the Star
+Quiz, Constellation Quiz, and Moon Quiz: a question requires 2 correct
+first-taps in a row to pass, but the moment it has ever been answered
+incorrectly, its required count rises to 3 correct in a row (a single lucky
+guess shouldn't pass a question the user doesn't actually know). Progress is
+`sum(achieved) / sum(required)` across the pool, where `achieved` is a
+question's current correct-in-a-row streak capped at its own requirement —
+so a wrong first-tap visibly reduces the progress bar (it grows the
+denominator) even though no correct answer has been undone.
 
 Quiz state is saved to local storage. If the user exits and later starts a quiz
 of the same type and difficulty, they are presented with the usual setup screen
@@ -204,8 +201,9 @@ The Lambda covers the following operations:
 
 - user login: calls Cognito `InitiateAuth` with the supplied username and password
   and returns the Cognito access token to the client
-- read objects: verifies the Cognito JWT, returns a short-lived pre-signed S3 URL
-  for the object data ZIP
+- read objects: verifies the Cognito JWT, returns the data manifest (one
+  entry per available star-catalogue magnitude set) with a short-lived
+  pre-signed S3 URL for the requested magnitude's object data ZIP
 - read images: verifies the Cognito JWT, returns a short-lived pre-signed S3 URL
   for the image ZIP
 - read user observations: verifies the Cognito JWT, reads and returns the user's
@@ -304,10 +302,13 @@ The Welcome screen is shown when the IndexedDB is not found. It contains:
 - A username and password input
 - A button "Load Application Data".
 
-After filling in the credentials and pressing the button the app loads the data
-in the following order:
+After filling in the credentials and pressing the button, the user is shown a
+list of available data sets, one per star-catalogue magnitude limit, each
+with its total download size. The list is selectable by tapping a row or
+pressing its number key. After picking a set, the app loads the data in the
+following order:
 
-a. Object data
+a. Object data (for the selected magnitude set)
 b. Images
 c. User data
 
@@ -551,8 +552,8 @@ Distractor selection (the three wrong options):
   available.
 
 The Constellation Quiz has no Local scope, so the Scope selector is hidden in
-its setup dialog. Its progress model is the achieved/required-with-doubling
-model described in §2.2g.
+its setup dialog. Its progress model is the achieved/required model described
+in §2.2g.
 
 ## 5.9 Finder Scope Quiz (planned)
 
@@ -615,9 +616,9 @@ difficulty level. In each step one feature is highlighted and four possible
 names are displayed; the user is expected to select the right one. The
 correct answer is outlined in blue.
 
-At Easy difficulty the full Moon disc is always shown, and no zooming is
-needed. From Medium difficulty upward the user may additionally choose
-between two scopes:
+At Easy difficulty the full Moon disc is always shown at a fixed 100% zoom
+(zooming is disabled). From Medium difficulty upward the user may
+additionally choose between two scopes:
 
 - Global: the full disc is still shown; the viewing angle (libration) changes
   randomly with every question, for variety.
@@ -631,14 +632,27 @@ between two scopes:
 Zooming into the map is supported, and required from Medium difficulty
 upward, where smaller features are included in the quiz pool.
 
+The rendered map always shows the full Hard-difficulty set of features for
+the current scope, regardless of which difficulty is actually being played —
+only the smaller, easier subset of those features is ever used as a
+question's target or answer options. This keeps the map's amount of detail
+consistent across difficulties; only how much of it you're quizzed on
+changes. The four answer options for a question are always the same broad
+kind of feature as the highlighted one (crater / sea / ridge-like feature
+such as a mons, catena or vallis) — a crater is never offered alongside a
+sea as a wrong answer.
+
 Difficulty levels:
 
-- Easy: only the Moon's largest, most prominent features (maria and the
-  largest named craters); full disc, no terminator, no zoom needed.
-- Medium: adds a wider range of medium-sized craters or montes; terminator restriction
-  available via Local scope.
+- Easy: only the Moon's largest, most prominent features (the biggest maria
+  and the largest named craters); full disc, no terminator, no zoom.
+- Medium: adds a wider range of medium-sized craters, maria, and other
+  features (montes, valles, catenae); terminator restriction available via
+  Local scope.
 - Hard: all eligible named features down to the smallest catalogued size;
   terminator restriction available via Local scope.
+
+Progress and pass rules follow the model described in §2.2g.
 
 ## 5.13 Object Finding Paths
 
@@ -750,12 +764,25 @@ keeps the path internally consistent.
 
 ## 5.14 Update object data
 
-The screen displays date of the last synchronization / check and a
-"Synchronize" button. Before fetching the data the server is asked for a hash
-and that is compared with the current data hash to determine whether
-synchronization is needed. If it is not needed the user is informed. The check
-is done independently for object data and images. If the data are updated,
-the progress bar is displayed during the download like in the Welcome screen.
+A full-screen overlay (menu item "Update object data", keyboard shortcut
+"u"). It first shows the same magnitude-set picker as the Welcome Screen
+(§5.1) — one row per available data set with its download size, selectable
+by tapping or by number key — labelled with the currently-synced magnitude
+and the date it was last synchronized, when known.
+
+After picking a magnitude:
+
+- If it's the same magnitude currently in use, the server is asked for a
+  data hash and an images hash, each compared against the locally stored
+  value to determine whether synchronization is needed; up-to-date parts are
+  skipped without any download.
+- If a different magnitude is picked, all local star/object data is cleared
+  and re-downloaded in full for the new magnitude, the same as a fresh
+  install.
+
+Object data and images are checked/updated independently, and a progress bar
+is displayed during download like in the Welcome screen. Observation data is
+never touched here — see §5.15 for that.
 
 ## 5.15 Synchronize Observation Data
 
