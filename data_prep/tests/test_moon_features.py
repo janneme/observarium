@@ -11,7 +11,13 @@ import shapefile
 
 from shapely.geometry import Polygon
 
-from config import LROC_MARE_FILENAME, MOON_CIRCLE_VERTEX_COUNT, MOON_FEATURE_TYPES, MOON_MIN_ITEM_SIZE_KM
+from config import (
+    LROC_MARE_FILENAME,
+    MOON_CIRCLE_VERTEX_COUNT,
+    MOON_FEATURE_TYPES,
+    MOON_MIN_ITEM_SIZE_KM,
+    MOON_RADIUS_KM,
+)
 from moon_features import (
     MoonFeaturePipeline,
     STYLE_FILLED,
@@ -136,6 +142,11 @@ def test_moon_feature_pipeline_filters_and_writes(tmp_path: Path):
     assert tycho["geom"][0].startswith("S RAISED M")
     ring = _circle_ring(-43.31, -11.36, 1.9, MOON_CIRCLE_VERTEX_COUNT)
     assert tycho["geom"] == [_encode_layer(STYLE_RAISED, ring)]
+    # Elongated (width 2.98deg corrected, height 3.8deg -> ratio ~1.27,
+    # above MOON_CIRCULAR_TOLERANCE) -> not circular, both axes reported.
+    km_per_deg = MOON_RADIUS_KM * math.pi / 180.0
+    assert tycho["circular"] is False
+    assert tycho["size_km"] == pytest.approx([2.98 * km_per_deg, 3.8 * km_per_deg], rel=1e-2)
 
     # No matching shapefile entry, and the KML gives no min/max lat/lon for
     # this placemark -> width == height (perfectly circular) -> a FILLED
@@ -145,6 +156,8 @@ def test_moon_feature_pipeline_filters_and_writes(tmp_path: Path):
     assert mare["lat"] == pytest.approx(8.5, rel=0, abs=1e-4)
     assert len(mare["geom"]) == 1
     assert mare["geom"][0].startswith("S FILLED M")
+    assert mare["circular"] is True
+    assert mare["size_km"][0] == pytest.approx(mare["size_km"][1], rel=1e-9)
 
     # Matches a shapefile entry — uses the real digitized outline (picking
     # the larger of the two same-named shapes) instead of a bounding box.

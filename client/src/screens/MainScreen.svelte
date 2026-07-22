@@ -19,6 +19,7 @@
   import StarQuizScreen from './StarQuizScreen.svelte'
   import ConstellationIdQuizScreen from './ConstellationIdQuizScreen.svelte'
   import MoonQuizScreen from './MoonQuizScreen.svelte'
+  import MoonMapScreen from './MoonMapScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
   import { getObjectsInArea, migrateLegacyPendingToSyncDirty, getSyncDirtyTotalCount } from '../lib/db.js'
@@ -109,6 +110,7 @@
   let showStarQuiz = false
   let showConstellationIdQuiz = false
   let showMoonQuiz = false
+  let showMoonMap = false
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
   let returnToFindingPathsListFromAbout = false
@@ -427,6 +429,11 @@
         e.preventDefault()
         return
       }
+      if (showMoonMap) {
+        showMoonMap = false
+        e.preventDefault()
+        return
+      }
       if (showFindingPaths) {
         showFindingPaths = false
         findingPathsObject = null
@@ -479,6 +486,7 @@
     if (showStarQuiz) return
     if (showConstellationIdQuiz) return
     if (showMoonQuiz) return
+    if (showMoonMap) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -691,9 +699,9 @@
     {time}
     {menuOpen}
     finderMode={$finderViewActive}
-    fov={minDimFov}
-    magMin={displayMagMin}
-    magMax={displayMagMax}
+    fov={showMoonMap ? null : minDimFov}
+    magMin={showMoonMap ? null : displayMagMin}
+    magMax={showMoonMap ? null : displayMagMax}
     on:menutoggle={() => {
       searchViewActive.set(false)
       objectDetailsActive.set(false)
@@ -747,6 +755,9 @@
     }}
     on:moonquiz={() => {
       showMoonQuiz = true
+    }}
+    on:moonmap={() => {
+      showMoonMap = true
     }}
   />
 
@@ -988,6 +999,15 @@
       time={skyTime}
       on:close={() => {
         showMoonQuiz = false
+      }}
+    />
+  {/if}
+
+  {#if showMoonMap}
+    <MoonMapScreen
+      time={skyTime}
+      on:close={() => {
+        showMoonMap = false
       }}
     />
   {/if}

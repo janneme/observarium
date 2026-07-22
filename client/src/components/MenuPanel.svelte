@@ -28,6 +28,7 @@
   import RefreshIcon from '../icons/RefreshIcon.svelte'
   import SyncIcon from '../icons/SyncIcon.svelte'
   import InfoIcon from '../icons/InfoIcon.svelte'
+  import MoonMapIcon from '../icons/MoonMapIcon.svelte'
 
   export let open = false
 
@@ -255,6 +256,20 @@
 
       <!-- Section 5: Data management -->
       <div class="section-row">
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('moonmap')
+            close()
+          }}
+          aria-label="Moon map"
+        >
+          <div class="icon-wrap">
+            <MoonMapIcon size="42" />
+          </div>
+          <span class="item-lbl">Moon Map</span>
+        </button>
+
         <button
           class="grid-item"
           on:click={() => {

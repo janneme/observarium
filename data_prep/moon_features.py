@@ -483,9 +483,22 @@ class MoonFeaturePipeline:
         mons/montes after obstacle subtraction, which can split a ridge
         into several disconnected pieces.
         """
+        width_deg, height_deg = feature["size_axes"]
+        km_per_deg = MOON_RADIUS_KM * math.pi / 180.0
+        width_km = float(width_deg) * km_per_deg
+        height_km = float(height_deg) * km_per_deg
+        max_axis = max(width_km, height_km)
+        min_axis = min(width_km, height_km)
+        ratio = (max_axis / min_axis) if min_axis > 0 else float("inf")
+
         out: dict[str, Any] = {
             "lat": round(float(feature["lat"]), 4),
             "lon": round(float(feature["lon"]), 4),
+            # Physical size in km, for display (README/moon_map.md) — derived
+            # from the same width/height _feature_ring uses for its own
+            # circular/elongated rendering choice, so the two never disagree.
+            "size_km": [round(width_km, 2), round(height_km, 2)],
+            "circular": ratio <= MOON_CIRCULAR_TOLERANCE,
         }
         out["geom"] = [_encode_layer(style, ring) for ring in rings if len(ring) >= 3]
         return out

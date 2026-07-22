@@ -21,7 +21,7 @@ from config import (
     DSO_MAX_MAG,
     EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
-    MIN_MOON_ITEM_SIZE,
+    MOON_MIN_ITEM_SIZE_KM,
 )
 from constellations import ConstellationPipeline
 from dso import DsoPipeline
@@ -148,8 +148,8 @@ def parse_args() -> argparse.Namespace:
         metavar="FLOAT",
         dest="mon_object_min_size",
         help=(
-            "Minimum Moon feature angular size in degrees "
-            f"(default: {MIN_MOON_ITEM_SIZE:g}, tuned for 8x50 binocular visibility)."
+            "Minimum Moon feature bounding-box size in km "
+            f"(default: {MOON_MIN_ITEM_SIZE_KM:g})."
         ),
     )
     parser.add_argument(

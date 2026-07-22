@@ -6,6 +6,7 @@
 // not a photorealistic render: the source data has no elevation/relief and
 // no true boundary polygons, only per-feature center + size/bounding-box.
 import { Libration, MoonPhase } from 'astronomy-engine'
+import { makeSpans } from './search.js'
 
 const D2R = Math.PI / 180
 
@@ -114,7 +115,13 @@ export function flattenMoonFeatures(raw) {
       if (!rec || typeof rec.lat !== 'number' || typeof rec.lon !== 'number') continue
       const layers = parseGeomLayers(rec.geom)
       const sizeDeg = layers.length ? layerExtentDeg(layers[0].points) : 0
-      list.push({ id: `${type}::${name}`, type, name, lat: rec.lat, lon: rec.lon, sizeDeg, layers })
+      // sizeKm/circular come straight from data_prep (moon_features.py's
+      // _round_feature) — the pipeline already has the width/height-in-km
+      // and circularity-ratio math the Moon Map's dimension display needs;
+      // the client only ever formats these, never re-derives geometry.
+      const sizeKm = Array.isArray(rec.size_km) ? rec.size_km : null
+      const circular = typeof rec.circular === 'boolean' ? rec.circular : null
+      list.push({ id: `${type}::${name}`, type, name, lat: rec.lat, lon: rec.lon, sizeDeg, sizeKm, circular, layers })
     }
   }
   return list
@@ -206,4 +213,65 @@ const CRATER_FADE_POWER = 3
 export function craterFadeAlpha(cos) {
   const t = Math.max(0, Math.min(1, cos))
   return CRATER_FADE_MIN_ALPHA + (1 - CRATER_FADE_MIN_ALPHA) * Math.pow(1 - t, CRATER_FADE_POWER)
+}
+
+// Moon Map zoom-visibility threshold — a feature smaller than this fraction
+// of the viewport isn't rendered at all. Deliberately separate from
+// MoonCanvas's MIN_VISIBLE_RADIUS_PX (a fixed pixel floor the Moon Quiz
+// uses for its small, fixed pool): the Moon Map renders the full catalogue
+// and needs the threshold to scale with the viewport, not stay a constant
+// pixel count. See moon_map.md "Zoom-based visibility".
+export const MOON_MAP_MIN_VISIBLE_RATIO = 0.02
+
+// Formats a feature's physical size for display: a diameter for circular
+// features, both axes for elongated ones, both rounded to 2 significant
+// figures. `sizeKm`/`circular` come from data_prep (see flattenMoonFeatures)
+// — this function only formats already-computed numbers.
+function roundToSigFigs(value, figs) {
+  if (!(value > 0)) return 0
+  const magnitude = Math.pow(10, figs - 1 - Math.floor(Math.log10(value)))
+  return Math.round(value * magnitude) / magnitude
+}
+
+export function formatDimensions(feature) {
+  if (!Array.isArray(feature?.sizeKm)) return ''
+  const [w, h] = feature.sizeKm
+  if (feature.circular) {
+    const diameter = roundToSigFigs((w + h) / 2, 2)
+    return `⌀${diameter} km`
+  }
+  return `${roundToSigFigs(w, 2)}×${roundToSigFigs(h, 2)} km`
+}
+
+// Moon-feature search — deliberately simpler than search.js's doSearch
+// (no bayer/flamsteed/catalogue-number ranking passes, which don't apply
+// here): plain case-insensitive substring match, always alphabetically
+// sorted (not ranked by match quality), matching the "search results
+// sorted out alphabetically, consisting of names only" requirement in
+// moon_map.md. Kept entirely separate from the sky object search index —
+// the Moon Map only ever searches Moon features.
+export function buildMoonSearchIndex(features) {
+  return features.map((f) => ({ id: f.id, name: f.name, feature: f }))
+}
+
+export function doMoonSearch(query, index) {
+  if (!index) return []
+  const trimmed = query.trim()
+  if (!trimmed) return []
+  const nq = trimmed.toLowerCase()
+  const out = []
+  for (const entry of index) {
+    const lower = entry.name.toLowerCase()
+    const idx = lower.indexOf(nq)
+    if (idx === -1) continue
+    out.push({
+      obj: entry.feature,
+      display: entry.name,
+      spans: makeSpans(entry.name, idx, idx + nq.length),
+      showCon: false,
+    })
+  }
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+  out.sort((a, b) => collator.compare(a.display, b.display))
+  return out
 }

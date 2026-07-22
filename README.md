@@ -286,6 +286,7 @@ The menu has the following items (each one represented by a suitable SVG icon):
 - Star quiz
 - Constellation quiz
 - Deep sky quiz
+- Moon map
 - Update object data
 - Synchronize observation data (when unsynchronized changes exist, shows the count as a badge)
 - About
@@ -905,3 +906,47 @@ start-star selection in §5.13, here restricted to objects with catalog numbers)
 picks a target, the app opens the finding path definition screen (§5.13) for that target with
 the start-star selection step shown immediately. Back from that screen returns to this screen
 with filters intact.
+
+## 5.19 Moon Map
+
+A full-screen overlay (menu item "Moon map", positioned as the first item in the data-management
+menu row, alongside "Update object data"). Unlike the Moon Quiz (§5.12), which only ever shows a
+small curated set of features per difficulty, this screen lets the user freely browse and search
+the full catalogue of named Moon features at any zoom level.
+
+The header shows, from left to right: a back arrow; a phase toggle (switches between a full disc
+with no terminator and the default terminator-cropped view); "Moon" plus — only when a feature is
+selected — its type, name, and physical size (a diameter for round features, both axes for
+elongated ones, e.g. "⌀18 km" or "12×48 km"; the type is omitted when the name already states it,
+e.g. "Mare Imbrium"); a search icon; and, only when a feature is selected, an "observed" icon.
+
+The rendered Moon fills the entire screen below the header. By default it shows the
+terminator-cropped disc, centered, at 100% zoom. Terminator-adjacent features are rendered more
+prominently, the same schematic stand-in used by the Moon Quiz's Local scope for "long shadows
+reveal detail near the terminator." The terminator is always computed from the app's currently
+selected date and time.
+
+Tapping a point on the Moon selects the feature there (highlighted on the map, header updated), or
+deselects the current feature if no feature is at that point. If more than one feature could match
+the tap, a magnified snapshot of the immediate area (at a fixed extra zoom relative to the current
+view) is shown so the user can tap again to disambiguate; if that second tap still matches more
+than one feature, the smallest one is chosen automatically. Zooming and swiping are supported —
+smaller features are revealed as the user zooms in and hidden again on zooming out, and panning is
+constrained so the disc can never be dragged fully off-screen.
+
+The search icon opens a search overlay scoped to Moon features only (a separate index from the
+sky-object search used elsewhere in the app — the two are never combined). Results are listed
+alphabetically by name with the matching text highlighted. Selecting a result selects that
+feature, centers and zooms the view on it, and switches to the full-disc view if the feature isn't
+within the currently lit, rendered portion of the disc.
+
+The "observed" icon opens the same observation form used elsewhere in the app (§5.17) for the
+selected feature. In the Observations screen (§5.5), Moon features share one common Moon icon
+(rather than a per-crater/mare icon) and are collapsed into a single "Moon N×" count in each
+observation's object summary, instead of being listed individually by name. Moon features cannot
+be added to an observation from the Observations screen's own search — they can only be added from
+this screen.
+
+The last-selected feature is remembered: reopening the Moon Map reselects it automatically (as if
+picked from search) unless it was deselected before leaving, or no longer resolves against the
+current data (e.g. after a data update) — in which case the screen falls back to the default view.

@@ -1966,3 +1966,152 @@ minimum viable pool size before widening the terminator threshold —
 `moonQuizPools.js`, mirroring the Constellation Quiz's own ×1.5/6-retry
 distractor relaxation). `geom` features render as their raw polygon (no
 fitted-ellipse smoothing) — acceptable for v1 as originally flagged.
+
+---
+
+### Step 41: Moon Map
+
+**README refs:** §5.19  
+**Deliverable:** Interactive Moon-browsing screen — freely pan/zoom/search
+the full Moon feature catalogue, distinct from the Moon Quiz's fixed
+curated pool.
+
+**data_prep:** `moon_features.py`'s `_round_feature` now includes `size_km`
+(`[width_km, height_km]`, converted from the pipeline's already-computed
+`size_axes` via `MOON_RADIUS_KM`) and `circular` (the same
+`MOON_CIRCULAR_TOLERANCE` ratio check `_feature_ring` already used for its
+own circle-vs-polygon rendering choice, recomputed here so the two can
+never disagree) in every feature's output record. The client only ever
+formats these two pre-computed values — no geometry math is duplicated
+there. Schema addition: needs a pipeline regen, `make data-upload`, and a
+client resync to reach existing installs.
+
+**Client — new files:**
+
+- `client/src/screens/MoonMapScreen.svelte` — the main screen. Wired into
+  `MainScreen.svelte` exactly like `MoonQuizScreen` (`showMoonMap` flag,
+  `moonmap` dispatch from `MenuPanel.svelte`, added to the Escape-close
+  chain and the "ignore global shortcuts while an overlay is open" list).
+  Loads the full flattened feature catalogue once (`getMeta('moon_features')`
+  / `flattenMoonFeatures`, same as the Quiz) and renders it through
+  `MoonCanvas` with no `fixedFeatureSet` (the Quiz's fixed-pool mode) — the
+  full catalogue is passed, zoom-based visibility filtering decides what's
+  actually drawn.
+- `client/src/components/MoonMapHeader.svelte` — the screen's own compact
+  header (back arrow, phase toggle, selected feature's type/name/dimensions,
+  search/observed icons). Not a `TopBar.svelte` modification: TopBar has no
+  back-arrow concept and stays mounted underneath every full-screen overlay
+  screen in the app (quizzes, Observations) exactly as it did before this
+  screen existed; `MainScreen` just passes `fov`/`magMin`/`magMax` as `null`
+  to it while the Moon Map is open, hiding its FOV/magnitude readout.
+- `client/src/components/MoonDisambiguationOverlay.svelte` — the
+  multi-candidate tap resolver. Reuses `MoonCanvas` itself (not a new
+  canvas/rendering component): renders with `fixedFeatureSet` set to the
+  small near-tap candidate set from the *current* frame (not re-filtered at
+  the overlay's tighter zoom, which would otherwise reveal features that
+  weren't actually visible a moment ago), `forceScale` a fixed multiple of
+  the main view's current scale, centered on the tap point via `centerOn()`
+  (below). Deliberately not the sky view's `LoupePanel` — that component
+  re-renders every object at the tighter FOV rather than only the tapped
+  candidates, which doesn't match this screen's requirement.
+- `client/src/icons/MoonMapIcon.svelte`, `ObservedIcon.svelte`,
+  `PhaseToggleIcon.svelte` — new icons for the menu item and header.
+
+**Client — extended existing files:**
+
+- `client/src/lib/moonMap.js`: `flattenMoonFeatures` now also carries
+  `sizeKm`/`circular` through from the raw record; `formatDimensions()`
+  formats them; `MOON_MAP_MIN_VISIBLE_RATIO` (0.02) is the zoom-visibility
+  threshold as a fraction of the viewport, deliberately separate from the
+  Quiz's fixed-pixel `MIN_VISIBLE_RADIUS_PX` (different needs — the Quiz
+  always renders the same small curated pool regardless of zoom; this
+  screen renders the full catalogue and needs the floor to scale with the
+  viewport); `buildMoonSearchIndex()`/`doMoonSearch()` — a Moon-only search
+  index and matcher (alphabetical, plain substring match, reusing
+  `search.js`'s exported `makeSpans()` for highlighting) kept entirely
+  separate from the sky-object search index.
+- `client/src/components/MoonCanvas.svelte` gained, on top of what the Moon
+  Quiz already used:
+  - `centerOn(lat, lon, scale)` — exported, generalized from
+    `centerOnHighlight()` (which now just calls it with an auto-computed
+    scale).
+  - `interactive` prop — enables tap-to-select: pointerdown/up with
+    negligible movement dispatches a `tap` event with `{candidates, lat,
+    lon}`, hit-testing against whatever was actually rendered that frame
+    (`lastRendered`). Off by default; the Quiz never needed tap handling.
+  - `minVisibleRatio` prop — the ratio-based visibility floor described
+    above; `null` (default) keeps the Quiz's fixed-pixel behaviour
+    unchanged. Explicitly **not** applied to the currently highlighted
+    feature's own size (only to the decision of whether to draw *other*
+    features) — early testing found that flooring the highlight's size too
+    made it stop visibly shrinking once zoomed out past the floor, while
+    the rest of the view kept scaling down normally.
+  - Pan-boundary clamping (`clampPan()`), applied on every pan/pinch/wheel
+    change — a general fix (not gated behind any new prop) so the disc can
+    never be dragged fully off-screen; benefits every consumer.
+  - A **viewport cull**: `LIMB_COS_CUTOFF` only rejects the far side of the
+    Moon (~half of it) — at high zoom the visible canvas covers a much
+    smaller fraction of the near side than that, so most craters accepted
+    by that check alone still land far outside the actual on-screen
+    rectangle. Point features now skip the (expensive — gradient-fill)
+    paint step when their own just-computed on-screen position + radius
+    doesn't intersect the canvas rect. Found via a real performance bug:
+    with the full ~8,860-feature catalogue and no cull, zooming in on a
+    small crater pushed `pointFeats` past 2,500 and per-frame paint time
+    past 400ms even though only a handful of features were actually
+    visible — profiling showed the projection loop itself was cheap (2–6ms)
+    and essentially all the cost was painting off-screen craters. Not
+    applied to filled/area features (mare, mons, ...): a large or
+    irregularly-shaped real outline can have vertices far from its own
+    centre point (e.g. Oceanus Procellarum), so a centre+radius cull isn't
+    safe there, and they're few in number (tens, not thousands) — not the
+    source of the slowdown.
+  - `requestDraw()` — coalesces bursts of pan/pinch/wheel events (which can
+    fire faster than the display refresh rate) into at most one `draw()`
+    per animation frame via `requestAnimationFrame`, used by the
+    interactive gesture handlers instead of calling `draw()` directly.
+  - `onWheel` now calls `e.stopPropagation()` unconditionally. Found via a
+    real bug: the sky view's own trackpad-pinch zoom
+    (`MainScreen.svelte`'s `handleWheel`) is a `window`-level `wheel`
+    listener, not scoped to the sky canvas element, so without this the
+    same gesture over the Moon Map also zoomed the (invisible, underlying)
+    sky view down to its minimum FOV and re-queried its object database on
+    every step. This was a latent bug in `MoonCanvas` itself (the Moon Quiz
+    was equally exposed, since it also leaves `zoomEnabled` at its default
+    `true`), not something newly introduced here.
+  - `scale` changed from a private variable to `export let scale = 1`
+    (bindable) so the Moon Map can read the current zoom to size the
+    disambiguation overlay's fixed extra-zoom multiple; the Quiz doesn't
+    bind it and is unaffected.
+- `client/src/components/SearchPanel.svelte`: two new optional props,
+  `indexLoader` (defaults to the existing `getSearchIndex`) and `searchFn`
+  (defaults to the existing `doSearch`), so the same component/UI (input,
+  on-screen keyboard, alphabetical highlighted results list) can be pointed
+  at `buildMoonSearchIndex`/`doMoonSearch` instead — no behaviour change
+  for existing callers that don't pass them.
+- `client/src/screens/ObservationsScreen.svelte`: observation records only
+  ever stored an object `id`, with type/label resolved via a sky-object-only
+  lookup (`getObjectsByIds`) that doesn't know about Moon features. Added a
+  second, Moon-specific lookup (`flattenMoonFeatures(getMeta('moon_features'))`)
+  for any observed id the sky lookup didn't resolve, merged into the same
+  `objectById`/`labelByObjectId` maps under a synthetic
+  `{id, type: 'moon_feature', name}` shape. `objectSymbolKind()` gained a
+  `moon_feature` → `'moon'` case (reusing the ☽ glyph already defined for
+  the solar-system Moon in `ObservationObjectSymbol.svelte` — no icon
+  changes needed there). `observationHeaderObjectsPart()` now separates
+  Moon-feature entries out of the per-observation name list into a "Moon
+  N×" count. Tapping a Moon-feature entry in the expanded list is a no-op
+  (guarded in `openObjectFromObservation`) — there's no "About object"
+  screen for a Moon feature to open (that's the sky view's `ObjectDetails`,
+  built for stars/DSOs/solar-system bodies only); the observation form
+  itself (`ObservationFormPanel.svelte`) needed no changes at all, since it
+  only ever treats `objectId` as an opaque string key.
+- `client/src/components/DataSyncPanel.svelte`: unrelated pre-existing bug
+  found and fixed while testing this screen on mobile — its `LoginForm`
+  uses the app's custom-keyboard input system but, unlike every other
+  screen that does (`WelcomeScreen`, `LoginScreen`, ...), never mounted an
+  `<OnScreenKeyboard/>`, so focusing the login input had nothing to
+  actually type with. Added a `$keyboardActive`-gated, bottom-docked
+  `OnScreenKeyboard` (with its own `stopPropagation` — without it, taps on
+  the keyboard bubbled through to the sky view's tap handler underneath,
+  the same class of leak `onWheel`'s fix above addresses for wheel events).

@@ -25,6 +25,12 @@
   export let resultFilter = null
   export let onAcceptObject = null
   export let title = null
+  // Pluggable data source/matcher — defaults to the sky-object search index
+  // and its ranked doSearch(). The Moon Map points these at a separate,
+  // Moon-only index/search function (see moonMap.js's buildMoonSearchIndex/
+  // doMoonSearch) — the two domains are never merged.
+  export let indexLoader = getSearchIndex
+  export let searchFn = doSearch
 
   let query = ''
   let results = []
@@ -41,7 +47,7 @@
     window.addEventListener('keydown', onKey)
     await tick()
     inputComp?.focus()
-    ;[index, objectIdsWithPaths] = await Promise.all([getSearchIndex(), getObjectIdsWithFindingPaths()])
+    ;[index, objectIdsWithPaths] = await Promise.all([indexLoader(), getObjectIdsWithFindingPaths()])
     loading = false
   })
 
@@ -66,7 +72,7 @@
       }))
     : []
 
-  $: rawResults = doSearch(query, index ? [...solarEntries, ...index] : solarEntries.length ? solarEntries : null)
+  $: rawResults = searchFn(query, index ? [...solarEntries, ...index] : solarEntries.length ? solarEntries : null)
 
   $: results =
     typeof resultFilter === 'function'

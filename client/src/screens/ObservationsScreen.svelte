@@ -9,6 +9,7 @@
     getSyncDirtyTotalCount,
     deleteObservationByDate,
   } from '../lib/db.js'
+  import { flattenMoonFeatures } from '../lib/moonMap.js'
   import { pendingChanges } from '../stores/ui.js'
   import { keyboardActive } from '../stores/keyboard.js'
   import CustomInput from '../components/CustomInput.svelte'
@@ -106,6 +107,11 @@
 
   function objectSymbolKind(obj) {
     if (!obj) return 'generic'
+    // Moon features (craters, maria, ...) all share one plain Moon glyph —
+    // no need to distinguish crater vs. mare in the icon itself. Reuses the
+    // same glyph ObservationObjectSymbol already defines for the
+    // solar-system Moon (kind 'moon').
+    if (obj.type === 'moon_feature') return 'moon'
     if (obj.type === 'double_star') return dsLetterCount(obj.pairs) > 2 ? 'double_star_multi' : 'double_star'
     if (obj.type === 'star') {
       if (obj.dbl === 'm') return 'double_star_multi'
@@ -166,8 +172,14 @@
   }
 
   function observationHeaderObjectsPart(obs) {
-    const names = (obs.objects || []).map((entry) => labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id))
-    return trimList(names)
+    const entries = obs.objects || []
+    const moonCount = entries.filter((entry) => objectById.get(entry.id)?.type === 'moon_feature').length
+    const names = entries
+      .filter((entry) => objectById.get(entry.id)?.type !== 'moon_feature')
+      .map((entry) => labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id))
+    const parts = [trimList(names)].filter(Boolean)
+    if (moonCount > 0) parts.push(`Moon ${moonCount}×`)
+    return parts.join(', ')
   }
 
   function observationLocationLabel(obs) {
@@ -322,6 +334,11 @@
     e?.stopPropagation?.()
     const object = objectById.get(objectId)
     if (!object) return
+    // Moon features have no "About object" screen (that's the sky view's
+    // ObjectDetails, built for stars/DSOs/solar-system bodies) — the Moon
+    // Map is a browsing screen, not a details view, so there's nowhere
+    // sensible to navigate to here.
+    if (object.type === 'moon_feature') return
     onOpenObject(object)
   }
 
@@ -686,11 +703,24 @@
     // avoids loading the entire star/DSO catalogue to render a couple of
     // observation rows (see getObjectsByIds vs. the much heavier
     // getSearchIndex, which is only needed for the "Add object" search box).
-    const [foundObjects, telescopes, eyepieces] = await Promise.all([
+    const [foundObjects, moonFeaturesRaw, telescopes, eyepieces] = await Promise.all([
       getObjectsByIds(observedIds),
+      getMeta('moon_features'),
       getMeta('telescopes'),
       getMeta('eyepieces'),
     ])
+
+    // Moon features live in a separate catalogue from the sky-object DB
+    // getObjectsByIds looks up (they're not stars/DSOs), so ids it didn't
+    // resolve get a second, Moon-specific lookup here.
+    const unresolvedIds = [...observedIds].filter((id) => !foundObjects.has(id))
+    if (unresolvedIds.length > 0 && moonFeaturesRaw) {
+      const moonFeaturesById = new Map(flattenMoonFeatures(moonFeaturesRaw).map((f) => [f.id, f]))
+      for (const id of unresolvedIds) {
+        const feat = moonFeaturesById.get(id)
+        if (feat) foundObjects.set(id, { id, type: 'moon_feature', name: feat.name })
+      }
+    }
 
     labelByObjectId = new Map([...foundObjects.values()].map((obj) => [obj.id, objectLabel(obj)]))
     objectById = foundObjects

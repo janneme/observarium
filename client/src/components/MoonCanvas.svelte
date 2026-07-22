@@ -1,7 +1,9 @@
 <script>
-  import { onMount, afterUpdate } from 'svelte'
+  import { onMount, afterUpdate, createEventDispatcher } from 'svelte'
   import { theme } from '../stores/theme.js'
   import { projectPoint, illumCos, craterFadeAlpha, LIMB_COS_CUTOFF, SEA_TYPES } from '../lib/moonMap.js'
+
+  const dispatch = createEventDispatcher()
 
   // The features to draw — normally everything currently visible (a future
   // general Moon-browsing screen); the Moon Quiz instead passes a
@@ -24,6 +26,18 @@
   // on-screen size changes. Default false preserves the general-purpose
   // "detail appears as you zoom in" behaviour.
   export let fixedFeatureSet = false
+  // Overrides the fixed-pixel MIN_VISIBLE_RADIUS_PX floor with a threshold
+  // that scales with the viewport (fraction of its shorter side) — used by
+  // the Moon Map, which renders the full catalogue and needs the floor to
+  // scale with zoom rather than stay a constant pixel count (see
+  // moon_map.md "Zoom-based visibility"). null (default) keeps the Quiz's
+  // fixed-pixel behaviour.
+  export let minVisibleRatio = null
+  // Enables tap-to-select: pointerup with negligible movement dispatches a
+  // `tap` event with the candidate features near the tap point (whatever
+  // was actually rendered this frame). Off by default — the Quiz only ever
+  // highlights a target programmatically, it doesn't need tap handling.
+  export let interactive = false
 
   let canvasEl
   let wrapEl
@@ -34,7 +48,10 @@
   // View transform: scale = 1 means the disc (radius 1 in normalized units)
   // fills ~90% of the shorter canvas dimension. panX/panY are normalized
   // (same units as projectPoint's x/y) offsets applied before scaling.
-  let scale = 1
+  // Exported (bindable) so the Moon Map can read the current zoom to size
+  // its disambiguation overlay (a fixed multiple of it) — the Quiz doesn't
+  // bind it and is unaffected.
+  export let scale = 1
   let panX = 0
   let panY = 0
   const MIN_SCALE = 1
@@ -89,21 +106,44 @@
   let pinchStartDist = 0
   let pinchStartScale = 1
   let dragLast = null
+  let tapStart = null
+
+  // Movement (px) below which a pointerdown/up pair counts as a tap rather
+  // than a drag — same threshold pattern as LoupePanel/MainScreen's tap
+  // detection.
+  const TAP_MOVE_THRESHOLD_PX = 5
+  // Extra hit-test radius (px) beyond a feature's own rendered size, so
+  // small features stay tappable without needing a pixel-perfect hit.
+  const TAP_HIT_TOLERANCE_PX = 14
+
+  // Populated fresh by draw() every frame with whatever point/filled
+  // features actually got rendered (already zoom-visibility-filtered) —
+  // tap hit-testing (below) only ever considers what's currently on
+  // screen, never the full underlying `features` array.
+  let lastRendered = []
 
   let prevHighlightId = undefined
 
-  function isPointDark(nx, ny) {
-    // Inverse of projectPoint for a unit-radius orthographic disc: given
-    // on-disc (nx, ny), recover (lat, lon) to evaluate illumination.
+  // Inverse of projectPoint for a unit-radius orthographic disc: given
+  // on-disc normalized (nx, ny), recover (lat, lon) — used both for
+  // terminator shading (isPointDark) and to resolve a tap's screen position
+  // back to a selenographic point (resolveTap, for the disambiguation
+  // overlay's centering).
+  function screenNormToLatLon(nx, ny) {
     const rho = Math.min(1, Math.hypot(nx, ny))
     const c = Math.asin(rho)
-    if (rho < 1e-6) return illumCos(subLat, subLon, sunLon) <= 0
+    if (rho < 1e-6) return { lat: subLat, lon: subLon }
     const phi0 = (subLat * Math.PI) / 180
     const lat = (Math.asin(Math.cos(c) * Math.sin(phi0) + (ny * Math.sin(c) * Math.cos(phi0)) / rho) * 180) / Math.PI
     const lon =
       subLon +
       (Math.atan2(nx * Math.sin(c), rho * Math.cos(phi0) * Math.cos(c) - ny * Math.sin(phi0) * Math.sin(c)) * 180) /
         Math.PI
+    return { lat, lon }
+  }
+
+  function isPointDark(nx, ny) {
+    const { lat, lon } = screenNormToLatLon(nx, ny)
     return illumCos(lat, lon, sunLon) <= 0
   }
 
@@ -389,6 +429,46 @@
     panY = 0
   }
 
+  // Clamp so a near-limb feature/pan (legitimately close to the disc's
+  // edge, e.g. Mare Orientale/Australe, or just the user dragging toward a
+  // corner) doesn't pull the viewport past the disc and leave empty
+  // background filling one edge of the square view — keep the pan within
+  // the range that still has disc content reaching every side of the
+  // frame, rather than always centering exactly.
+  function clampPan() {
+    const halfExtent = 1 / (DISC_FILL_FRACTION * scale)
+    const maxPan = Math.max(0, 1 - halfExtent)
+    panX = Math.max(-maxPan, Math.min(maxPan, panX))
+    panY = Math.max(-maxPan, Math.min(maxPan, panY))
+  }
+
+  // Centers the view on a selenographic (lat, lon) at the given scale —
+  // shared by centerOnHighlight() (auto-scale from the target's own size)
+  // and the Moon Map's search/disambiguation flows (an explicit scale, e.g.
+  // a fixed multiple of the current one). Returns false (and resets the
+  // view) if the point isn't visible from the current sub-Earth point.
+  function centerOnPoint(lat, lon, targetScale) {
+    const p = projectPoint(lat, lon, subLat, subLon)
+    if (p.cosC <= LIMB_COS_CUTOFF) {
+      resetView()
+      return false
+    }
+    scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, targetScale))
+    // Centering a point (px, py) at screen-space (cx, cy) requires
+    // panX = -p.x, panY = +p.y — see discGeometry()/draw(): px = cx + (panX+x)*r
+    // solves to panX=-x at px=cx, while py = cy + (panY-y)*r solves to
+    // panY=y at py=cy (the y-axis sign flips because normalized y is
+    // north-up but screen y grows downward).
+    panX = -p.x
+    panY = p.y
+    clampPan()
+    return true
+  }
+
+  export function centerOn(lat, lon, targetScale) {
+    centerOnPoint(lat, lon, targetScale)
+  }
+
   export function centerOnHighlight() {
     if (!highlightId) {
       resetView()
@@ -399,33 +479,11 @@
       resetView()
       return
     }
-    const p = projectPoint(feat.lat, feat.lon, subLat, subLon)
-    if (p.cosC <= LIMB_COS_CUTOFF) {
-      resetView()
-      return
-    }
     // Zoom enough that a small feature isn't a single pixel, but not so much
     // that its immediate neighbourhood falls outside the view.
     const targetRadiusNorm = Math.max(0.01, (feat.sizeDeg * Math.PI) / 180 / 2)
-    scale = forceScale ?? Math.max(MIN_SCALE, Math.min(MAX_SCALE, 0.12 / targetRadiusNorm))
-
-    // Centering a point (px, py) at screen-space (cx, cy) requires
-    // panX = -p.x, panY = +p.y — see discGeometry()/draw(): px = cx + (panX+x)*r
-    // solves to panX=-x at px=cx, while py = cy + (panY-y)*r solves to
-    // panY=y at py=cy (the y-axis sign flips because normalized y is
-    // north-up but screen y grows downward).
-    const idealPanX = -p.x
-    const idealPanY = p.y
-
-    // Clamp so a near-limb feature (legitimately close to the disc's edge,
-    // e.g. Mare Orientale/Australe) doesn't pull the viewport past the disc
-    // and leave empty background filling one edge of the square view — keep
-    // the pan within the range that still has disc content reaching every
-    // side of the frame, rather than always centering exactly.
-    const halfExtent = 1 / (DISC_FILL_FRACTION * scale)
-    const maxPan = Math.max(0, 1 - halfExtent)
-    panX = Math.max(-maxPan, Math.min(maxPan, idealPanX))
-    panY = Math.max(-maxPan, Math.min(maxPan, idealPanY))
+    const autoScale = forceScale ?? Math.max(MIN_SCALE, Math.min(MAX_SCALE, 0.12 / targetRadiusNorm))
+    centerOnPoint(feat.lat, feat.lon, autoScale)
   }
 
   function resizeCanvas() {
@@ -444,6 +502,19 @@
     const cx = cssW / 2 + panX * baseR * scale
     const cy = cssH / 2 + panY * baseR * scale
     return { cx, cy, r: baseR * scale }
+  }
+
+  // Coalesces bursts of pan/pinch/wheel events (which can fire faster than
+  // the display refresh rate) into at most one draw() per animation frame,
+  // instead of one per input event.
+  let drawScheduled = false
+  function requestDraw() {
+    if (drawScheduled) return
+    drawScheduled = true
+    requestAnimationFrame(() => {
+      drawScheduled = false
+      draw()
+    })
   }
 
   function draw() {
@@ -522,6 +593,10 @@
     let highlightGeom = null
     const filledFeats = []
     const pointFeats = []
+    const renderedThisFrame = []
+    // A viewport-relative floor (Moon Map) or the Quiz's fixed-pixel one —
+    // see minVisibleRatio's doc comment above.
+    const visibilityFloorPx = minVisibleRatio != null ? minVisibleRatio * Math.min(cssW, cssH) : MIN_VISIBLE_RADIUS_PX
 
     for (const feat of features) {
       const p = projectPoint(feat.lat, feat.lon, subLat, subLon)
@@ -554,13 +629,15 @@
         const shape = polyPoints ? { kind: 'poly', points: polyPoints } : { kind: 'circle', px, py, px2 }
         if (isHighlight) highlightGeom = shape
         filledFeats.push({ colors: FILLED_COLORS[feat.type] || FILLED_COLORS.mare, isSea: SEA_TYPES.has(feat.type), shape })
+        renderedThisFrame.push({ feature: feat, px, py, radiusPx: px2 })
       } else {
-        // Zoom-based visibility filter (see MIN_VISIBLE_RADIUS_PX): skip
-        // drawing this crater entirely once it's too small to matter at the
-        // current zoom, rather than always flooring it to a visible dot.
-        // Skipped entirely when `fixedFeatureSet` is set (Moon Quiz) — the
-        // rendered set must not change with zoom there.
-        if (!isHighlight && !fixedFeatureSet && cappedNorm * r < MIN_VISIBLE_RADIUS_PX) continue
+        // Zoom-based visibility filter (see MIN_VISIBLE_RADIUS_PX /
+        // minVisibleRatio): skip drawing this crater entirely once it's too
+        // small to matter at the current zoom, rather than always flooring
+        // it to a visible dot. Skipped entirely when `fixedFeatureSet` is
+        // set (Moon Quiz) — the rendered set must not change with zoom
+        // there.
+        if (!isHighlight && !fixedFeatureSet && cappedNorm * r < visibilityFloorPx) continue
 
         // Point features (craters etc.) are drawn as an ellipse, not a
         // circle — orthographic projection foreshortens a circular surface
@@ -570,8 +647,33 @@
         // projection distortion (Tissot's indicatrix: radial scale = cosC,
         // tangential scale = 1). A plain circle looks noticeably wrong for
         // anything away from disc centre.
-        const tangentR = Math.max(MIN_VISIBLE_RADIUS_PX, cappedNorm * r)
+        // The visibility floor keeps *unselected* craters from rendering
+        // as sub-pixel specks once drawn — but it must not apply to the
+        // highlighted feature's own size, or it visibly stops shrinking
+        // once zoomed out past that floor while everything else keeps
+        // scaling down, making it look stuck rather than zooming with the
+        // rest of the view. The highlight only ever needs a tiny numerical
+        // floor to avoid a zero/negative radius.
+        const tangentR = Math.max(isHighlight ? 0.3 : visibilityFloorPx, cappedNorm * r)
         const radialR = Math.max(0.5, tangentR * p.cosC)
+
+        // Viewport cull: LIMB_COS_CUTOFF only rejects the far side (~half
+        // the Moon) — at high zoom the visible canvas covers a much
+        // smaller fraction of the near side than that, so most craters
+        // accepted above still land far outside the actual on-screen
+        // rectangle. Skip the (expensive — gradient fill) paint work for
+        // those; uses the crater's own just-computed radius, so it can't
+        // wrongly cull a real on-screen crater the way a fixed guessed
+        // margin could. Not applied to filled/area features (mare, mons,
+        // ...) — a huge or oddly-shaped real outline can have vertices far
+        // from its own centre point (e.g. Oceanus Procellarum), so a
+        // centre+radius cull isn't safe there; they're also few in number
+        // (tens, not thousands) and not the source of the slowdown.
+        if (!isHighlight) {
+          const cullR = Math.max(tangentR, radialR)
+          if (px < -cullR || px > cssW + cullR || py < -cullR || py > cssH + cullR) continue
+        }
+
         const angle = Math.atan2(py - cy, px - cx)
         if (isHighlight) {
           highlightGeom = {
@@ -584,8 +686,10 @@
           }
         }
         pointFeats.push({ px, py, tangentR, radialR, angle, cos, sizeDeg: feat.sizeDeg })
+        renderedThisFrame.push({ feature: feat, px, py, radiusPx: Math.max(tangentR, radialR) })
       }
     }
+    lastRendered = renderedThisFrame
 
     // Draw smaller craters last (on top) so an overlap reads as "the
     // smaller crater's rim cuts into the bigger one," matching how this
@@ -707,13 +811,35 @@
     return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
   }
 
+  // Hit-tests the tap point (client coords) against whatever was actually
+  // rendered this frame (lastRendered — already zoom-visibility-filtered)
+  // and dispatches the candidates, letting the parent screen decide:
+  // 0 -> deselect, 1 -> select, >1 -> disambiguate. See moon_map.md
+  // "Selecting a feature".
+  function resolveTap(clientX, clientY) {
+    const rect = wrapEl.getBoundingClientRect()
+    const px = clientX - rect.left
+    const py = clientY - rect.top
+    const candidates = lastRendered
+      .filter((entry) => Math.hypot(entry.px - px, entry.py - py) <= Math.max(entry.radiusPx, TAP_HIT_TOLERANCE_PX))
+      .map((entry) => entry.feature)
+    const { cx, cy, r } = discGeometry()
+    const { lat, lon } = screenNormToLatLon((px - cx) / r, -(py - cy) / r)
+    dispatch('tap', { candidates, lat, lon })
+  }
+
   function onPointerDown(e) {
-    if (!zoomEnabled) return
     wrapEl.setPointerCapture(e.pointerId)
     const rect = wrapEl.getBoundingClientRect()
-    pointers.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top })
+    const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    pointers.set(e.pointerId, pt)
+    // Tracked independent of zoomEnabled: the disambiguation overlay wants
+    // tap-to-select with pan/zoom disabled (zoomEnabled=false).
+    tapStart = pointers.size === 1 ? { x: pt.x, y: pt.y, clientX: e.clientX, clientY: e.clientY } : null
+
+    if (!zoomEnabled) return
     if (pointers.size === 1) {
-      dragLast = [...pointers.values()][0]
+      dragLast = pt
     } else if (pointers.size === 2) {
       pinchStartDist = pointerDist() || 1
       pinchStartScale = scale
@@ -724,34 +850,55 @@
   function onPointerMove(e) {
     if (!pointers.has(e.pointerId)) return
     const rect = wrapEl.getBoundingClientRect()
-    pointers.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top })
+    const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    pointers.set(e.pointerId, pt)
 
+    if (tapStart && Math.hypot(pt.x - tapStart.x, pt.y - tapStart.y) > TAP_MOVE_THRESHOLD_PX) {
+      tapStart = null
+    }
+
+    if (!zoomEnabled) return
     if (pointers.size === 1 && dragLast) {
       const cur = [...pointers.values()][0]
       const { r } = discGeometry()
       panX += (cur.x - dragLast.x) / r
       panY += (cur.y - dragLast.y) / r
+      clampPan()
       dragLast = cur
-      draw()
+      requestDraw()
     } else if (pointers.size === 2) {
       const dist = pointerDist() || 1
       scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, pinchStartScale * (dist / pinchStartDist)))
-      draw()
+      clampPan()
+      requestDraw()
     }
   }
 
   function onPointerUp(e) {
+    const wasSolePointer = pointers.size === 1
     pointers.delete(e.pointerId)
     if (pointers.size === 1) dragLast = [...pointers.values()][0]
     else dragLast = null
+
+    if (interactive && wasSolePointer && tapStart) {
+      resolveTap(tapStart.clientX, tapStart.clientY)
+    }
+    tapStart = null
   }
 
   function onWheel(e) {
+    // Stop this from bubbling to `window` regardless of zoomEnabled — the
+    // sky view's own pinch-to-zoom (MainScreen's handleWheel) is a
+    // window-level `wheel` listener, not scoped to the sky canvas element,
+    // so without this the same gesture over the Moon canvas also zoomed
+    // the (invisible, underlying) sky view and re-queried its object DB.
+    e.stopPropagation()
     if (!zoomEnabled) return
     e.preventDefault()
     const factor = Math.pow(1.0015, -e.deltaY)
     scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor))
-    draw()
+    clampPan()
+    requestDraw()
   }
 
   onMount(() => {

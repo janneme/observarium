@@ -2,10 +2,12 @@
   import { onMount, createEventDispatcher } from 'svelte'
   import { push } from 'svelte-spa-router'
   import LoginForm from './LoginForm.svelte'
+  import OnScreenKeyboard from './OnScreenKeyboard.svelte'
   import { runSync, runUpdateSync, clearAllStarAndObjectData } from '../lib/datasync.js'
   import { getManifest } from '../lib/api.js'
   import { getTokenStatus } from '../lib/auth.js'
   import { getMeta } from '../lib/db.js'
+  import { keyboardActive } from '../stores/keyboard.js'
 
   const dispatch = createEventDispatcher()
 
@@ -261,12 +263,29 @@
   </div>
 </div>
 
+{#if $keyboardActive}
+  <div class="kb-dock" on:pointerdown|stopPropagation>
+    <OnScreenKeyboard />
+  </div>
+{/if}
+
 <style>
   .backdrop {
     position: fixed;
     inset: 0;
     z-index: 50;
     background: rgba(0, 0, 0, 0.55);
+  }
+
+  .kb-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 52;
+    padding: 0.5rem;
+    box-sizing: border-box;
+    background: var(--surface-bg);
   }
 
   .panel {
