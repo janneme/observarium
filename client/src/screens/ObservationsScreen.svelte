@@ -767,8 +767,9 @@
                   >{#if observationHeaderLocationName(obs)}<span class="obs-location"
                       >, {observationHeaderLocationName(obs)}</span
                     >{/if}</span
-                >{#if observationHeaderObjectsPart(obs)}
-                  <span class="obs-objects">({observationHeaderObjectsPart(obs)})</span>
+                >{#if observationHeaderObjectsPart(obs)}{' '}<span class="obs-objects"
+                    >({observationHeaderObjectsPart(obs)})</span
+                  >
                 {/if}
               </span>
             </button>

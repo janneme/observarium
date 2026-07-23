@@ -820,11 +820,23 @@
     const rect = wrapEl.getBoundingClientRect()
     const px = clientX - rect.left
     const py = clientY - rect.top
-    const candidates = lastRendered
-      .filter((entry) => Math.hypot(entry.px - px, entry.py - py) <= Math.max(entry.radiusPx, TAP_HIT_TOLERANCE_PX))
-      .map((entry) => entry.feature)
     const { cx, cy, r } = discGeometry()
-    const { lat, lon } = screenNormToLatLon((px - cx) / r, -(py - cy) / r)
+    const nx = (px - cx) / r
+    const ny = -(py - cy) / r
+    const { lat, lon } = screenNormToLatLon(nx, ny)
+    // A feature's *stored* on-screen position/radius (lastRendered) ignores
+    // the terminator clip applied at paint time — e.g. a mare that straddles
+    // the terminator is still tracked at its full extent even though only
+    // its lit portion is actually drawn. Without this check, tapping the
+    // clipped-away (visually black) part of such a feature would still
+    // register as a hit on it. Reject the tap outright once it's on the
+    // dark side, before any geometric matching.
+    const candidates =
+      sunLon != null && isPointDark(nx, ny)
+        ? []
+        : lastRendered
+            .filter((entry) => Math.hypot(entry.px - px, entry.py - py) <= Math.max(entry.radiusPx, TAP_HIT_TOLERANCE_PX))
+            .map((entry) => entry.feature)
     dispatch('tap', { candidates, lat, lon })
   }
 

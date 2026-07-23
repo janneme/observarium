@@ -284,7 +284,7 @@
           <div class="icon-wrap">
             <MoonMapIcon size="42" />
           </div>
-          <span class="item-lbl">Moon Map</span>
+          <span class="item-lbl">Moon Map (M)</span>
         </button>
 
         <button

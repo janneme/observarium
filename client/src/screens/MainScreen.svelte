@@ -605,6 +605,12 @@
       e.preventDefault()
       return
     }
+    if (e.key === 'M') {
+      menuOpen = false
+      showMoonMap = true
+      e.preventDefault()
+      return
+    }
     if (e.key === 'a') {
       menuOpen = false
       showAbout = true
@@ -1040,6 +1046,8 @@
   {#if showMoonMap}
     <MoonMapScreen
       time={skyTime}
+      {lat}
+      {lon}
       on:close={() => {
         showMoonMap = false
       }}

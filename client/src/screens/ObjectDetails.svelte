@@ -26,6 +26,9 @@
   import ObjectListMembershipOverlay from '../components/ObjectListMembershipOverlay.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
   import ListIcon from '../icons/ListIcon.svelte'
+  import RiseIcon from '../icons/RiseIcon.svelte'
+  import SetIcon from '../icons/SetIcon.svelte'
+  import MaxHeightIcon from '../icons/MaxHeightIcon.svelte'
 
   export let lat = 48.2
   export let lon = 16.37
@@ -37,7 +40,7 @@
   let imageUrl = null
   let blobUrlToRevoke = null
   let riseTime = null
-  let transitTime = null
+  let transitAltitude = null
   let setTime = null
   let moonPhaseDeg = null
   let moonIllumination = null
@@ -326,9 +329,9 @@
       imageUrl = null
     }
 
-    // Rise/transit/set
+    // Rise/set/max altitude
     riseTime = null
-    transitTime = null
+    transitAltitude = null
     setTime = null
     moonPhaseDeg = null
     moonIllumination = null
@@ -366,7 +369,7 @@
       riseTime = SearchRiseSet(body, observer, +1, startTime, 1)
       setTime = SearchRiseSet(body, observer, -1, startTime, 1)
       const transitResult = SearchHourAngle(body, observer, 0, startTime)
-      transitTime = transitResult?.time ?? null
+      transitAltitude = transitResult?.hor?.altitude ?? null
 
       // Moon phase
       if (o.name === 'Moon' || body === Body.Moon) {
@@ -682,18 +685,8 @@
         {/if}
       </section>
 
-      <section class="info-section">
-        <div class="section-title">Visibility today</div>
-        <div class="row"><span class="label">Rise</span><span class="value mono">{formatTime(riseTime)}</span></div>
-        <div class="row">
-          <span class="label">Transit</span><span class="value mono">{formatTime(transitTime)}</span>
-        </div>
-        <div class="row"><span class="label">Set</span><span class="value mono">{formatTime(setTime)}</span></div>
-      </section>
-
       {#if moonPhaseDeg !== null}
         <section class="info-section moon-section">
-          <div class="section-title">Moon phase</div>
           <div class="moon-row">
             <svg viewBox="0 0 100 100" width="64" height="64" class="moon-svg">
               <circle cx="50" cy="50" r="45" class="moon-dark" />
@@ -701,7 +694,24 @@
                 <path d={moonPath(moonPhaseDeg)} class="moon-lit" />
               {/if}
             </svg>
-            <span class="value">{Math.round((moonIllumination ?? 0) * 100)}% illuminated</span>
+            <span class="value">
+              {Math.round((moonIllumination ?? 0) * 100)}% illuminated,
+              <span class="moon-rise-set">
+                <span class="rise-set"
+                  ><span class="rs-icon"><RiseIcon size="1em" /></span> {formatTime(riseTime)}</span
+                >
+                <span class="rise-set"
+                  ><span class="rs-icon"><SetIcon size="1em" /></span> {formatTime(setTime)}</span
+                >
+                {#if transitAltitude !== null}
+                  <span class="rise-set"
+                    ><span class="rs-icon"><MaxHeightIcon size="1em" /></span> {transitAltitude.toFixed(
+                      1,
+                    )}°</span
+                  >
+                {/if}
+              </span>
+            </span>
           </div>
         </section>
       {/if}
@@ -999,6 +1009,29 @@
 
   .moon-lit {
     fill: #e8e8e8;
+  }
+
+  .moon-rise-set {
+    display: inline;
+    font-size: 1em;
+    margin-left: 0.6rem;
+  }
+
+  .rise-set {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.2rem;
+    margin-right: 0.5rem;
+  }
+
+  .rs-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    line-height: 1;
+    position: relative;
+    top: 0.15em;
+    color: var(--accent);
   }
 
   .sep-row {

@@ -5,9 +5,16 @@
   import PhaseToggleIcon from '../icons/PhaseToggleIcon.svelte'
   import SearchIcon from '../icons/SearchIcon.svelte'
   import ObservedIcon from '../icons/ObservedIcon.svelte'
+  import RiseIcon from '../icons/RiseIcon.svelte'
+  import SetIcon from '../icons/SetIcon.svelte'
+  import MaxHeightIcon from '../icons/MaxHeightIcon.svelte'
 
   export let selectedFeature = null
   export let phaseFull = false
+  export let moonPhasePercent = null
+  export let moonRiseTime = null
+  export let moonSetTime = null
+  export let moonMaxAltitude = null
 
   const dispatch = createEventDispatcher()
 
@@ -18,22 +25,37 @@
     if (feature.name.toLowerCase().includes(label.toLowerCase())) return ''
     return label
   }
+
+  function formatRiseSetTime(astroTime) {
+    if (!astroTime) return '—'
+    const d = astroTime.date
+    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
 </script>
 
 <div class="moon-map-header">
   <button class="icon-btn" on:click={() => dispatch('back')} aria-label="Back">
     <BackIcon size="1.2rem" />
   </button>
-  <button class="icon-btn" on:click={() => dispatch('togglephase')} aria-label="Toggle phase view">
+  <button class="icon-btn phase-btn" on:click={() => dispatch('togglephase')} aria-label="Toggle phase view">
     <PhaseToggleIcon size="1.2rem" full={phaseFull} />
   </button>
 
   <span class="title">
-    Moon{#if selectedFeature}
+    {#if selectedFeature}
       {@const type = displayType(selectedFeature)}
-      , {type ? `${type} ` : ''}{selectedFeature.name}{#if selectedFeature.sizeKm}, {formatDimensions(
+      {type ? `${type} ` : ''}{selectedFeature.name}{#if selectedFeature.sizeKm}, {formatDimensions(
           selectedFeature,
         )}{/if}
+    {:else if moonPhasePercent !== null}
+      {moonPhasePercent}%,
+      <span class="rise-set"><span class="rs-icon"><RiseIcon size="1.2rem" /></span> {formatRiseSetTime(moonRiseTime)}</span>
+      <span class="rise-set"><span class="rs-icon"><SetIcon size="1.2rem" /></span> {formatRiseSetTime(moonSetTime)}</span>
+      {#if moonMaxAltitude !== null}
+        <span class="rise-set"><span class="rs-icon"><MaxHeightIcon size="1.2rem" /></span> {moonMaxAltitude.toFixed(
+            1,
+          )}°</span>
+      {/if}
     {/if}
   </span>
 
@@ -77,11 +99,34 @@
     background: rgba(200, 0, 0, 0.1);
   }
 
+  .phase-btn {
+    margin-left: -0.2rem;
+  }
+
   .title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .rise-set {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-weight: 400;
+  }
+
+  .rise-set + .rise-set {
+    margin-left: 0.5rem;
+  }
+
+  .rs-icon {
+    display: inline-flex;
+    color: var(--accent);
   }
 
   .filler {

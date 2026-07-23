@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte'
+  import { MoonPhase, Observer, AstroTime, SearchRiseSet, SearchHourAngle, Body } from 'astronomy-engine'
   import MoonMapHeader from '../components/MoonMapHeader.svelte'
   import MoonCanvas from '../components/MoonCanvas.svelte'
   import MoonDisambiguationOverlay from '../components/MoonDisambiguationOverlay.svelte'
@@ -16,15 +17,22 @@
   } from '../lib/moonMap.js'
 
   export let time = new Date()
+  export let lat = 48.2
+  export let lon = 16.37
 
   const dispatch = createEventDispatcher()
-  // Persisted only on leaving the screen (see handleBack) — deselecting
-  // before leaving clears it, same as never having selected anything.
+  // Persisted reactively (below) on every selection change, not just on an
+  // explicit "back" action — closing the screen via Escape (MainScreen's
+  // global shortcut handler) sets showMoonMap=false directly rather than
+  // going through handleBack, so persistence must not depend on that path.
   const LAST_SELECTED_KEY = 'observarium.moonMap.lastSelected'
 
   let loading = true
   let allFeatures = []
   let featuresById = new Map()
+  // Guards the persistence reactive statement below from firing (and
+  // wiping the saved selection) before onMount has restored it.
+  let didInitialLoad = false
 
   let selectedFeature = null
   // Terminator-cropped is the default (false) — see moon_map.md.
@@ -42,6 +50,11 @@
 
   let moonCanvasRef
 
+  let moonPhasePercent = null
+  let moonRiseTime = null
+  let moonSetTime = null
+  let moonMaxAltitude = null
+
   $: highlightId = selectedFeature?.id ?? null
 
   function updateViewing() {
@@ -52,6 +65,31 @@
   }
   $: time, phaseFull, updateViewing()
 
+  // Illumination %, next rise/set, and next max altitude (transit) — relevant
+  // only while nothing is selected (the header shows type/name/dimensions
+  // for a selection instead). Searched forward from the current moment
+  // (not from midnight) so an event that falls after midnight — e.g.
+  // tonight's moonset at 0:13 — is still found instead of showing "-"
+  // because it fell outside a midnight-to-midnight window.
+  function updateMoonRiseSetPhase() {
+    try {
+      const phaseDeg = MoonPhase(time)
+      moonPhasePercent = Math.round((1 - Math.cos((phaseDeg * Math.PI) / 180)) * 50)
+      const observer = new Observer(lat, lon, 0)
+      const startTime = new AstroTime(time)
+      moonRiseTime = SearchRiseSet(Body.Moon, observer, +1, startTime, 1)
+      moonSetTime = SearchRiseSet(Body.Moon, observer, -1, startTime, 1)
+      const transit = SearchHourAngle(Body.Moon, observer, 0, startTime, +1)
+      moonMaxAltitude = transit?.hor?.altitude ?? null
+    } catch {
+      moonPhasePercent = null
+      moonRiseTime = null
+      moonSetTime = null
+      moonMaxAltitude = null
+    }
+  }
+  $: time, lat, lon, updateMoonRiseSetPhase()
+
   function persistSelection(feature) {
     if (typeof window === 'undefined') return
     try {
@@ -61,6 +99,7 @@
       return
     }
   }
+  $: if (didInitialLoad) persistSelection(selectedFeature)
 
   function selectFeature(feature) {
     selectedFeature = feature
@@ -97,7 +136,6 @@
   }
 
   function handleBack() {
-    persistSelection(selectedFeature)
     dispatch('close')
   }
 
@@ -117,6 +155,7 @@
       }
     }
     loading = false
+    didInitialLoad = true
   })
 </script>
 
@@ -124,6 +163,10 @@
   <MoonMapHeader
     {selectedFeature}
     {phaseFull}
+    {moonPhasePercent}
+    {moonRiseTime}
+    {moonSetTime}
+    {moonMaxAltitude}
     on:back={handleBack}
     on:togglephase={() => (phaseFull = !phaseFull)}
     on:search={() => (showSearch = true)}
