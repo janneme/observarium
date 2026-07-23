@@ -32,10 +32,13 @@ import {
   getEyepieces,
   saveEyepieces,
   mergeEyepieces,
+  getLists,
+  saveLists,
+  mergeLists,
 } from './api.js'
 
 export const SYNC_MODES = ['merge', 'overwriteLocal', 'overwriteServer']
-export const SYNC_CATEGORY_LIST = ['observations', 'findingPaths', 'telescopes', 'eyepieces']
+export const SYNC_CATEGORY_LIST = ['observations', 'findingPaths', 'telescopes', 'eyepieces', 'lists']
 
 function fmtDateLabel(dateKey) {
   const d = new Date(`${dateKey}T00:00:00`)
@@ -186,6 +189,17 @@ async function makeAdapters() {
       saveServerRaw: (raw) => saveEyepieces(raw),
       formatLabel: (key, map) => map.get(key)?.name || key,
       mergePush: (upserts, deletes) => mergeEyepieces(upserts, deletes),
+    },
+    lists: {
+      noun: { singular: 'list', plural: 'lists' },
+      getLocalRaw: async () => (await getMeta('lists')) || [],
+      getRemoteRaw: () => getLists(),
+      toMap: (raw) => new Map((raw || []).map((l) => [l.id, l])),
+      fromMap: (map) => Array.from(map.values()),
+      replaceLocalRaw: (raw) => setMeta('lists', raw),
+      saveServerRaw: (raw) => saveLists(raw),
+      formatLabel: (key, map) => map.get(key)?.name || key,
+      mergePush: (upserts, deletes) => mergeLists(upserts, deletes),
     },
   }
 }

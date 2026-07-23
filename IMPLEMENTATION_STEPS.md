@@ -2115,3 +2115,108 @@ client resync to reach existing installs.
   `OnScreenKeyboard` (with its own `stopPropagation` — without it, taps on
   the keyboard bubbled through to the sky view's tap handler underneath,
   the same class of leak `onWheel`'s fix above addresses for wheel events).
+
+### Step 42: Lists
+
+**README refs:** §4.2, §5.15, §5.17, §5.20  
+**Deliverable:** Named, syncable lists of stars/DSOs, with a difficulty-based
+sort option, sky-view marking for active lists, and membership management
+from both the Lists screen and "About object".
+
+**Data & sync:** Lists are a flat array under `getMeta('lists')` — the same
+storage shape as telescopes/eyepieces (`client/src/screens/TelescopesScreen.svelte`),
+not the nested-blob shape finding paths use — chosen because it's what the
+generic sync adapter in `sync.js` already expects for array-of-records
+categories with an `id` field. `'lists'` was added to `db.js`'s
+`SYNC_CATEGORIES` (the dirty ledger is already generic over category, so no
+ledger changes were needed) and to `sync.js`'s adapter map (`toMap`/`fromMap`
+by `id`, `mergePush` via a new `mergeLists`). `server/handler.py` gained
+`/lists`, `/lists` POST, and `/lists/merge` routes by reusing the existing
+generic `_handle_get_flat_list`/`_handle_save_flat_list`/`_handle_merge_flat_list`
+helpers already backing telescopes/eyepieces — no new server-side logic.
+`SyncSetupScreen.svelte` gained a "Lists" row in its category checklist.
+
+**Client — new files:**
+
+- `client/src/lib/lists.js` — the CRUD layer (`getAllLists`, `saveList`,
+  `deleteList`, `renameList`, `setListActive`, `addObjectToList`,
+  `removeObjectFromList`/`removeObjectFromLists`, `updateListObjectNote`,
+  `reorderListObject`, `getListsForObject`), each write going through
+  `saveList`/`deleteList` so dirty-marking is centralized. Also exports
+  `activeListObjectIds`, a Svelte store holding the `Set` of object ids
+  belonging to at least one active list, refreshed automatically after every
+  list mutation — this is what `SkyCanvas` subscribes to for its marker
+  layer, rather than re-querying storage per frame.
+- `client/src/lib/listDifficulty.js` — the difficulty index described in
+  README §5.20 (`dsoDifficulty`, `doubleStarDifficulty`, `starDifficulty`,
+  `percentileRank`, `computeListDifficultyOrder`). Reads the object shapes
+  already present in synced data (DSO `size`/`mag`, double-star `pairs[0]`
+  with `mag`/`sep`, star `mag`) — no data_prep changes needed. The
+  double-star formula's two weighting constants are named and commented as
+  rough starting values pending empirical tuning, not something to treat as
+  fixed. Covered by `client/test/lib/listDifficulty.test.js`.
+- `client/src/screens/ListsScreen.svelte` — the main screen, structured
+  directly on `ObservationsScreen.svelte`'s patterns: same expandable-card
+  layout, the same edit-in-place state shape (draft + Accept/Cancel icons)
+  reused for both list-name renaming and object notes, the existing
+  `ConfirmDialog` for deletions, and the existing `SearchPanel` (with
+  `includeSolar={false}` and a `resultFilter` excluding objects already in
+  the list) for adding objects — no new search/matching logic. Manual-sort
+  reordering and the three sort types are computed at render time from the
+  stored `objects` array; only Manual order is actually persisted.
+- `client/src/components/ObservedListRemovalOverlay.svelte` and
+  `ObjectListMembershipOverlay.svelte` — the two small overlays described in
+  README §5.17. Kept as two separate components rather than one shared one
+  since their scope genuinely differs (active-lists-only vs. all-lists) and
+  their action semantics differ (explicit Remove/Continue vs. immediate
+  toggle-on-change).
+- `client/src/icons/ListIcon.svelte`, `MoveUpIcon.svelte`,
+  `MoveDownIcon.svelte` — new icons for the menu, the About-object header,
+  and Manual-sort reordering. The active-toggle icon reuses the existing
+  `ObservedIcon`/`StrikeOverlayIcon` pair rather than a new icon.
+
+**Client — extended existing files:**
+
+- `client/src/components/MenuPanel.svelte`: the Records row is split into
+  two rows to keep four items each — Observations/Lists/Finding
+  Paths/Telescopes, then Visual Range alone — with a new "Lists (l)" button
+  dispatching `lists`.
+- `client/src/screens/MainScreen.svelte`: `showLists` flag following the
+  same wiring shape as every other overlay screen (Escape-close chain, the
+  "ignore global shortcuts while an overlay is open" list, the `l` shortcut,
+  the menu dispatch handler, the template block). Also subscribes to
+  `activeListObjectIds` and passes it down to `SkyCanvas` as a prop, and
+  calls a one-time `refreshActiveListObjectIds()` on mount (list mutations
+  refresh it themselves afterwards).
+- `client/src/components/SkyCanvas.svelte`: new `activeListObjectIds` prop
+  and `drawActiveListMarkers()`, called once per frame after the DSO and
+  star/double-star passes. Three bugs found and fixed during development,
+  all specific to this new code (not pre-existing):
+  - `activeListObjectIds` was missing from the component's central
+    dependency-tracking reactive block, so toggling a list active didn't
+    reliably mark the canvas dirty for redraw.
+  - `renderedPx` (the per-object on-screen-position map) was a `const`
+    local to `draw()`; `drawActiveListMarkers` is a separate top-level
+    function and had no access to it, throwing a `ReferenceError` the first
+    time a marker was due to be drawn — which, since nothing catches it,
+    silently killed the `requestAnimationFrame` loop's next scheduling.
+    Fixed by hoisting `renderedPx` to component scope.
+  - The marker radius was originally a fixed 9px, which is smaller than a
+    deep sky object's own symbol once it renders proportionally at
+    sufficient zoom (e.g. M31). `drawDso`/`drawDsoSymbol`/`drawStar` now
+    return the pixel radius they actually drew at; that radius is stored
+    per-object in `renderedPx` and the marker uses
+    `max(9px, symbolRadius + 4px)` so it always clears the symbol.
+  - Separately (found via the same testing, not part of the marker layer
+    itself): `drawDso`'s proportional-size cap was a fixed 50px — far
+    smaller than objects like M31 need at even moderate zoom — which froze
+    the galaxy's apparent size while its companions (M32, M110) kept moving
+    outward at the correct scale, making them appear to escape it. Changed
+    to cap relative to the viewport (`min(W,H) * 0.9`) instead.
+  - The FOV gate compares `minDimFov` (matching the value shown in the top
+    bar) rather than the raw `fov` prop, so the configured threshold lines
+    up with what the user sees displayed; the threshold itself
+    (`ACTIVE_LIST_MARKER_MAX_FOV_DEG`) is a named constant, currently 75°.
+- `client/src/screens/ObjectDetails.svelte`: new "Lists" header icon/badge
+  and its membership overlay, and the Observed-flow pre-check overlay,
+  wired as described in README §5.17.

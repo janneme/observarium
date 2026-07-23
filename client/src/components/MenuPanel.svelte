@@ -20,6 +20,7 @@
   import ObservationsIcon from '../icons/ObservationsIcon.svelte'
   import FindingPathsIcon from '../icons/FindingPathsIcon.svelte'
   import RangeIcon from '../icons/RangeIcon.svelte'
+  import ListIcon from '../icons/ListIcon.svelte'
   import TelescopeIcon from '../icons/TelescopeIcon.svelte'
   import ConstellationQuizIcon from '../icons/ConstellationQuizIcon.svelte'
   import DsoQuizIcon from '../icons/DsoQuizIcon.svelte'
@@ -158,6 +159,20 @@
         <button
           class="grid-item"
           on:click={() => {
+            dispatch('lists')
+            close()
+          }}
+          aria-label="Lists"
+        >
+          <div class="icon-wrap">
+            <ListIcon size="42" />
+          </div>
+          <span class="item-lbl">Lists (l)</span>
+        </button>
+
+        <button
+          class="grid-item"
+          on:click={() => {
             dispatch('findingpathslist')
             close()
           }}
@@ -172,20 +187,6 @@
         <button
           class="grid-item"
           on:click={() => {
-            dispatch('visualrange')
-            close()
-          }}
-          aria-label="Visual Range"
-        >
-          <div class="icon-wrap">
-            <RangeIcon size="42" />
-          </div>
-          <span class="item-lbl">Visual Range (r)</span>
-        </button>
-
-        <button
-          class="grid-item"
-          on:click={() => {
             dispatch('telescopes')
             close()
           }}
@@ -195,6 +196,22 @@
             <TelescopeIcon size="42" />
           </div>
           <span class="item-lbl">Telescopes (t)</span>
+        </button>
+      </div>
+
+      <div class="section-row">
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('visualrange')
+            close()
+          }}
+          aria-label="Visual Range"
+        >
+          <div class="icon-wrap">
+            <RangeIcon size="42" />
+          </div>
+          <span class="item-lbl">Visual Range (r)</span>
         </button>
       </div>
 

@@ -14,9 +14,18 @@
   import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
   import { getObservationByDate, getObjectImage, getDoubleStarNear, resolveObservationDateKey } from '../lib/db.js'
   import { applyDsPatch } from '../lib/customObjects.js'
+  import {
+    getAllLists,
+    getListsForObject,
+    addObjectToList,
+    removeObjectFromLists,
+  } from '../lib/lists.js'
   import ObservationFormPanel from '../components/ObservationFormPanel.svelte'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
+  import ObservedListRemovalOverlay from '../components/ObservedListRemovalOverlay.svelte'
+  import ObjectListMembershipOverlay from '../components/ObjectListMembershipOverlay.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
+  import ListIcon from '../icons/ListIcon.svelte'
 
   export let lat = 48.2
   export let lon = 16.37
@@ -34,6 +43,11 @@
   let moonIllumination = null
   let planetPhaseFraction = null
   let showObservationForm = false
+  let allLists = []
+  let objectListMemberships = []
+  let showObservedListRemoval = false
+  let observedListRemovalCandidates = []
+  let showListMembership = false
 
   $: obj = $selectedObject
 
@@ -370,9 +384,55 @@
     }
   }
 
-  function openObservedForm() {
+  async function refreshListMemberships() {
+    if (!obj) {
+      allLists = []
+      objectListMemberships = []
+      return
+    }
+    allLists = await getAllLists()
+    objectListMemberships = await getListsForObject(obj.id)
+  }
+
+  $: if (obj) refreshListMemberships()
+
+  async function openObservedForm() {
     if (!obj) return
+    const activeContaining = objectListMemberships.filter((l) => l.active)
+    if (activeContaining.length > 0) {
+      observedListRemovalCandidates = activeContaining.map((l) => ({
+        id: l.id,
+        name: l.name,
+        count: (l.objects || []).length,
+      }))
+      showObservedListRemoval = true
+      return
+    }
     showObservationForm = true
+  }
+
+  async function onObservedListRemovalRemove(e) {
+    showObservedListRemoval = false
+    await removeObjectFromLists(e.detail.listIds, obj.id)
+    await refreshListMemberships()
+    showObservationForm = true
+  }
+
+  function onObservedListRemovalContinue() {
+    showObservedListRemoval = false
+    showObservationForm = true
+  }
+
+  function openListMembership() {
+    if (!obj) return
+    showListMembership = true
+  }
+
+  async function onListMembershipToggle(e) {
+    const { listId, member } = e.detail
+    if (member) await addObjectToList(listId, obj.id)
+    else await removeObjectFromLists([listId], obj.id)
+    await refreshListMemberships()
   }
 
   function shouldIgnoreShortcutTarget(target) {
@@ -481,6 +541,14 @@
     </button>
     <span class="type-symbol"><ObservationObjectSymbol kind={objectSymbolKind(obj)} /></span>
     <span class="header-title">{objLabel(obj)}</span>
+    {#if allLists.length > 0}
+      <button class="lists-btn" on:click={openListMembership} title="Lists">
+        <ListIcon size="1.15rem" aria-hidden="true" />
+        {#if objectListMemberships.length > 0}
+          <span class="badge">{objectListMemberships.length}</span>
+        {/if}
+      </button>
+    {/if}
     <button
       class="observed-btn"
       class:observed={isObservedToday}
@@ -683,6 +751,30 @@
   {/if}
 </div>
 
+{#if showObservedListRemoval}
+  <ObservedListRemovalOverlay
+    lists={observedListRemovalCandidates}
+    on:remove={onObservedListRemovalRemove}
+    on:continue={onObservedListRemovalContinue}
+  />
+{/if}
+
+{#if showListMembership && obj}
+  <ObjectListMembershipOverlay
+    lists={allLists.map((l) => ({
+      id: l.id,
+      name: l.name,
+      active: l.active,
+      count: (l.objects || []).length,
+      member: (l.objects || []).some((o) => o.id === obj.id),
+    }))}
+    on:toggle={onListMembershipToggle}
+    on:close={() => {
+      showListMembership = false
+    }}
+  />
+{/if}
+
 <style>
   .overlay {
     position: fixed;
@@ -739,6 +831,47 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .lists-btn {
+    background: none;
+    border: none;
+    color: var(--fg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0.25rem;
+    border-radius: 4px;
+    position: relative;
+  }
+
+  .lists-btn:hover {
+    background: rgba(200, 0, 0, 0.1);
+  }
+
+  .lists-btn .badge {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    min-width: 15px;
+    height: 15px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+  }
+
+  :global([data-theme='nightly']) .lists-btn .badge {
+    background: #1a3a6e;
+    color: #ff4444;
   }
 
   .observed-btn {

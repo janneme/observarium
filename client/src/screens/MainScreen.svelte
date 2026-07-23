@@ -21,8 +21,10 @@
   import MoonQuizScreen from './MoonQuizScreen.svelte'
   import MoonMapScreen from './MoonMapScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
+  import ListsScreen from './ListsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
   import { getObjectsInArea, migrateLegacyPendingToSyncDirty, getSyncDirtyTotalCount } from '../lib/db.js'
+  import { activeListObjectIds, refreshActiveListObjectIds } from '../lib/lists.js'
   import { getTokenStatus } from '../lib/auth.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
@@ -89,7 +91,13 @@
   let showSync = false
   let showSyncSetup = false
   let showSyncReport = false
-  let syncCategories = { observations: true, findingPaths: true, telescopes: true, eyepieces: true }
+  let syncCategories = {
+    observations: true,
+    findingPaths: true,
+    telescopes: true,
+    eyepieces: true,
+    lists: true,
+  }
   let syncMode = 'merge'
   let syncSource = 'local'
   let syncPlan = null
@@ -97,6 +105,7 @@
   let showObservationSyncLogin = false
   let showTelescopes = false
   let showObservations = false
+  let showLists = false
   let showFindingPaths = false
   let findingPathsObject = null
   let findingPathsFromFinder = false
@@ -458,6 +467,11 @@
         e.preventDefault()
         return
       }
+      if (showLists) {
+        showLists = false
+        e.preventDefault()
+        return
+      }
       if (get(objectDetailsActive)) {
         objectDetailsActive.set(false)
         e.preventDefault()
@@ -487,6 +501,7 @@
     if (showConstellationIdQuiz) return
     if (showMoonQuiz) return
     if (showMoonMap) return
+    if (showLists) return
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -560,6 +575,12 @@
       e.preventDefault()
       return
     }
+    if (e.key === 'l') {
+      menuOpen = false
+      showLists = true
+      e.preventDefault()
+      return
+    }
     if (e.key === 'p') {
       menuOpen = false
       showFindingPathsList = true
@@ -627,6 +648,7 @@
     migrateLegacyPendingToSyncDirty()
       .then(() => getSyncDirtyTotalCount())
       .then((count) => pendingChanges.set(count))
+    refreshActiveListObjectIds()
     window.addEventListener('keydown', handleKey)
     window.addEventListener('wheel', handleWheel, { passive: false })
     clockInterval = setInterval(() => {
@@ -692,6 +714,7 @@
       showDsos={$showDsos}
       showHorizon={$showHorizon}
       showSolarSystem={$showSolarSystem}
+      activeListObjectIds={$activeListObjectIds}
     />
   {/if}
 
@@ -737,6 +760,9 @@
     }}
     on:observations={() => {
       showObservations = true
+    }}
+    on:lists={() => {
+      showLists = true
     }}
     on:findingpathslist={() => {
       showFindingPathsList = true
@@ -862,6 +888,14 @@
         showObservations = false
         selectedObject.set(obj)
         objectDetailsActive.set(true)
+      }}
+    />
+  {/if}
+
+  {#if showLists}
+    <ListsScreen
+      onClose={() => {
+        showLists = false
       }}
     />
   {/if}

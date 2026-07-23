@@ -708,6 +708,20 @@ def _route_eyepieces(path: str, method: str, event: dict):
     return None
 
 
+def _lists_key_for_user(username: str) -> str:
+    return f"lists/{username}.json"
+
+
+def _route_lists(path: str, method: str, event: dict):
+    if path == "/lists" and method == "GET":
+        return _handle_get_flat_list(event, _lists_key_for_user)
+    if path == "/lists" and method == "POST":
+        return _handle_save_flat_list(event, _lists_key_for_user, "Lists")
+    if path == "/lists/merge" and method == "POST":
+        return _handle_merge_flat_list(event, _lists_key_for_user, "id", "Lists")
+    return None
+
+
 def _route_observations(path: str, method: str, event: dict):
     if path == "/observations" and method == "GET":
         return handle_get_observations(event)
@@ -741,6 +755,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
         _route_finding_paths,
         _route_telescopes,
         _route_eyepieces,
+        _route_lists,
     )
 
     for fn in route_funcs:

@@ -38,6 +38,11 @@
   export let overlayArrows = []
   export let starRadiusScale = 1
   export let nightlyStarRadiusScale = 1.5
+  export let activeListObjectIds = new Set()
+
+  // Lists (see lists.md §4): active-list membership markers only show once
+  // zoomed in enough that a full-sky view isn't cluttered with rings.
+  const ACTIVE_LIST_MARKER_MAX_FOV_DEG = 75
   export let showSpecialStarSymbols = true
   export let targetMarker = null
   export let targetMarkerColor = 'rgba(120,0,255,0.9)'
@@ -52,6 +57,7 @@
     H = 0
   let rafId = null
   let dirty = true
+  let renderedPx = new Map()
   let observer
   let currentTheme = get(theme)
   let aboveMap = new Map()
@@ -98,6 +104,7 @@
     highlightBoundaryAbbr
     lineAbbrsFilter
     quizzedConstellationAbbr
+    activeListObjectIds
     dirty = true
   }
 
@@ -620,6 +627,7 @@
     }
 
     ctx.globalAlpha = 1
+    return r
   }
 
   function dsLetterCount(pairs) {
@@ -647,6 +655,7 @@
     ctx.fillStyle = fill
     ctx.fill()
     ctx.globalAlpha = 1
+    return r
   }
 
   function _blendToWhite(hex, t) {
@@ -741,12 +750,16 @@
   function drawDso(ctx, obj, pt) {
     const rawSz = dsoRawPx(obj.size)
     if (rawSz < DSO_SYMBOL_THRESHOLD * Math.min(W, H)) {
-      drawDsoSymbol(ctx, obj, pt)
-      return
+      return drawDsoSymbol(ctx, obj, pt)
     }
 
     const nightly = currentTheme === 'nightly'
-    const sz = Math.max(4, Math.min(50, rawSz))
+    // Cap relative to the viewport (not a fixed px value) so the symbol keeps
+    // scaling correctly as the user zooms in further — a fixed cap freezes
+    // the symbol's apparent size while companion objects (e.g. M32/M110
+    // around M31) keep moving outward at the correct zoomed scale, making
+    // them appear to escape it.
+    const sz = Math.max(4, Math.min(Math.min(W, H) * 0.9, rawSz))
     const r = sz / 2
     ctx.globalAlpha = nightly ? 1.0 : 0.85
     ctx.strokeStyle = nightly ? '#bb0000' : '#99c0ff'
@@ -807,6 +820,7 @@
     }
 
     ctx.globalAlpha = 1
+    return r
   }
 
   // Circular mean of boundary vertices → [ra_h, dec_d] centroid for a constellation.
@@ -1030,6 +1044,24 @@
     ctx.stroke()
   }
 
+  const ACTIVE_LIST_MARKER_MIN_R = 9
+  const ACTIVE_LIST_MARKER_GAP = 4 // clearance beyond the object's own rendered symbol radius
+
+  function drawActiveListMarkers(ctx) {
+    if (minDimFov > ACTIVE_LIST_MARKER_MAX_FOV_DEG) return
+    if (!activeListObjectIds || activeListObjectIds.size === 0) return
+    ctx.strokeStyle = currentTheme === 'nightly' ? '#aa00ff' : '#ffff00'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([])
+    for (const [id, pt] of renderedPx) {
+      if (!activeListObjectIds.has(id)) continue
+      const r = Math.max(ACTIVE_LIST_MARKER_MIN_R, (pt.r ?? 0) + ACTIVE_LIST_MARKER_GAP)
+      ctx.beginPath()
+      ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  }
+
   function drawTargetMarker(ctx) {
     if (!Array.isArray(targetMarker) || targetMarker.length < 2) return
     const pt = projectToPixel(targetMarker[0], targetMarker[1], ra0, dec0, W, H, fov, rotation)
@@ -1112,7 +1144,7 @@
     if (showConstellationLines) drawConstellationLines(ctx)
     if (showConstellationNames) drawConstellationNames(ctx)
 
-    const renderedPx = new Map()
+    renderedPx = new Map()
     const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
     // DSO limit: anchored at starMag=5→dsoMag=8, starMag=13→dsoMag=12 (linear in mag space).
     // DSOs are extended objects; their visual limit lags stars by 3 mags at naked-eye FOV,
@@ -1250,8 +1282,8 @@
         const [ra, dec] = obj.pos
         const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
         if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
-        drawDso(ctx, obj, pt)
-        renderedPx.set(obj.id, { px: pt.px, py: pt.py })
+        const symR = drawDso(ctx, obj, pt)
+        renderedPx.set(obj.id, { px: pt.px, py: pt.py, r: symR })
         tally(obj.dsoType ?? 'galaxy')
       }
     }
@@ -1269,13 +1301,15 @@
         const isDouble = obj.type === 'double_star' || !!obj.dbl
         const isMulti = (obj.type === 'double_star' && dsLetterCount(obj.pairs) > 2) || obj.dbl === 'm'
         const isVariable = Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1
-        drawStar(ctx, obj, pt, above)
+        const symR = drawStar(ctx, obj, pt, above)
         if (showSpecialStarSymbols && isVariable) addVariableRing(ctx, obj, pt, above)
         if (showSpecialStarSymbols && isDouble) addDoubleJut(ctx, obj, pt, above, isMulti)
-        renderedPx.set(obj.id, { px: pt.px, py: pt.py })
+        renderedPx.set(obj.id, { px: pt.px, py: pt.py, r: symR })
         tally(isDouble ? 'double_star' : 'star')
       }
     }
+
+    drawActiveListMarkers(ctx)
 
     // Pass 3: solar system bodies (on top of stars)
     if (showSolarSystem) drawSolarSystem(ctx)

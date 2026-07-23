@@ -5,7 +5,13 @@
   import { setActiveServerUrl, CLOUD_SERVER_URL } from '../lib/api.js'
   import { analyzeSync } from '../lib/sync.js'
 
-  export let categories = { observations: true, findingPaths: true, telescopes: true, eyepieces: true }
+  export let categories = {
+    observations: true,
+    findingPaths: true,
+    telescopes: true,
+    eyepieces: true,
+    lists: true,
+  }
   export let mode = 'merge'
   export let source = 'local'
 
@@ -18,6 +24,7 @@
     { key: 'findingPaths', label: 'Finding paths' },
     { key: 'telescopes', label: 'Telescopes' },
     { key: 'eyepieces', label: 'Eyepieces' },
+    { key: 'lists', label: 'Lists' },
   ]
 
   const MODE_OPTIONS = [

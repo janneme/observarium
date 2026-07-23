@@ -281,6 +281,7 @@ The menu has the following items (each one represented by a suitable SVG icon):
 - Toggle FOV circle (on by default; shows the finder FOV footprint on the Main Screen)
 - Search
 - Observations
+- Lists
 - Telescopes
 - Moon quiz
 - Star quiz
@@ -799,6 +800,10 @@ After pressing "Synchronize", the app:
 
 Operation status is displayed in the screen.
 
+Observations, Object Finding Paths, Telescopes/Eyepieces, and Lists (§5.20)
+are each an independently includable/excludable category in this screen,
+synchronized the same way.
+
 ## 5.16 About
 
 The screen consists of:
@@ -820,17 +825,27 @@ The screen consists of:
 - All known object details
 - Rise, transit and set times for the current date and location
 - "Back" icon button
+- "Lists" icon button, shown only when at least one list (§5.20) is defined —
+  carries a badge with the number of lists the object currently belongs to
+  (unbadged if none). Opens an overlay listing every defined list (active or
+  not) with a toggle per list reflecting the object's current membership;
+  toggling takes effect immediately.
 - "Observed" icon button — visually distinct (filled/checked state) if the object
   is already recorded in today's observation
 
 In case of Moon we want to see the moon image in the current phase.
 Information about phase % should be displayed for Moon and inner planets.
 
-If we press "Observed" a new observation with current date and location will be
-created (if it does not exist yet) or the existing data for today's observation
-are updated (there is always at most one observation record, typically with multiple
-observed objects, per date). A form consisting of the following items is
-displayed:
+If the object belongs to at least one currently active list, pressing
+"Observed" first shows an overlay offering to remove it from those lists
+("This object is present in some active lists. Would you like to remove it
+from these lists?", one toggle per active list, "Remove" vs. "Continue
+without removing") before proceeding. Otherwise, or after that choice is
+made, a new observation with current date and location will be created (if
+it does not exist yet) or the existing data for today's observation are
+updated (there is always at most one observation record, typically with
+multiple observed objects, per date). A form consisting of the following
+items is displayed:
 
 - Date (prefilled with current date and time, but we can override it; if we override the
   date, the data are saved to observation of the overridden date)
@@ -950,3 +965,42 @@ this screen.
 The last-selected feature is remembered: reopening the Moon Map reselects it automatically (as if
 picked from search) unless it was deselected before leaving, or no longer resolves against the
 current data (e.g. after a data update) — in which case the screen falls back to the default view.
+
+## 5.20 Lists
+
+Named, user-defined lists of observation targets (e.g. "objects planned for tonight", "nice double
+stars", a long-term wish list). A list may contain stars (including double stars) and deep sky
+objects; solar system bodies (planets, Sun, Moon) cannot be added to a list. Lists are user data,
+synchronized to the server the same way observations and finding paths are (§5.15).
+
+The screen, structured like the Observations screen (§5.5), consists of:
+
+- Header: back icon, "Lists", add icon (opens the add-list form).
+- A list of defined lists, sorted alphabetically by name. Each row shows the list name (bold when
+  active) and its object count, plus icon buttons to edit the name in place (same edit-in-place
+  pattern as observation notes), delete the list (with confirmation), and toggle it active/inactive
+  (an eye / crossed-eye icon).
+- Expanding a list reveals its objects, an "Add object" icon (opens the app's object search,
+  restricted to stars and deep sky objects), and per-object icon buttons to edit a note (multiline,
+  same edit-in-place pattern; saving an empty note deletes it) and remove the object (with
+  confirmation). When the list's sort type is "Manual", move up/down icons are also shown.
+- The add-list form asks for a name and a sort type, fixed once the list is created:
+  - **Name** — alphabetical by object identification (star name/catalogue number, or
+    `CATALOGUE (NAME)` for a named deep sky object).
+  - **Difficulty** — easiest first. A single difficulty index ranks stars, double stars, and deep
+    sky objects against each other: deep sky objects use surface brightness (magnitude adjusted for
+    angular size, so a large low-surface-brightness galaxy correctly ranks harder than a small
+    bright one of the same catalogue magnitude); double stars combine separation and the magnitude
+    difference between components; single stars use their own magnitude. Since these three
+    formulas aren't on a shared scale, each object's raw index is normalized to a percentile rank
+    within its own category before the mixed list is sorted.
+  - **Manual** — the user's own order, reorderable via the move up/down icons above.
+
+Once the sky view is zoomed in to a field of view of 75° or narrower, every object belonging to an
+**active** list is marked with a solid circle, sized to clear the object's own rendered symbol —
+yellow in daily mode, a magenta `#aa00ff` in nightly mode. Above that threshold no markers are
+shown, to avoid cluttering a wide-field view with rings scattered across dozens of objects.
+
+Objects can be added to or removed from lists both from this screen and from the "About object"
+screen's "Lists" icon (§5.17); removing an object from an active list can also be offered as part of
+pressing "Observed" for that object (§5.17).

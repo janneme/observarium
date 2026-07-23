@@ -771,7 +771,7 @@ export async function getObservationByDate(date) {
 // --------------------------------------------------------------------------
 
 export const SYNC_EPOCH_ISO = '1970-01-01T00:00:00.000Z'
-const SYNC_CATEGORIES = ['observations', 'findingPaths', 'telescopes', 'eyepieces']
+const SYNC_CATEGORIES = ['observations', 'findingPaths', 'telescopes', 'eyepieces', 'lists']
 
 export async function getSyncDirty() {
   const dirty = (await getMeta('syncDirty')) || {}
