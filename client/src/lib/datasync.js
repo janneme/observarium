@@ -1,4 +1,3 @@
-import JSZip from 'jszip'
 import {
   getDataHash,
   getImagesHash,
@@ -35,6 +34,15 @@ import {
 // start from a genuinely empty profile. Defaults to on; set to the literal
 // string "false" in client/.env.development to disable for local testing.
 const LOAD_USER_DATA_ON_INIT = import.meta.env.VITE_LOAD_USER_DATA_ON_INIT !== 'false'
+
+// JSZip is only ever needed for this catalogue/image download flow, not for
+// normal app startup — loaded on demand (and cached) so it lands in its own
+// chunk instead of bloating the main bundle.
+let _jsZipPromise = null
+function getJSZip() {
+  if (!_jsZipPromise) _jsZipPromise = import('jszip').then((m) => m.default)
+  return _jsZipPromise
+}
 
 async function fetchWithProgress(url, onProgress) {
   const res = await fetch(url)
@@ -117,7 +125,7 @@ function extractMetaKeys(objectsJson) {
 }
 
 async function downloadZip(url, onProgress) {
-  const data = await fetchWithProgress(url, onProgress || (() => {}))
+  const [data, JSZip] = await Promise.all([fetchWithProgress(url, onProgress || (() => {})), getJSZip()])
   return JSZip.loadAsync(data)
 }
 
@@ -162,6 +170,7 @@ async function downloadAndStoreImages(onImagesProgress) {
   const imgProg = onImagesProgress || (() => {})
   const imagesUrl = await getImagesUrl()
   const imagesData = await fetchWithProgress(imagesUrl, (p) => imgProg(p * 0.7))
+  const JSZip = await getJSZip()
   const imagesZip = await JSZip.loadAsync(imagesData, {
     onUpdate(metadata) {
       if (metadata.percent != null) imgProg(0.7 + (metadata.percent / 100) * 0.3)
