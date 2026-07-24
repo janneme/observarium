@@ -68,10 +68,7 @@ export function parseGeomLayers(geom) {
       const tok = tokens[i]
       if (tok === 'Z') break
       const cmd = tok[0]
-      const [a, b] = tok
-        .slice(1)
-        .split(',')
-        .map(Number)
+      const [a, b] = tok.slice(1).split(',').map(Number)
       if (cmd === 'M') {
         lat = a
         lon = b

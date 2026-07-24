@@ -54,11 +54,8 @@
   {#if open}
     <div class="opts" style={optsStyle}>
       {#each options as opt (opt.value)}
-        <button
-          type="button"
-          class="opt"
-          class:cur={opt.value === value}
-          on:click|stopPropagation={() => pick(opt)}>{opt.label}</button
+        <button type="button" class="opt" class:cur={opt.value === value} on:click|stopPropagation={() => pick(opt)}
+          >{opt.label}</button
         >
       {/each}
     </div>

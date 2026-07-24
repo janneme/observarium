@@ -63,7 +63,7 @@
     subLon = vc.subLon
     sunLon = phaseFull ? null : vc.sunLon
   }
-  $: time, phaseFull, updateViewing()
+  $: (time, phaseFull, updateViewing())
 
   // Illumination %, next rise/set, and next max altitude (transit) — relevant
   // only while nothing is selected (the header shows type/name/dimensions
@@ -88,7 +88,7 @@
       moonMaxAltitude = null
     }
   }
-  $: time, lat, lon, updateMoonRiseSetPhase()
+  $: (time, lat, lon, updateMoonRiseSetPhase())
 
   function persistSelection(feature) {
     if (typeof window === 'undefined') return

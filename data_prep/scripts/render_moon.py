@@ -38,7 +38,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 _DATA_PREP_DIR = _SCRIPT_DIR.parent
 sys.path.insert(0, str(_DATA_PREP_DIR))
 
-from moon_features import MoonFeaturePipeline  # noqa: E402
+from moon_features import MoonFeaturePipeline  # noqa: E402 # pylint: disable=wrong-import-position
 
 _SOURCES_DIR = _DATA_PREP_DIR / "sources"
 _CACHE_DIR = _DATA_PREP_DIR / "cache"
@@ -130,7 +130,9 @@ def find_feature(features, query):
         return exact_name[0]
     if len(exact_name) > 1:
         ids = ", ".join(f["id"] for f in exact_name)
-        raise SystemExit(f'"{query}" matches multiple feature types: {ids}. Use TYPE::NAME to disambiguate.')
+        raise SystemExit(
+            f'"{query}" matches multiple feature types: {ids}. Use TYPE::NAME to disambiguate.'
+        )
     partial = [f for f in features if q in f["name"].lower()]
     if len(partial) == 1:
         return partial[0]
@@ -232,10 +234,16 @@ function isPointDark(nx, ny) {
   const c = Math.asin(rho)
   if (rho < 1e-6) return illumCos(subLat, subLon, sunLon) <= 0
   const phi0 = (subLat * Math.PI) / 180
-  const lat = (Math.asin(Math.cos(c) * Math.sin(phi0) + (ny * Math.sin(c) * Math.cos(phi0)) / rho) * 180) / Math.PI
+  const lat =
+    (Math.asin(Math.cos(c) * Math.sin(phi0) + (ny * Math.sin(c) * Math.cos(phi0)) / rho) * 180) /
+    Math.PI
   const lon =
     subLon +
-    (Math.atan2(nx * Math.sin(c), rho * Math.cos(phi0) * Math.cos(c) - ny * Math.sin(phi0) * Math.sin(c)) * 180) /
+    (Math.atan2(
+      nx * Math.sin(c),
+      rho * Math.cos(phi0) * Math.cos(c) - ny * Math.sin(phi0) * Math.sin(c)
+    ) *
+      180) /
       Math.PI
   return illumCos(lat, lon, sunLon) <= 0
 }
@@ -257,7 +265,8 @@ function angleDiff(a, b) {
 }
 
 function computeTerminatorGeometry() {
-  const key = `${subLat.toFixed(3)}|${subLon.toFixed(3)}|${sunLon == null ? 'x' : sunLon.toFixed(3)}`
+  const sunLonKey = sunLon == null ? 'x' : sunLon.toFixed(3)
+  const key = `${subLat.toFixed(3)}|${subLon.toFixed(3)}|${sunLonKey}`
   if (key === terminatorGeomKey) return terminatorGeom
   terminatorGeomKey = key
   if (sunLon == null) {
@@ -299,7 +308,8 @@ function computeTerminatorGeometry() {
   const midNormA = alphaNorm1 + Math.PI / 2
   const aLit = !isPointDark(Math.cos(midNormA), Math.sin(midNormA))
 
-  terminatorGeom = { theta, b, alphaNorm1, aLit, betaCusp1, ellipseDir: angleDiff(betaNearMid, betaCusp1) > 0 ? 1 : -1 }
+  const ellipseDir = angleDiff(betaNearMid, betaCusp1) > 0 ? 1 : -1
+  terminatorGeom = { theta, b, alphaNorm1, aLit, betaCusp1, ellipseDir }
   return terminatorGeom
 }
 
@@ -311,7 +321,10 @@ function buildPhasePath(cx, cy, r) {
   const circleStart = -g.alphaNorm1
   path.arc(cx, cy, r, circleStart, circleStart - circleDir * Math.PI, circleDir > 0)
   const ellipseStart = -g.betaCusp1
-  path.ellipse(cx, cy, r, r * g.b, -g.theta, ellipseStart, ellipseStart - g.ellipseDir * Math.PI, g.ellipseDir > 0)
+  path.ellipse(
+    cx, cy, r, r * g.b, -g.theta,
+    ellipseStart, ellipseStart - g.ellipseDir * Math.PI, g.ellipseDir > 0
+  )
   return path
 }
 
@@ -561,9 +574,12 @@ function draw() {
 
     if (isFilled) {
       const px2 = Math.max(1.4, cappedNorm * p.cosC * r)
-      const shape = polyPoints ? { kind: 'poly', points: polyPoints } : { kind: 'circle', px, py, px2 }
+      const shape = polyPoints
+        ? { kind: 'poly', points: polyPoints }
+        : { kind: 'circle', px, py, px2 }
       if (isHighlight) highlightGeom = shape
-      filledFeats.push({ colors: FILLED_COLORS[feat.type] || FILLED_COLORS.mare, isSea: SEA_TYPES.has(feat.type), shape })
+      const colors = FILLED_COLORS[feat.type] || FILLED_COLORS.mare
+      filledFeats.push({ colors, isSea: SEA_TYPES.has(feat.type), shape })
     } else {
       // Zoom-based visibility filter: skip drawing this crater entirely
       // once it's too small to matter at the current zoom, rather than
@@ -661,7 +677,11 @@ function draw() {
       traceRoundedPolygon(ctx, highlightGeom.points)
     } else if (highlightGeom.kind === 'ellipse') {
       ctx.beginPath()
-      ctx.ellipse(highlightGeom.px, highlightGeom.py, highlightGeom.radialR, highlightGeom.tangentR, highlightGeom.angle, 0, Math.PI * 2)
+      ctx.ellipse(
+        highlightGeom.px, highlightGeom.py,
+        highlightGeom.radialR, highlightGeom.tangentR,
+        highlightGeom.angle, 0, Math.PI * 2
+      )
     } else {
       ctx.beginPath()
       ctx.arc(highlightGeom.px, highlightGeom.py, highlightGeom.px2, 0, Math.PI * 2)
@@ -854,12 +874,14 @@ def parse_args(argv):
 
 
 def _resolve_phase_offset(phase_arg):
+    # Picks a random terminator offset for this dev preview tool's display
+    # only — not a cryptographic or security-sensitive use.
     if phase_arg is None:
         return None
     if phase_arg == "+":
-        return random.uniform(*AUTO_OFFSET_RANGE_DEG)
+        return random.uniform(*AUTO_OFFSET_RANGE_DEG)  # noqa: S311
     if phase_arg == "-":
-        return -random.uniform(*AUTO_OFFSET_RANGE_DEG)
+        return -random.uniform(*AUTO_OFFSET_RANGE_DEG)  # noqa: S311
     try:
         return float(phase_arg)
     except ValueError as exc:
@@ -879,14 +901,20 @@ def _resolve_zoom(zoom_arg):
 
 
 def _open_in_browser(path):
+    # Dev-only convenience: opens a local file this same script just wrote in
+    # the OS default browser. Not attacker-controlled input, so the
+    # subprocess/partial-path security lints don't apply here. Deliberately
+    # not `with subprocess.Popen(...) as p:` — that waits for the process to
+    # exit on scope exit, which would block this script until the user
+    # closes their browser instead of firing-and-forgetting the launch.
     system = platform.system()
     try:
         if system == "Darwin":
-            subprocess.Popen(["open", str(path)])
+            subprocess.Popen(["open", str(path)])  # noqa: S603, S607 # pylint: disable=consider-using-with
         elif system == "Windows":
-            subprocess.Popen(["cmd", "/c", "start", "", str(path)])
+            subprocess.Popen(["cmd", "/c", "start", "", str(path)])  # noqa: S603, S607 # pylint: disable=consider-using-with
         else:
-            subprocess.Popen(["xdg-open", str(path)])
+            subprocess.Popen(["xdg-open", str(path)])  # noqa: S603, S607 # pylint: disable=consider-using-with
     except OSError as exc:
         print(f"Could not open a browser automatically ({exc}); open {path} manually.")
 
@@ -919,11 +947,17 @@ def main(argv: list[str] | None = None) -> int:
         offset_deg = (
             forced_offset
             if forced_offset is not None
-            else (1.0 if random.random() < 0.5 else -1.0) * random.uniform(*AUTO_OFFSET_RANGE_DEG)
+            # Dev preview tool display only — not security-sensitive.
+            else (1.0 if random.random() < 0.5 else -1.0)  # noqa: S311
+            * random.uniform(*AUTO_OFFSET_RANGE_DEG)  # noqa: S311
         )
         sun_lon = terminator_sun_lon_for_object(feature["lat"], feature["lon"], offset_deg)
 
-    term_desc = f"terminator view, sunLon={sun_lon:.2f}°" if use_terminator else "full-disc view (no terminator)"
+    term_desc = (
+        f"terminator view, sunLon={sun_lon:.2f}°"
+        if use_terminator
+        else "full-disc view (no terminator)"
+    )
     zoom_desc = f", zoom={force_scale}x" if force_scale else ", zoom=auto"
     theme_desc = "nightly" if opts["nightly"] else "daily"
     print(

@@ -9,7 +9,7 @@ REQ := requirements.txt
 PYPROJECT := pyproject.toml
 
 .PHONY: init uv-init activate install
-.PHONY: test
+.PHONY: test test-network
 .PHONY: lint lint-fix
 
 .PHONY: test
@@ -45,8 +45,15 @@ install:
 	@if [ -f $(REQ) ]; then $(PIP) install -r $(REQ); else echo "No requirements.txt found in data_prep"; fi
 
 # Run tests: assume the venv is already prepared and only run pytest.
-test: ## Run pytest using existing venv (requires prior `make init`)
-	$(VENV)/bin/python -m pytest
+# Network tests (see pyproject.toml's "network" marker) are deselected by
+# default — they hit a real external service and can take a minute-plus to
+# time out and self-skip when there's no outbound network access. Run them
+# explicitly via `make test-network`.
+test: ## Run pytest using existing venv (requires prior `make init`), excluding network tests
+	$(VENV)/bin/python -m pytest -m "not network"
+
+test-network: ## Run only the network-marked tests (requires prior `make init`)
+	$(VENV)/bin/python -m pytest -m network
 
 # Run linters using tools installed in the venv. Do not perform any installs.
 lint: ## Run ruff and pylint

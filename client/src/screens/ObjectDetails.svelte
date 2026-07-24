@@ -14,12 +14,7 @@
   import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
   import { getObservationByDate, getObjectImage, getDoubleStarNear, resolveObservationDateKey } from '../lib/db.js'
   import { applyDsPatch } from '../lib/customObjects.js'
-  import {
-    getAllLists,
-    getListsForObject,
-    addObjectToList,
-    removeObjectFromLists,
-  } from '../lib/lists.js'
+  import { getAllLists, getListsForObject, addObjectToList, removeObjectFromLists } from '../lib/lists.js'
   import ObservationFormPanel from '../components/ObservationFormPanel.svelte'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
   import ObservedListRemovalOverlay from '../components/ObservedListRemovalOverlay.svelte'
@@ -697,17 +692,12 @@
             <span class="value">
               {Math.round((moonIllumination ?? 0) * 100)}% illuminated,
               <span class="moon-rise-set">
-                <span class="rise-set"
-                  ><span class="rs-icon"><RiseIcon size="1em" /></span> {formatTime(riseTime)}</span
+                <span class="rise-set"><span class="rs-icon"><RiseIcon size="1em" /></span> {formatTime(riseTime)}</span
                 >
-                <span class="rise-set"
-                  ><span class="rs-icon"><SetIcon size="1em" /></span> {formatTime(setTime)}</span
-                >
+                <span class="rise-set"><span class="rs-icon"><SetIcon size="1em" /></span> {formatTime(setTime)}</span>
                 {#if transitAltitude !== null}
                   <span class="rise-set"
-                    ><span class="rs-icon"><MaxHeightIcon size="1em" /></span> {transitAltitude.toFixed(
-                      1,
-                    )}°</span
+                    ><span class="rs-icon"><MaxHeightIcon size="1em" /></span> {transitAltitude.toFixed(1)}°</span
                   >
                 {/if}
               </span>

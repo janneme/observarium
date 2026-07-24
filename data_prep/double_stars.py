@@ -96,6 +96,7 @@ def _angular_distance_deg(ra1_h: float, dec1_d: float, ra2_h: float, dec2_d: flo
 
 
 _PC_TO_AU: float = 206_265.0  # 1 parsec in AU
+_APPARENT_PAIR_SEP_MATCH_TOL_ARCSEC: float = 3.0
 
 
 def _angular_sep_arcsec(pos1: list[float], pos2: list[float]) -> float:
@@ -180,12 +181,35 @@ class DoubleStarMatcher:
                 pair["period"] = period
                 pair.setdefault("phys", pair["comp"])
 
+    def _resolve_system_match(
+        self,
+        system: dict[str, Any],
+        stars_with_hip: list[dict[str, Any]],
+        bins: dict[tuple[int, int], list[dict[str, Any]]],
+    ) -> dict[str, Any] | None:
+        """Return the star matched to *system* — direct match, else the
+        nearest bin candidate within 0.2°, else None."""
+        matched = self._find_direct_match(system, stars_with_hip)
+        if matched is not None:
+            return matched
+        sys_ra, sys_dec = system["pos"]
+        candidates = self._get_bin_candidates(sys_ra, sys_dec, bins)
+        if not candidates:
+            return None
+        nearest = self._find_nearest(candidates, sys_ra, sys_dec)
+        if nearest is None:
+            return None
+        dist, matched = nearest
+        if dist > 0.2:
+            return None
+        return matched
+
     def _apply_systems_to_stars(
         self,
         systems: list[dict[str, Any]],
         stars_with_hip: list[dict[str, Any]],
         all_stars: list[dict[str, Any]],
-    ) -> tuple[int, int, int]:  # pylint: disable=too-many-locals
+    ) -> tuple[int, int, int]:
         """Match systems to stars, attach `dbl` payloads, and return counts."""
         bins = self._build_spatial_bins(stars_with_hip)
         all_bins = self._build_spatial_bins([s for s in all_stars if s.get("pos")])
@@ -193,18 +217,9 @@ class DoubleStarMatcher:
         phys_count = 0
         touched: set[int] = set()
         for system in systems:
-            matched = self._find_direct_match(system, stars_with_hip)
+            matched = self._resolve_system_match(system, stars_with_hip, bins)
             if matched is None:
-                sys_ra, sys_dec = system["pos"]
-                candidates = self._get_bin_candidates(sys_ra, sys_dec, bins)
-                if not candidates:
-                    continue
-                nearest = self._find_nearest(candidates, sys_ra, sys_dec)
-                if nearest is None:
-                    continue
-                dist, matched = nearest
-                if dist > 0.2:
-                    continue
+                continue
             if not self._passes_mag_check(matched, system):
                 continue
             self._enrich_system_spect_from_components(system, matched, all_bins)
@@ -232,13 +247,11 @@ class DoubleStarMatcher:
             return
         system["spect"] = f"{primary} / {_normalize_spect(secondary)}"
 
-    def _infer_secondary_spect(
-        self,
-        system: dict[str, Any],
-        matched: dict[str, Any],
-        bins: dict[tuple[int, int], list[dict[str, Any]]],
-    ) -> str | None:  # pylint: disable=too-many-locals
-        """Infer secondary component spectral type from nearby stars."""
+    def _target_pair_search_params(
+        self, system: dict[str, Any], matched: dict[str, Any]
+    ) -> tuple[float | None, float] | None:
+        """Return (expected_sep, target_mag) to search for a secondary
+        component, or None when the AB (or first) pair lacks usable data."""
         pair = next((p for p in system.get("pairs", []) if p.get("comp") == "AB"), None)
         if pair is None:
             pair = (system.get("pairs") or [None])[0]
@@ -254,7 +267,17 @@ class DoubleStarMatcher:
         target_mag = m2
         if matched_mag is not None and abs(matched_mag - m2) < abs(matched_mag - m1):
             target_mag = m1
+        return expected_sep, target_mag
 
+    def _best_secondary_candidate(
+        self,
+        system: dict[str, Any],
+        matched: dict[str, Any],
+        bins: dict[tuple[int, int], list[dict[str, Any]]],
+        expected_sep: float | None,
+        target_mag: float,
+    ) -> dict[str, Any] | None:
+        """Scan nearby stars for the best-scoring secondary-component match."""
         best_score = math.inf
         best_star: dict[str, Any] | None = None
         cand_stars = self._get_bin_candidates(system["pos"][0], system["pos"][1], bins)
@@ -275,6 +298,20 @@ class DoubleStarMatcher:
             if score < best_score:
                 best_score = score
                 best_star = cand
+        return best_star
+
+    def _infer_secondary_spect(
+        self,
+        system: dict[str, Any],
+        matched: dict[str, Any],
+        bins: dict[tuple[int, int], list[dict[str, Any]]],
+    ) -> str | None:
+        """Infer secondary component spectral type from nearby stars."""
+        params = self._target_pair_search_params(system, matched)
+        if params is None:
+            return None
+        expected_sep, target_mag = params
+        best_star = self._best_secondary_candidate(system, matched, bins, expected_sep, target_mag)
         if best_star is None:
             return None
         return str(best_star.get("spect"))
@@ -534,6 +571,53 @@ class DoubleStarMatcher:
                 mapping[wds] = p
         return mapping
 
+    @staticmethod
+    def _apparent_pair_separation_3d_au(
+        s1: dict[str, Any], s2: dict[str, Any], sep_arcsec: float
+    ) -> float | None:
+        """3D projected separation (AU) between two stars at a given angular
+        separation, or None when either lacks a parallax distance."""
+        d1 = s1.get("dist")
+        d2 = s2.get("dist")
+        if d1 is None or d2 is None:
+            return None
+        theta_rad = sep_arcsec / 3600.0 * math.pi / 180.0
+        proj_au = theta_rad * min(d1, d2) * _PC_TO_AU
+        depth_au = abs(d1 - d2) * _PC_TO_AU
+        return math.hypot(proj_au, depth_au)
+
+    def _mark_pair_apparent_if_wide(
+        self,
+        s1: dict[str, Any],
+        pair: dict[str, Any],
+        candidates: list[dict[str, Any]],
+        threshold_au: float,
+    ) -> bool:
+        """Check *pair* against the nearest matching candidate; mark it
+        apparent (`vis`) and return True if its 3D separation exceeds
+        *threshold_au*. Only the first candidate within the separation
+        tolerance is ever considered, matching the original single-pass scan."""
+        if "phys" in pair or "vis" in pair:
+            return False
+        sep_field = pair.get("sep")
+        if sep_field is None:
+            return False
+        target_sep = sep_field[-1] if isinstance(sep_field, list) else sep_field
+        for s2 in candidates:
+            if s2 is s1:
+                continue
+            sep = _angular_sep_arcsec(s1["pos"], s2["pos"])
+            if abs(sep - target_sep) > _APPARENT_PAIR_SEP_MATCH_TOL_ARCSEC:
+                continue
+            sep3d_au = self._apparent_pair_separation_3d_au(s1, s2, sep)
+            if sep3d_au is None:
+                break
+            if sep3d_au > threshold_au:
+                pair["vis"] = pair["comp"]
+                return True
+            break
+        return False
+
     def classify_apparent_pairs(
         self,
         stars: list[dict[str, Any]],
@@ -545,40 +629,15 @@ class DoubleStarMatcher:
         """
         bins = self._build_spatial_bins([s for s in stars if s.get("dist") is not None])
         threshold_au = threshold_pc * _PC_TO_AU
-        _MATCH_TOL = 3.0  # arcsec
         count = 0
         for s1 in stars:
-            if not s1.get("dbl"):
-                continue
-            if s1.get("dist") is None:
+            if not s1.get("dbl") or s1.get("dist") is None:
                 continue
             candidates = self._get_bin_candidates(s1["pos"][0], s1["pos"][1], bins)
             for entry in s1["dbl"]:
                 for pair in entry["pairs"]:
-                    if "phys" in pair or "vis" in pair:
-                        continue
-                    sep_field = pair.get("sep")
-                    if sep_field is None:
-                        continue
-                    target_sep = sep_field[-1] if isinstance(sep_field, list) else sep_field
-                    for s2 in candidates:
-                        if s2 is s1:
-                            continue
-                        sep = _angular_sep_arcsec(s1["pos"], s2["pos"])
-                        if abs(sep - target_sep) > _MATCH_TOL:
-                            continue
-                        d1 = s1.get("dist")
-                        d2 = s2.get("dist")
-                        if d1 is None or d2 is None:
-                            break
-                        theta_rad = sep / 3600.0 * math.pi / 180.0
-                        proj_au = theta_rad * min(d1, d2) * _PC_TO_AU
-                        depth_au = abs(d1 - d2) * _PC_TO_AU
-                        sep3d_au = math.hypot(proj_au, depth_au)
-                        if sep3d_au > threshold_au:
-                            pair["vis"] = pair["comp"]
-                            count += 1
-                        break
+                    if self._mark_pair_apparent_if_wide(s1, pair, candidates, threshold_au):
+                        count += 1
         return count
 
     @staticmethod

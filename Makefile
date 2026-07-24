@@ -59,7 +59,7 @@ test: ## Run server, data-prep, and client test suites (from repo root)
 	@printf '\033[1;36m==> Running server tests\033[0m\n'
 	cd server && PYTHONPATH=$(CURDIR) uv run pytest -q
 	@printf '\033[1;36m==> Running data_prep tests\033[0m\n'
-	cd data_prep && uv run pytest -q
+	cd data_prep && uv run pytest -q -m "not network"
 	@printf '\033[1;36m==> Running client tests\033[0m\n'
 	cd client && npx vitest run
 

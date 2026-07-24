@@ -1004,3 +1004,26 @@ shown, to avoid cluttering a wide-field view with rings scattered across dozens 
 Objects can be added to or removed from lists both from this screen and from the "About object"
 screen's "Lists" icon (§5.17); removing an object from an active list can also be offered as part of
 pressing "Observed" for that object (§5.17).
+
+## 5.21 Visual Range
+
+A guided measurement tool that determines the actual limiting magnitude reachable with a given
+telescope/eyepiece at a chosen part of the sky, so the observer can judge current viewing conditions
+and what magnitude of DSO is realistically reachable. The user picks a telescope (with eyepiece), a
+start star, and an initial magnitude estimate to verify; Observarium computes a star-hopping guide
+path (arrows from star to star, as in Object Finding Paths, §5.13) that moves the telescope while
+avoiding bright stars in the field, then asks the observer to confirm visibility of progressively
+fainter candidate stars, raising the confirmed limiting magnitude one step at a time until the
+observer fails to see a candidate twice in a row.
+
+TODO: the guide-path planner (`client/src/lib/visualRangePlan.js`, `findGuidePath`) currently fails
+to find any plan for some real start-star/telescope combinations — e.g. Mizar, where the BFS search
+dead-ends after a single hop because the surrounding sky region lacks enough mutually-visible bright
+guide-star pairs. This isn't fixable by raising the step-count limits (`MAX_INITIAL_STEPS`/
+`MAX_MOVE_STEPS`); confirmed by experiment that increasing them has zero effect on the failures.
+Loosening `MOVE_STARS_MIN_MAG_DIFF` (the guide-star brightness margin) has partial leverage but no
+value fixes all cases without making the "guide star" requirement unrealistically weak. The
+underlying algorithm needs a real improvement (e.g. relaxing the mutual-visibility/interior-FOV
+constraints adaptively, or falling back to single-star hops) to handle sparse star fields — not just
+parameter tuning. Five combinations in `client/test/lib/visualRangePlan.test.js` are currently
+disabled pending this fix.

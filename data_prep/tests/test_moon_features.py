@@ -8,7 +8,6 @@ from xml.etree import ElementTree as ET
 
 import pytest
 import shapefile
-
 from shapely.geometry import Polygon
 
 from config import (
@@ -19,9 +18,9 @@ from config import (
     MOON_RADIUS_KM,
 )
 from moon_features import (
-    MoonFeaturePipeline,
     STYLE_FILLED,
     STYLE_RAISED,
+    MoonFeaturePipeline,
     _circle_ring,
     _encode_layer,
     _subtract_obstacles,
@@ -343,7 +342,12 @@ def _write_fixture_kmz_with_mons(kmz_path: Path) -> None:
         zf.writestr("MOON_nomenclature_center_pts.kml", kml)
 
 
-def test_moon_feature_pipeline_subtracts_seas_and_craters_from_mons(tmp_path: Path):
+_MONS_FIXTURE_MARE_RING = [(8.0, -1.5), (12.0, -1.5), (12.0, 1.5), (8.0, 1.5)]
+
+
+def _run_mons_fixture_pipeline(tmp_path: Path) -> dict:
+    """Set up sources/cache/output dirs, write the mons/mare/vallis fixture,
+    run the pipeline, and return its parsed JSON output."""
     sources = tmp_path / "sources"
     cache = tmp_path / "cache"
     outdir = tmp_path / "output"
@@ -355,7 +359,11 @@ def test_moon_feature_pipeline_subtracts_seas_and_craters_from_mons(tmp_path: Pa
 
     pipeline = MoonFeaturePipeline(sources, outdir, cache_dir=cache)
     output = pipeline.run()
-    data = json.loads(output.read_text(encoding="utf-8"))
+    return json.loads(output.read_text(encoding="utf-8"))
+
+
+def test_mons_geom_split_and_trimmed_against_mare_and_crater(tmp_path: Path):
+    data = _run_mons_fixture_pipeline(tmp_path)
 
     montes = data["mons"]["Montes Test"]
     # The mare cuts clean through the middle -> two disconnected pieces.
@@ -363,23 +371,26 @@ def test_moon_feature_pipeline_subtracts_seas_and_craters_from_mons(tmp_path: Pa
     for layer in montes["geom"]:
         assert layer.startswith("S FILLED M")
 
-    mare_ring = [(8.0, -1.5), (12.0, -1.5), (12.0, 1.5), (8.0, 1.5)]
     crater_diam_deg = MoonFeaturePipeline._selenographic_size_deg(8.0)  # pylint: disable=protected-access
     crater_ring = _circle_ring(1.0, 2.0, crater_diam_deg / 2.0, MOON_CIRCLE_VERTEX_COUNT)
-    mare_poly = Polygon(mare_ring)
+    mare_poly = Polygon(_MONS_FIXTURE_MARE_RING)
     crater_poly = Polygon(crater_ring).buffer(0)
     for layer in montes["geom"]:
-        piece = _decode_path_to_ring(layer)
-        piece_poly = Polygon(piece)
+        piece_poly = Polygon(_decode_path_to_ring(layer))
         assert piece_poly.intersection(mare_poly).area == pytest.approx(0.0, abs=1e-6)
         assert piece_poly.intersection(crater_poly).area == pytest.approx(0.0, abs=1e-6)
 
+
+def test_vallis_overlaps_mons_but_trimmed_against_mare(tmp_path: Path):
     # Vallis (and catena) get the same ridge-outline construction as mons —
     # FILLED style, not a crater-like RAISED circle — but ridge-like types
     # are never obstacles to each other: Vallis Test legitimately overlaps
     # Montes Test's box (a valley crossing a mountain range is real, not a
     # rendering bug), while it's still trimmed against the sea it crosses.
+    data = _run_mons_fixture_pipeline(tmp_path)
+    montes = data["mons"]["Montes Test"]
     vallis = data["vallis"]["Vallis Test"]
+
     # Vallis Test also straddles the mare (lon 5-15 vs. the mare's 8-12), so
     # it's split into two pieces the same way Montes Test was.
     assert len(vallis["geom"]) == 2
@@ -391,6 +402,7 @@ def test_moon_feature_pipeline_subtracts_seas_and_craters_from_mons(tmp_path: Pa
     montes_union = Polygon(_decode_path_to_ring(montes["geom"][0])).union(
         Polygon(_decode_path_to_ring(montes["geom"][1]))
     )
+    mare_poly = Polygon(_MONS_FIXTURE_MARE_RING)
     assert vallis_union.intersection(montes_union).area > 0
     assert vallis_union.intersection(mare_poly).area == pytest.approx(0.0, abs=1e-6)
 
@@ -449,7 +461,7 @@ def _make_placemark(
 {bounds}
 <SimpleData name="type">{type_str}</SimpleData>
 </SchemaData></ExtendedData></Placemark>"""
-    return ET.fromstring(xml)
+    return ET.fromstring(xml)  # noqa: S314 -- self-authored fixture XML, not untrusted input
 
 
 _KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
@@ -457,7 +469,13 @@ _KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
 def test_parse_placemark_aliases_satellite_feature_to_crater():
     placemark = _make_placemark(
-        "Satellite Feature", 5.0, name="Cassini A", min_lat=16.5, max_lat=17.4, min_lon=343.0, max_lon=344.0
+        "Satellite Feature",
+        5.0,
+        name="Cassini A",
+        min_lat=16.5,
+        max_lat=17.4,
+        min_lon=343.0,
+        max_lon=344.0,
     )
     feature = MoonFeaturePipeline._parse_placemark(  # pylint: disable=protected-access
         placemark, _KML_NS, set(MOON_FEATURE_TYPES), MOON_MIN_ITEM_SIZE_KM
@@ -468,7 +486,13 @@ def test_parse_placemark_aliases_satellite_feature_to_crater():
 
 def test_parse_placemark_aliases_rima_to_vallis():
     placemark = _make_placemark(
-        "Rima, rimae", 20.0, name="Rima Test", min_lat=24.5, max_lat=24.6, min_lon=10.0, max_lon=10.5
+        "Rima, rimae",
+        20.0,
+        name="Rima Test",
+        min_lat=24.5,
+        max_lat=24.6,
+        min_lon=10.0,
+        max_lon=10.5,
     )
     feature = MoonFeaturePipeline._parse_placemark(  # pylint: disable=protected-access
         placemark, _KML_NS, set(MOON_FEATURE_TYPES), MOON_MIN_ITEM_SIZE_KM
@@ -479,7 +503,13 @@ def test_parse_placemark_aliases_rima_to_vallis():
 
 def test_parse_placemark_aliases_dorsum_to_mons():
     placemark = _make_placemark(
-        "Dorsum, dorsa", 30.0, name="Dorsum Test", min_lat=11.7, max_lat=16.5, min_lon=20.0, max_lon=21.0
+        "Dorsum, dorsa",
+        30.0,
+        name="Dorsum Test",
+        min_lat=11.7,
+        max_lat=16.5,
+        min_lon=20.0,
+        max_lon=21.0,
     )
     feature = MoonFeaturePipeline._parse_placemark(  # pylint: disable=protected-access
         placemark, _KML_NS, set(MOON_FEATURE_TYPES), MOON_MIN_ITEM_SIZE_KM

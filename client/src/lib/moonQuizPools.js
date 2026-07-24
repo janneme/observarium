@@ -68,11 +68,11 @@ export function buildGlobalPools(allFeatures, difficulty) {
   if (difficulty === 'easy') {
     const craters = topN(
       visible.filter((f) => typeBucket(f.type) === 'crater'),
-      GLOBAL_EASY_CRATERS
+      GLOBAL_EASY_CRATERS,
     )
     const sea = topN(
       visible.filter((f) => typeBucket(f.type) === 'sea'),
-      GLOBAL_EASY_SEA
+      GLOBAL_EASY_SEA,
     )
     return { questionPool: byId([...craters, ...sea]), renderPool }
   }
@@ -80,11 +80,11 @@ export function buildGlobalPools(allFeatures, difficulty) {
   // medium
   const craters = topN(
     visible.filter((f) => typeBucket(f.type) === 'crater'),
-    GLOBAL_MEDIUM_CRATERS
+    GLOBAL_MEDIUM_CRATERS,
   )
   const other = topN(
     visible.filter((f) => typeBucket(f.type) === 'sea' || typeBucket(f.type) === 'ridge'),
-    GLOBAL_MEDIUM_OTHER
+    GLOBAL_MEDIUM_OTHER,
   )
   return { questionPool: byId([...craters, ...other]), renderPool }
 }

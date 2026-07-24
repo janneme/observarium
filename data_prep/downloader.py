@@ -28,6 +28,10 @@ class Downloader:
         self._debug = debug
         self._cache_dir.mkdir(parents=True, exist_ok=True)
 
+    @property
+    def cache_dir(self) -> Path:
+        return self._cache_dir
+
     def fetch(self, url: str, filename: str) -> Path:
         """Return path to the local file, downloading it if absent.
 

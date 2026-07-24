@@ -2,6 +2,10 @@
 
 import gzip
 import io
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -132,7 +136,7 @@ class TestAdqlQuery:
     def test_only_uses_known_columns(self):
         q = _adql_query(13.0, -35.0, 11.5)
         # Every column reference in SELECT must be from the known-valid set.
-        select_part = q.split("FROM")[0]
+        select_part = q.split("FROM", maxsplit=1)[0]
         # Strip "SELECT " prefix and split by comma
         col_names = [c.strip() for c in select_part.replace("SELECT", "").split(",")]
         for col in col_names:
@@ -176,14 +180,14 @@ class TestLoadGaiaStars:
                  "phot_g_mean_mag": "13.5", "bp_rp": "0.5"}]
         p = _write_csv_gz(tmp_path, rows)
         stars = load_gaia_stars(p, 13.0, -35.0, _PALETTE)
-        assert stars == []
+        assert not stars
 
     def test_star_below_min_dec_excluded(self, tmp_path):
         rows = [{"source_id": "1", "ra": "0.0", "dec": "-50.0",
                  "phot_g_mean_mag": "12.0", "bp_rp": "0.5"}]
         p = _write_csv_gz(tmp_path, rows)
         stars = load_gaia_stars(p, 13.0, -35.0, _PALETTE)
-        assert stars == []
+        assert not stars
 
     def test_missing_bp_rp_gets_default_colour(self, tmp_path):
         rows = [{"source_id": "1", "ra": "0.0", "dec": "0.0",
@@ -237,10 +241,6 @@ class TestLoadGaiaStars:
 @pytest.mark.network
 def test_adql_accepted_by_gaia_tap():
     """Submit a LIMIT 5 query to verify the ADQL column names are valid."""
-    import urllib.error
-    import urllib.parse
-    import urllib.request
-
     base_query = _adql_query(13.0, -35.0, 12.9)
     limited = base_query.replace("SELECT ", "SELECT TOP 5 ", 1)
     body = urllib.parse.urlencode(
@@ -263,7 +263,6 @@ def test_adql_accepted_by_gaia_tap():
     except (urllib.error.URLError, TimeoutError, ConnectionResetError) as exc:
         pytest.skip(f"Gaia TAP unavailable: {exc}")
 
-    import time
     for _ in range(30):
         try:
             with urllib.request.urlopen(f"{job_url}/phase", timeout=15) as r:  # noqa: S310

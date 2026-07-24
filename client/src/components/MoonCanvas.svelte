@@ -236,7 +236,14 @@
     const midNormA = alphaNorm1 + Math.PI / 2
     const aLit = !isPointDark(Math.cos(midNormA), Math.sin(midNormA))
 
-    terminatorGeom = { theta, b, alphaNorm1, aLit, betaCusp1, ellipseDir: angleDiff(betaNearMid, betaCusp1) > 0 ? 1 : -1 }
+    terminatorGeom = {
+      theta,
+      b,
+      alphaNorm1,
+      aLit,
+      betaCusp1,
+      ellipseDir: angleDiff(betaNearMid, betaCusp1) > 0 ? 1 : -1,
+    }
     return terminatorGeom
   }
 
@@ -628,7 +635,11 @@
         const px2 = Math.max(1.4, cappedNorm * p.cosC * r)
         const shape = polyPoints ? { kind: 'poly', points: polyPoints } : { kind: 'circle', px, py, px2 }
         if (isHighlight) highlightGeom = shape
-        filledFeats.push({ colors: FILLED_COLORS[feat.type] || FILLED_COLORS.mare, isSea: SEA_TYPES.has(feat.type), shape })
+        filledFeats.push({
+          colors: FILLED_COLORS[feat.type] || FILLED_COLORS.mare,
+          isSea: SEA_TYPES.has(feat.type),
+          shape,
+        })
         renderedThisFrame.push({ feature: feat, px, py, radiusPx: px2 })
       } else {
         // Zoom-based visibility filter (see MIN_VISIBLE_RADIUS_PX /
@@ -791,7 +802,15 @@
         traceRoundedPolygon(ctx, highlightGeom.points)
       } else if (highlightGeom.kind === 'ellipse') {
         ctx.beginPath()
-        ctx.ellipse(highlightGeom.px, highlightGeom.py, highlightGeom.radialR, highlightGeom.tangentR, highlightGeom.angle, 0, Math.PI * 2)
+        ctx.ellipse(
+          highlightGeom.px,
+          highlightGeom.py,
+          highlightGeom.radialR,
+          highlightGeom.tangentR,
+          highlightGeom.angle,
+          0,
+          Math.PI * 2,
+        )
       } else {
         ctx.beginPath()
         ctx.arc(highlightGeom.px, highlightGeom.py, highlightGeom.px2, 0, Math.PI * 2)
@@ -835,7 +854,9 @@
       sunLon != null && isPointDark(nx, ny)
         ? []
         : lastRendered
-            .filter((entry) => Math.hypot(entry.px - px, entry.py - py) <= Math.max(entry.radiusPx, TAP_HIT_TOLERANCE_PX))
+            .filter(
+              (entry) => Math.hypot(entry.px - px, entry.py - py) <= Math.max(entry.radiusPx, TAP_HIT_TOLERANCE_PX),
+            )
             .map((entry) => entry.feature)
     dispatch('tap', { candidates, lat, lon })
   }

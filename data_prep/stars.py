@@ -3,8 +3,8 @@
 import csv
 import gzip
 import json
-import math
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ from config import (
 from double_stars import DoubleStarMatcher
 from downloader import Downloader
 from gaia import fetch_gaia, load_gaia_stars
+from star_annotations import _StarAnnotationsMixin
 
 # ---------------------------------------------------------------------------
 # Spectral class → approximate CSS colour (B−V colour index approximation)
@@ -55,6 +56,22 @@ COLOR_PALETTE: list[str] = [
     "#ffffff",  # 7 — default / unknown
 ]
 _COLOUR_TO_IDX: dict[str, int] = {c: i for i, c in enumerate(COLOR_PALETTE)}
+
+
+def _mag_sort(s: dict[str, Any]) -> float:
+    m = s["mag"]
+    return m[0] if isinstance(m, list) else m
+
+
+def _encode_mag(m: Any) -> str:
+    if isinstance(m, list):
+        return f"{m[0]:.2f}:{m[1]:.2f}"
+    return f"{m:.2f}"
+
+
+def _col_idx(s: dict[str, Any]) -> int:
+    return _COLOUR_TO_IDX.get(s.get("clr", ""), len(COLOR_PALETTE) - 1)
+
 
 # Stars with mag ≤ this limit go into Tier-1 (always in memory after startup).
 # Stars with mag > this limit go into Tier-2 (fetched per zone on demand).
@@ -194,12 +211,6 @@ _SPECT_PATTERN = re.compile(
 )
 
 
-def _lsun_str(l_sun: float) -> str:
-    """Round solar luminosity to 1 significant figure and format with commas."""
-    magnitude = 10 ** math.floor(math.log10(l_sun))
-    return f"{int(round(l_sun / magnitude) * magnitude):,}"
-
-
 def _parse_spec_class(spect: str) -> str | None:
     """Return a temperature label for a spectral type string.
 
@@ -272,6 +283,30 @@ def _is_variable(
     return (var_max - var_min) >= threshold
 
 
+def _star_mag_fields(
+    mag: float,
+    var_range: tuple[float, float] | None,
+    var_threshold: float,
+    var_type: str | None,
+    period: float | None,
+) -> dict[str, Any]:
+    """Return the mag-related star fields: `mag` (scalar or [min, max] for a
+    variable star), plus `var_type`/`var_period` when the star is variable."""
+    eff_threshold = variable_threshold(mag, var_threshold)
+    mag_value: float | list[float] = (
+        [var_range[0], var_range[1]]
+        if var_range is not None and _is_variable(var_range[0], var_range[1], eff_threshold)
+        else mag
+    )
+    fields: dict[str, Any] = {"mag": mag_value}
+    if isinstance(mag_value, list):
+        if var_type:
+            fields["var_type"] = var_type
+        if period is not None:
+            fields["var_period"] = period
+    return fields
+
+
 def _build_star(
     row: dict[str, str],
     max_mag: float = MAX_STAR_MAGNITUDE,
@@ -302,23 +337,11 @@ def _build_star(
         return None
 
     spect = row.get("spect", "")
-    eff_threshold = variable_threshold(mag, var_threshold)
-    mag_value: float | list[float] = (
-        [var_range[0], var_range[1]]
-        if var_range is not None
-        and _is_variable(var_range[0], var_range[1], eff_threshold)
-        else mag
-    )
     star: dict[str, Any] = {
         "pos": [ra, dec],
-        "mag": mag_value,
         "clr": spectral_colour(spect),
+        **_star_mag_fields(mag, var_range, var_threshold, var_type, period),
     }
-    if isinstance(mag_value, list):
-        if var_type:
-            star["var_type"] = var_type
-        if period is not None:
-            star["var_period"] = period
     for key, value in (
         ("hip", _int_or_none(row.get("hip", ""))),
         ("hd", _int_or_none(row.get("hd", ""))),
@@ -337,11 +360,24 @@ def _build_star(
 
 
 # ---------------------------------------------------------------------------
+# Row-level enrichment data bundle — threaded through _process/_process_file/
+# _process_row instead of three separate parameters each.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _EnrichmentData:
+    var_index: dict[int, tuple]
+    notes: dict[int, str]
+    alt_names: dict[int, list[str]]
+
+
+# ---------------------------------------------------------------------------
 # Pipeline class
 # ---------------------------------------------------------------------------
 
 
-class StarPipeline:
+class StarPipeline(_StarAnnotationsMixin):
     """Downloads HYG v4, filters stars, and writes stars.json."""
 
     def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -366,6 +402,40 @@ class StarPipeline:
         self._double_matcher = DoubleStarMatcher(sources_dir, cache_dir=cache, debug=debug)
         self._debug = debug
 
+    def _fetch_athyg_csv_paths(self) -> list[Path]:
+        if self._max_mag > ATHYG_FULL_MAG_THRESHOLD:
+            return [
+                self._downloader.fetch(url, name)
+                for url, name in zip(ATHYG_FULL_URLS, ATHYG_FULL_FILENAMES, strict=True)
+            ]
+        return [self._downloader.fetch(ATHYG_URL, ATHYG_FILENAME)]
+
+    def _supplement_with_gaia(self, stars: list[dict[str, Any]]) -> None:
+        """Append Gaia DR3 stars above the AT-HYG/Tycho-2 ceiling, in place."""
+        if self._max_mag <= GAIA_MAG_THRESHOLD:
+            return
+        gaia_max = min(self._max_mag, GAIA_DEFAULT_MAX_MAG)
+        fname = GAIA_FILENAME_TEMPLATE.format(max_mag=gaia_max, min_dec=EUROPE_MIN_DEC)
+        gaia_cache = self._downloader.cache_dir / fname
+        fetch_gaia(gaia_max, EUROPE_MIN_DEC, gaia_cache, min_mag=GAIA_MAG_THRESHOLD)
+        gaia_stars = load_gaia_stars(gaia_cache, gaia_max, EUROPE_MIN_DEC, COLOR_PALETTE)
+        print(f"Gaia supplement : {len(gaia_stars):,} stars loaded")
+        stars.extend(gaia_stars)
+
+    def _attach_double_stars(
+        self, stars: list[dict[str, Any]], attach_double: bool
+    ) -> tuple[int, int, int, int]:
+        """Optionally attach double-star metadata; return the four double-star counts."""
+        if not attach_double:
+            return 0, 0, 0, 0
+        n_dbl_stars, n_dbl_pairs, n_phys_pairs = self._double_matcher.attach(
+            stars,
+            max_mag=self._max_mag,
+            min_sep=self._min_double_star_sep,
+        )
+        n_apparent_pairs = self._double_matcher.classify_apparent_pairs(stars)
+        return n_dbl_stars, n_dbl_pairs, n_phys_pairs, n_apparent_pairs
+
     def run(
         self,
         var_index: dict[int, tuple] | None = None,
@@ -382,61 +452,26 @@ class StarPipeline:
         By default this method does not attach double-star metadata; set
         *attach_double* to True to perform double-star matching inline.
         """
-        if self._max_mag > ATHYG_FULL_MAG_THRESHOLD:
-            csv_paths = [
-                self._downloader.fetch(url, name)
-                for url, name in zip(ATHYG_FULL_URLS, ATHYG_FULL_FILENAMES, strict=True)
-            ]
-        else:
-            csv_paths = [self._downloader.fetch(ATHYG_URL, ATHYG_FILENAME)]
-        notes_path = self._sources_dir / "notes_stars.csv"
-        notes = _load_notes(notes_path)
-        alt_names_path = self._sources_dir / "star_alt_names.csv"
-        alt_names = _load_alt_names(alt_names_path)
-        stars, n_curated, _ = self._process(csv_paths, var_index or {}, notes, alt_names)
+        csv_paths = self._fetch_athyg_csv_paths()
+        enrichment = _EnrichmentData(
+            var_index=var_index or {},
+            notes=_load_notes(self._sources_dir / "notes_stars.csv"),
+            alt_names=_load_alt_names(self._sources_dir / "star_alt_names.csv"),
+        )
+        stars, n_curated, _ = self._process(csv_paths, enrichment)
 
         # Gaia DR3 supplement — fills the gap above the AT-HYG / Tycho-2 ceiling
-        if self._max_mag > GAIA_MAG_THRESHOLD:
-            gaia_max = min(self._max_mag, GAIA_DEFAULT_MAX_MAG)
-            fname = GAIA_FILENAME_TEMPLATE.format(
-                max_mag=gaia_max, min_dec=EUROPE_MIN_DEC
-            )
-            gaia_cache = self._downloader._cache_dir / fname
-            fetch_gaia(gaia_max, EUROPE_MIN_DEC, gaia_cache, min_mag=GAIA_MAG_THRESHOLD)
-            gaia_stars = load_gaia_stars(
-                gaia_cache, gaia_max, EUROPE_MIN_DEC, COLOR_PALETTE
-            )
-            print(f"Gaia supplement : {len(gaia_stars):,} stars loaded")
-            stars.extend(gaia_stars)
+        self._supplement_with_gaia(stars)
 
         # Compute luminosities and annotate the most luminous stars. Recompute
         # the post-annotation auto-note count so only the top N are reported
         # as auto-generated notes.
-
         top_n = extreme_stars_num if extreme_stars_num is not None else EXTREME_STARS_NUM
-        self._safe_annotate(self._annotate_luminosity, stars, top_n)
-        self._safe_annotate(self._annotate_brightness, stars, top_n)
-        self._safe_annotate(self._annotate_pm, stars, top_n)
-        self._safe_annotate(self._annotate_most_variable, stars, var_index or {}, top_n)
-        self._safe_annotate(self._annotate_nearest, stars, top_n)
-        self._safe_annotate(self._annotate_hottest, stars, top_n)
-        self._safe_annotate(self._annotate_space_velocity, stars, top_n)
-        # Compute the number of unique stars that received auto-generated
-        # notes (marked by the helper flag set above).
-        summary_ids: set[int] = {id(s) for s in stars if s.get("_auto_note")}
-        n_auto = len(summary_ids)
-        if attach_double:
-            n_dbl_stars, n_dbl_pairs, n_phys_pairs = self._double_matcher.attach(
-                stars,
-                max_mag=self._max_mag,
-                min_sep=self._min_double_star_sep,
-            )
-            n_apparent_pairs = self._double_matcher.classify_apparent_pairs(stars)
-        else:
-            n_dbl_stars = 0
-            n_dbl_pairs = 0
-            n_phys_pairs = 0
-            n_apparent_pairs = 0
+        n_auto = self._run_annotation_passes(stars, var_index, top_n)
+
+        n_dbl_stars, n_dbl_pairs, n_phys_pairs, n_apparent_pairs = self._attach_double_stars(
+            stars, attach_double
+        )
         self._write_csv(stars)
         return self._write(
             stars,
@@ -451,271 +486,14 @@ class StarPipeline:
             show_summary=show_summary,
         )
 
-    def _safe_annotate(self, fn: Any, *args: Any) -> None:
-        try:
-            fn(*args)
-        except Exception:  # pylint: disable=broad-except
-            if self._debug:
-                raise
-
-    def _annotate_luminosity(self, stars: list[dict[str, Any]], top_n: int) -> int:
-        """Compute luminosity (L/L_sun) for stars with `mag` (float) and `dist` (pc).
-
-        Adds temporary `_lsun` (float) and `_lsun_phrase` (str) and appends the
-        phrase to `note` so that `_cap_luminosity_notes()` can trim it for all
-        but the top *top_n* entries. After capping, adds a persistent note
-        "Among the X stars with highest luminosity" to those top entries.
-        """
-        with_lsun = []
-        for star in stars:
-            if self._assign_lsun_to_star(star):
-                with_lsun.append(star)
-        if not with_lsun:
-            return 0
-        # Determine top N by luminosity (handle top_n > available)
-        actual_top = max(0, min(top_n, len(with_lsun)))
-        top_list = sorted(with_lsun, key=lambda s: s["_lsun"], reverse=True)[:actual_top]
-        # Cap/remove luminosity phrases and temp fields per existing behaviour
-        self._cap_luminosity_notes(stars, top_n=actual_top)
-        # Add persistent summary into `smr` for the top items.
-        for idx, star in enumerate(top_list, start=1):
-            if idx == 1:
-                summary = "The star with the highest luminosity"
-            elif idx == 2:
-                summary = "A star with the 2nd highest luminosity"
-            elif idx == 3:
-                summary = "A star with the 3rd highest luminosity"
-            else:
-                summary = f"Among the {actual_top} stars with highest luminosity"
-            if "smr" in star and star["smr"]:
-                star["smr"] = f"{star['smr']}; {summary}"
-            else:
-                star["smr"] = summary
-            star["_auto_note"] = True
-        return actual_top
-
-    def _annotate_brightness(self, stars: list[dict[str, Any]], top_n: int) -> int:
-        """Mark the top *top_n* stars by apparent brightness (lowest `mag`).
-
-        Appends a persistent summary note "Among the X brightest stars" to
-        each of the selected stars and returns the actual number marked.
-        """
-        with_mag = [s for s in stars if isinstance(s.get("mag"), float)]
-        if not with_mag:
-            return 0
-        actual_top = max(0, min(top_n, len(with_mag)))
-        # sort by apparent magnitude (smaller = brighter)
-        top_stars = sorted(with_mag, key=lambda s: s["mag"])[:actual_top]
-        for idx, s in enumerate(top_stars, start=1):
-            if idx == 1:
-                summary = "The brightest star in the sky"
-            elif idx == 2:
-                summary = "The 2nd brightest star in the sky"
-            elif idx == 3:
-                summary = "The 3rd brightest star in the sky"
-            else:
-                summary = f"Among the {actual_top} brightest stars"
-            if "smr" in s and s["smr"]:
-                s["smr"] = f"{s['smr']}; {summary}"
-            else:
-                s["smr"] = summary
-            s["_auto_note"] = True
-        return actual_top
-
-    def _annotate_pm(self, stars: list[dict[str, Any]], top_n: int) -> int:
-        """Mark the top *top_n* stars by proper motion (pm_ra, pm_dec).
-
-        Proper motion magnitude is computed as sqrt(pm_ra^2 + pm_dec^2)
-        where the fields are expected in mas/yr. Top-ranked stars receive
-        special phrasing for ranks 1..3; others receive a summary note.
-        """
-        with_pm = []
-        for s in stars:
-            pm_ra = s.get("pm_ra")
-            pm_dec = s.get("pm_dec")
-            if isinstance(pm_ra, (int, float)) and isinstance(pm_dec, (int, float)):
-                s["_pm"] = float(math.hypot(pm_ra, pm_dec))
-                with_pm.append(s)
-        if not with_pm:
-            return 0
-        actual_top = max(0, min(top_n, len(with_pm)))
-        top_list = sorted(with_pm, key=lambda s: s["_pm"], reverse=True)[:actual_top]
-        def _fmt_arcsec_per_year(pm_masyr: float) -> str:
-            # mas/yr -> arcsec/yr: arcsec = pm_masyr / 1000
-            arcsec = pm_masyr / 1000.0
-            # Format with 2 decimal places for readability
-            return f"{arcsec:.2f}\"/yr"
-
-        for idx, s in enumerate(top_list, start=1):
-            if idx == 1:
-                summary = "The star with the highest proper motion"
-            elif idx == 2:
-                summary = "The star with the 2nd highest proper motion"
-            elif idx == 3:
-                summary = "The star with the 3rd highest proper motion"
-            else:
-                summary = f"Among the {actual_top} stars with highest proper motion"
-            # append a human-readable proper-motion rate (arcsec per year)
-            pm_val = s.get("_pm")
-            if isinstance(pm_val, (int, float)):
-                pm_str = _fmt_arcsec_per_year(pm_val)
-                summary = f"{summary} - {pm_str}"
-            if "smr" in s and s["smr"]:
-                s["smr"] = f"{s['smr']}; {summary}"
-            else:
-                s["smr"] = summary
-            s["_auto_note"] = True
-        return actual_top
-
-    @staticmethod
-    def _collect_variable_amplitudes(
-        stars: list[dict[str, Any]],
-        var_index: dict[int, tuple],
-    ) -> list[tuple[dict[str, Any], float]]:
-        result: list[tuple[dict[str, Any], float]] = []
-        for s in stars:
-            hip = s.get("hip")
-            if hip and hip in var_index:
-                rng = var_index[hip]
-                if rng and isinstance(rng[0], (int, float)) and isinstance(rng[1], (int, float)):
-                    amp = rng[1] - rng[0]
-                    if amp > 0:
-                        result.append((s, amp))
-        return result
-
-    def _annotate_most_variable(
-        self,
-        stars: list[dict[str, Any]],
-        var_index: dict[int, tuple] | None,
-        top_n: int,
-    ) -> int:
-        """Mark the top *top_n* stars by variability amplitude from *var_index*.
-
-        *var_index* is a HIP -> (min_mag, max_mag, var_type, period) mapping.
-        """
-        if not var_index:
-            return 0
-        var_list = self._collect_variable_amplitudes(stars, var_index)
-        if not var_list:
-            return 0
-        var_list.sort(key=lambda x: x[1], reverse=True)
-        actual_top = max(0, min(top_n, len(var_list)))
-        for idx, (s, amp) in enumerate(var_list[:actual_top], start=1):
-            if idx == 1:
-                summary = f"The most variable star (amplitude {amp:.2f} mag)"
-            elif idx == 2:
-                summary = f"The 2nd most variable star (amplitude {amp:.2f} mag)"
-            elif idx == 3:
-                summary = f"The 3rd most variable star (amplitude {amp:.2f} mag)"
-            else:
-                summary = f"Among the {actual_top} most variable stars (amplitude {amp:.2f} mag)"
-            if "smr" in s and s["smr"]:
-                s["smr"] = f"{s['smr']}; {summary}"
-            else:
-                s["smr"] = summary
-            s["_auto_note"] = True
-        return actual_top
-
-    def _annotate_nearest(self, stars: list[dict[str, Any]], top_n: int) -> int:
-        """Mark the top *top_n* nearest stars (showing distance in ly)."""
-        with_dist = [
-            s
-            for s in stars
-            if isinstance(s.get("dist"), (int, float)) and s.get("dist") > 0
-        ]
-        if not with_dist:
-            return 0
-        with_dist.sort(key=lambda s: s["dist"])  # ascending pc
-        actual_top = max(0, min(top_n, len(with_dist)))
-        for idx, s in enumerate(with_dist[:actual_top], start=1):
-            ly = s["dist"] * 3.26156
-            if idx == 1:
-                summary = f"The nearest star — {ly:.2f} ly"
-            elif idx == 2:
-                summary = f"The 2nd nearest star — {ly:.2f} ly"
-            elif idx == 3:
-                summary = f"The 3rd nearest star — {ly:.2f} ly"
-            else:
-                summary = f"Among the {actual_top} nearest stars — {ly:.2f} ly"
-            if "smr" in s and s["smr"]:
-                s["smr"] = f"{s['smr']}; {summary}"
-            else:
-                s["smr"] = summary
-            s["_auto_note"] = True
-        return actual_top
-
-    def _annotate_hottest(self, stars: list[dict[str, Any]], top_n: int) -> int:
-        """Rank by Harvard spectral class (O hottest → M coolest)."""
-        order = {"O": 0, "B": 1, "A": 2, "F": 3, "G": 4, "K": 5, "M": 6, "W": 7, "C": 8, "S": 9}
-        parsed: list[tuple[dict[str, Any], int, float]] = []
-        for s in stars:
-            spect = s.get("spect") or ""
-            if not spect:
-                continue
-            m = re.match(r"^([OBAFGKMWCS])([0-9.]*)", spect.strip(), re.I)
-            if not m:
-                continue
-            letter = m.group(1).upper()
-            subtype = float(m.group(2)) if m.group(2) else 5.0
-            rank_key = order.get(letter, 99)
-            parsed.append((s, rank_key, subtype))
-        if not parsed:
-            return 0
-        parsed.sort(key=lambda x: (x[1], x[2]))
-        actual_top = max(0, min(top_n, len(parsed)))
-        for idx, (s, _, _) in enumerate(parsed[:actual_top], start=1):
-            if idx == 1:
-                summary = "The hottest star"
-            elif idx == 2:
-                summary = "The 2nd hottest star"
-            elif idx == 3:
-                summary = "The 3rd hottest star"
-            else:
-                summary = f"Among the {actual_top} hottest stars"
-            if "smr" in s and s["smr"]:
-                s["smr"] = f"{s['smr']}; {summary}"
-            else:
-                s["smr"] = summary
-            s["_auto_note"] = True
-        return actual_top
-
-    def _assign_lsun_to_star(self, star: dict[str, Any]) -> bool:
-        """Compute and attach luminosity fields for *star*.
-
-        Returns True if luminosity was computed and attached, False otherwise.
-        """
-        m_sun = 4.83
-        mag = star.get("mag")
-        dist = star.get("dist")
-        if not (isinstance(mag, float) and isinstance(dist, (int, float)) and dist and dist > 0):
-            return False
-        try:
-            abs_mag = mag - 5 * math.log10(dist / 10)
-            lsun = 10 ** ((m_sun - abs_mag) / 2.5)
-        except (ValueError, OverflowError):
-            return False
-        star["_lsun"] = float(lsun)
-        phrase = f"~{_lsun_str(lsun)}\u00d7 the Sun's luminosity"
-        star["_lsun_phrase"] = phrase
-        # Auto-generated phrases go into the `smr` (summary) field. Always
-        # attach the luminosity phrase to `smr` so curated `note` remains
-        # untouched while still recording autogenerated summaries.
-        if "smr" in star and star["smr"]:
-            star["smr"] = f"{star['smr']}; {phrase}"
-        else:
-            star["smr"] = phrase
-        return True
-
     def _process_row(
         self,
         row: dict[str, str],
-        var_index: dict[int, tuple],
-        notes: dict[int, str],
-        alt_names: dict[int, list[str]],
+        enrichment: _EnrichmentData,
     ) -> tuple[dict[str, Any] | None, int, int]:
         """Process one CSV row; return (star_or_None, n_curated_delta, n_auto_delta)."""
         hip = _int_or_none(row.get("hip", ""))
-        var_data = var_index.get(hip) if hip else None
+        var_data = enrichment.var_index.get(hip) if hip else None
         var_range = (var_data[0], var_data[1]) if var_data else None
         var_type = var_data[2] if var_data and len(var_data) > 2 else None
         period = var_data[3] if var_data and len(var_data) > 3 else None
@@ -729,14 +507,14 @@ class StarPipeline:
         )
         if star is None:
             return None, 0, 0
-        if hip and hip in alt_names:
+        if hip and hip in enrichment.alt_names:
             # Alternate (informal / historical) names, e.g. "Navi" for gamma Cas.
             # Additive field: absent when a star has no curated alt names, so
             # older catalogues without this feature remain unaffected.
-            star["altNames"] = alt_names[hip]
-        if hip and hip in notes:
+            star["altNames"] = enrichment.alt_names[hip]
+        if hip and hip in enrichment.notes:
             # Attach curated note into `note` (preserve curated text).
-            star["note"] = notes[hip]
+            star["note"] = enrichment.notes[hip]
             star["_curated_note"] = True
             return star, 1, 0
         # Auto-generated physical notes have been disabled. Preserve curated
@@ -747,9 +525,7 @@ class StarPipeline:
         self,
         csv_path: Path,
         fieldnames: list[str] | None,
-        var_index: dict[int, tuple],
-        notes: dict[int, str],
-        alt_names: dict[int, list[str]],
+        enrichment: _EnrichmentData,
     ) -> tuple[list[dict[str, Any]], int, int, list[str]]:
         """Read one catalogue file; return (stars, n_curated, n_auto, fieldnames)."""
         stars: list[dict[str, Any]] = []
@@ -759,7 +535,7 @@ class StarPipeline:
         with opener(csv_path, "rt", encoding="utf-8") as fh:
             reader = csv.DictReader(fh, fieldnames=fieldnames)
             for row in reader:
-                star, dc, da = self._process_row(row, var_index, notes, alt_names)
+                star, dc, da = self._process_row(row, enrichment)
                 if star is not None:
                     stars.append(star)
                     n_curated += dc
@@ -769,9 +545,7 @@ class StarPipeline:
     def _process(
         self,
         csv_paths: list[Path],
-        var_index: dict[int, tuple[float, float]],
-        notes: dict[int, str],
-        alt_names: dict[int, list[str]],
+        enrichment: _EnrichmentData,
     ) -> tuple[list[dict[str, Any]], int, int]:
         """Parse one or more CSV files and return (stars, n_curated, n_auto).
 
@@ -787,9 +561,7 @@ class StarPipeline:
             batch, dc, da, fnames = self._process_file(
                 csv_path,
                 None if idx == 0 else shared_fieldnames,
-                var_index,
-                notes,
-                alt_names,
+                enrichment,
             )
             stars.extend(batch)
             n_curated += dc
@@ -799,47 +571,6 @@ class StarPipeline:
         # Auto-luminosity notes and auto-generated notes are disabled.
         # Curated notes from `notes_stars.csv` are preserved and counted.
         return stars, n_curated, n_auto
-
-    @staticmethod
-    def _cap_luminosity_notes(
-        stars: list[dict[str, Any]], top_n: int = 5
-    ) -> None:
-        """Keep the luminosity phrase only for the *top_n* most luminous stars."""
-        tagged = sorted(
-            [s for s in stars if "_lsun" in s],
-            key=lambda s: s["_lsun"],
-            reverse=True,
-        )
-        for s in tagged[top_n:]:
-            phrase = s.pop("_lsun_phrase", None)
-            # Remove the phrase from the note and summary fields in all
-            # common positions so only the top-N keep the luminosity claim.
-            if phrase:
-                smr = s.get("smr")
-                if smr:
-                    new = smr.replace(f"; {phrase}", "").replace(f"{phrase}; ", "")
-                    new = new.replace(phrase, "")
-                    new = re.sub(r"\s*;\s*", "; ", new).strip()
-                    new = new.strip("; ")
-                    if new:
-                        s["smr"] = new
-                    else:
-                        s.pop("smr", None)
-
-                note = s.get("note")
-                if note:
-                    newn = note.replace(f"; {phrase}", "").replace(f"{phrase}; ", "")
-                    newn = newn.replace(phrase, "")
-                    newn = re.sub(r"\s*;\s*", "; ", newn).strip()
-                    newn = newn.strip("; ")
-                    if newn:
-                        s["note"] = newn
-                    else:
-                        s.pop("note", None)
-            s.pop("_lsun", None)
-        for s in tagged[:top_n]:
-            s.pop("_lsun", None)
-            s.pop("_lsun_phrase", None)
 
     @staticmethod
     def _dbl_csv_nature(s: dict[str, Any]) -> str:
@@ -865,41 +596,9 @@ class StarPipeline:
             return "p"
         return "1"
 
-    def _write_csv(
-        self,
-        stars: list[dict[str, Any]],
-    ) -> tuple[Path, Path]:
-        """Write Tier-1 and Tier-2 star CSVs alongside the JSON output.
-
-        Returns (path_t1, path_t2).
-        """
-        self._output_dir.mkdir(parents=True, exist_ok=True)
-        mag_tag = f"m{self._max_mag:g}"
-        path_t1 = self._output_dir / f"stars_t1.{mag_tag}.csv"
-        path_t2 = self._output_dir / f"stars_t2.{mag_tag}.csv"
-
-        def _mag_sort(s: dict[str, Any]) -> float:
-            m = s["mag"]
-            return m[0] if isinstance(m, list) else m
-
-        def _encode_mag(m: Any) -> str:
-            if isinstance(m, list):
-                return f"{m[0]:.2f}:{m[1]:.2f}"
-            return f"{m:.2f}"
-
-        def _col_idx(s: dict[str, Any]) -> int:
-            return _COLOUR_TO_IDX.get(s.get("clr", ""), len(COLOR_PALETTE) - 1)
-
+    def _write_t1_csv(self, path_t1: Path, tier1: list[dict[str, Any]]) -> None:
         t1_header = "ra,de,mg,cl,hp,hd,sp,ds,pr,pd,fl,by,db,nm,nt,sm,cn,vt,vp,an"
-        t1_fixed_cols = 10   # columns before the optional trailing group
-        t2_header = "z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd"
-
-        tier1 = sorted([s for s in stars if _mag_sort(s) <= T1_MAG_LIMIT], key=_mag_sort)
-        tier2 = sorted(
-            [s for s in stars if _mag_sort(s) > T1_MAG_LIMIT],
-            key=lambda s: (_compute_zone(s["pos"][0] * 15, s["pos"][1]), _mag_sort(s)),
-        )
-
+        t1_fixed_cols = 10  # columns before the optional trailing group
         with path_t1.open("w", encoding="utf-8", newline="") as fh:
             fh.write(t1_header + "\n")
             for s in tier1:
@@ -933,6 +632,9 @@ class StarPipeline:
                     row.pop()
                 fh.write(",".join(row) + "\n")
 
+    @staticmethod
+    def _write_t2_csv(path_t2: Path, tier2: list[dict[str, Any]]) -> None:
+        t2_header = "z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd"
         with path_t2.open("w", encoding="utf-8", newline="") as fh:
             fh.write(t2_header + "\n")
             for s in tier2:
@@ -953,6 +655,28 @@ class StarPipeline:
                     f"{s['pm_dec']:.2f}" if s.get("pm_dec") is not None else "",
                 ]
                 fh.write(",".join(row) + "\n")
+
+    def _write_csv(
+        self,
+        stars: list[dict[str, Any]],
+    ) -> tuple[Path, Path]:
+        """Write Tier-1 and Tier-2 star CSVs alongside the JSON output.
+
+        Returns (path_t1, path_t2).
+        """
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        mag_tag = f"m{self._max_mag:g}"
+        path_t1 = self._output_dir / f"stars_t1.{mag_tag}.csv"
+        path_t2 = self._output_dir / f"stars_t2.{mag_tag}.csv"
+
+        tier1 = sorted([s for s in stars if _mag_sort(s) <= T1_MAG_LIMIT], key=_mag_sort)
+        tier2 = sorted(
+            [s for s in stars if _mag_sort(s) > T1_MAG_LIMIT],
+            key=lambda s: (_compute_zone(s["pos"][0] * 15, s["pos"][1]), _mag_sort(s)),
+        )
+
+        self._write_t1_csv(path_t1, tier1)
+        self._write_t2_csv(path_t2, tier2)
 
         print(f"Stars CSV T1    : {len(tier1):,} rows → {path_t1}")
         print(f"Stars CSV T2    : {len(tier2):,} rows → {path_t2}")
@@ -1038,60 +762,3 @@ class StarPipeline:
             print(f"Output         : {out} ({size_mb:.2f} MB)")
         return out
     # pylint: enable=too-many-arguments,too-many-positional-arguments,too-many-locals
-
-    @staticmethod
-    def _compute_space_velocity(s: dict[str, Any]) -> float | None:
-        pm_ra = s.get("pm_ra")
-        pm_dec = s.get("pm_dec")
-        dist = s.get("dist")
-        if not (
-            isinstance(pm_ra, (int, float))
-            and isinstance(pm_dec, (int, float))
-            and isinstance(dist, (int, float))
-            and dist > 0
-        ):
-            return None
-        mu_masyr = math.hypot(pm_ra, pm_dec)
-        mu_arcsec = mu_masyr / 1000.0
-        vt = 4.74047 * mu_arcsec * dist
-        rv = s.get("rv")
-        if isinstance(rv, (int, float)):
-            return math.hypot(vt, rv)
-        return vt
-
-    def _annotate_space_velocity(
-        self, stars: list[dict[str, Any]], top_n: int
-    ) -> int:
-        """Annotate stars with highest total space velocity (km/s).
-
-        Uses `pm_ra`, `pm_dec` (mas/yr), `dist` (pc) and optional `rv` (km/s).
-        Ranks by total velocity sqrt(vt^2 + rv^2) when RV present, else by vt.
-        Notes only include the total km/s rounded to 1 decimal place.
-        """
-        vals: list[tuple[dict[str, Any], float]] = []
-        for s in stars:
-            vtot = self._compute_space_velocity(s)
-            if vtot is not None:
-                vals.append((s, vtot))
-        if not vals:
-            return 0
-        vals.sort(key=lambda x: x[1], reverse=True)
-        actual_top = max(0, min(top_n, len(vals)))
-        for idx, (s, vtot) in enumerate(vals[:actual_top], start=1):
-            if idx == 1:
-                summary = f"The star with the highest total space velocity — {vtot:.1f} km/s"
-            elif idx == 2:
-                summary = f"The star with the 2nd highest total space velocity — {vtot:.1f} km/s"
-            elif idx == 3:
-                summary = f"The star with the 3rd highest total space velocity — {vtot:.1f} km/s"
-            else:
-                summary = (
-                    f"Among the {actual_top} stars with highest total space velocity — "
-                    f"{vtot:.1f} km/s"
-                )
-            if "smr" in s and s["smr"]:
-                s["smr"] = f"{s['smr']}; {summary}"
-            else:
-                s["smr"] = summary
-            s["_auto_note"] = True
-        return actual_top

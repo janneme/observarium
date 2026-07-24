@@ -372,7 +372,9 @@
         <p class="done">Quiz complete. Every question passed.</p>
       {:else}
         <p class="question">
-          {resolved ? 'Tap the highlighted answer again for the next question' : 'What is the name of the highlighted feature?'}
+          {resolved
+            ? 'Tap the highlighted answer again for the next question'
+            : 'What is the name of the highlighted feature?'}
         </p>
 
         <div class="moon-wrap">

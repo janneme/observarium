@@ -148,6 +148,38 @@ def _circle_ring(lat: float, lon: float, radius_deg: float, n_points: int) -> li
     ]
 
 
+def _ridge_corner_params(
+    width: float, height: float, corner_ratio: float
+) -> tuple[float, float, list[tuple[float, float, float]]]:
+    """Return (rx, ry, corners) — the rounded-corner ellipse radii and each
+    corner's (dx, dy, start_angle_deg) placement relative to the box centre.
+
+    Each corner entry is a quarter-ellipse arc (NE/NW/SW/SE); consecutive
+    corners' arc endpoints already share an axis, so no explicit edge points
+    are needed — straight connectors between them form the flat sides.
+    """
+    half_w = width / 2.0
+    half_h = height / 2.0
+    ratio = max(0.0, min(1.0, corner_ratio))
+    rx = half_w * ratio
+    ry = half_h * ratio
+    cx = half_w - rx
+    cy = half_h - ry
+    corners = [(cx, cy, 0.0), (-cx, cy, 90.0), (-cx, -cy, 180.0), (cx, -cy, 270.0)]
+    return rx, ry, corners
+
+
+def _ridge_corner_arc_points(
+    lat: float, lon: float, ox: float, oy: float, start: float, rx: float, ry: float, segments: int
+) -> list[Point]:
+    """Sample one quarter-ellipse corner arc into (lon, lat) points."""
+    points: list[Point] = []
+    for i in range(segments + 1):
+        rad = math.radians(start + 90.0 * i / segments)
+        points.append((lon + ox + rx * math.cos(rad), lat + oy + ry * math.sin(rad)))
+    return points
+
+
 def _ridge_outline(
     lat: float,
     lon: float,
@@ -165,22 +197,10 @@ def _ridge_outline(
     approximation of a ridge/massif footprint without claiming precision the
     source data doesn't have. Ported from the client's former ridgeOutline().
     """
-    half_w = width / 2.0
-    half_h = height / 2.0
-    ratio = max(0.0, min(1.0, corner_ratio))
-    rx = half_w * ratio
-    ry = half_h * ratio
-    cx = half_w - rx
-    cy = half_h - ry
-    # Each entry is a quarter-ellipse arc (NE/NW/SW/SE); consecutive corners'
-    # arc endpoints already share an axis, so no explicit edge points are
-    # needed — straight connectors between them form the flat sides.
-    corners = [(cx, cy, 0.0), (-cx, cy, 90.0), (-cx, -cy, 180.0), (cx, -cy, 270.0)]
+    rx, ry, corners = _ridge_corner_params(width, height, corner_ratio)
     points: list[Point] = []
     for ox, oy, start in corners:
-        for i in range(segments + 1):
-            rad = math.radians(start + 90.0 * i / segments)
-            points.append((lon + ox + rx * math.cos(rad), lat + oy + ry * math.sin(rad)))
+        points.extend(_ridge_corner_arc_points(lat, lon, ox, oy, start, rx, ry, segments))
     return points
 
 
@@ -252,12 +272,16 @@ def _subtract_obstacles(ring: list[Point], obstacle_polys: list[Polygon]) -> lis
     remainder = poly.difference(unary_union(overlapping))
     if remainder.is_empty:
         return [ring]
-    pieces: list[Polygon] = list(remainder.geoms) if isinstance(remainder, MultiPolygon) else [remainder]  # type: ignore[list-item]
+    if isinstance(remainder, MultiPolygon):
+        pieces: list[Polygon] = list(remainder.geoms)
+    else:
+        pieces = [remainder]  # type: ignore[list-item]
     rings: list[list[Point]] = []
     for piece in pieces:
         if not isinstance(piece, Polygon) or piece.is_empty or piece.area < 1e-9:
             continue
-        coords: list[Point] = [(x, y) for x, y in list(piece.exterior.coords)[:-1]]  # drop closing duplicate vertex
+        # Drop the closing duplicate vertex.
+        coords: list[Point] = list(piece.exterior.coords)[:-1]  # type: ignore[assignment]
         simplified = _simplify_to_max_points(coords, MOON_OUTLINE_MAX_POINTS)
         if len(simplified) >= 3:
             rings.append(simplified)
@@ -371,7 +395,8 @@ class MoonFeaturePipeline:
             # Schrodinger at lat -74.7 recorded a raw 41 deg "width" for a
             # crater whose real angular size, matching its height, is ~10
             # deg — a >4x size inflation before this fix).
-            width = _lon_span_deg(float(min_lon), float(max_lon)) * math.cos(math.radians(lat))  # type: ignore[arg-type]
+            lon_span = _lon_span_deg(float(min_lon), float(max_lon))  # type: ignore[arg-type]
+            width = lon_span * math.cos(math.radians(lat))
             height = abs(float(max_lat) - float(min_lat))  # type: ignore[arg-type]
             return width, height
         return diam_deg, diam_deg
@@ -432,19 +457,12 @@ class MoonFeaturePipeline:
         return out
 
     @staticmethod
-    def _feature_ring(
-        feature: dict[str, Any], outline: list[Point] | None, type_key: str
+    def _synthesize_ring(
+        feature: dict[str, Any], lat: float, lon: float, type_key: str, style: str
     ) -> tuple[list[Point], str]:
-        """Return a feature's base (ring, style) — before any mons-specific
-        obstacle subtraction, which _group_features applies afterward once
-        every other type's ring is known (see _subtract_obstacles)."""
-        lat = float(feature["lat"])
-        lon = float(feature["lon"])
-        style = STYLE_FILLED if type_key in MOON_AREA_TYPES or type_key in MOON_RIDGE_LIKE_TYPES else STYLE_RAISED
-
-        if outline:
-            return outline, style
-
+        """Build a ring for a feature with no digitized outline: a circle,
+        a ridge outline, a filled rectangle, or a raised circle, depending
+        on its aspect ratio and type."""
         width = float(feature["size_axes"][0])
         height = float(feature["size_axes"][1])
         max_axis = max(width, height)
@@ -476,7 +494,26 @@ class MoonFeaturePipeline:
         return _circle_ring(lat, lon, radius, MOON_CIRCLE_VERTEX_COUNT), STYLE_RAISED
 
     @staticmethod
-    def _round_feature(feature: dict[str, Any], rings: list[list[Point]], style: str) -> dict[str, Any]:
+    def _feature_ring(
+        feature: dict[str, Any], outline: list[Point] | None, type_key: str
+    ) -> tuple[list[Point], str]:
+        """Return a feature's base (ring, style) — before any mons-specific
+        obstacle subtraction, which _group_features applies afterward once
+        every other type's ring is known (see _subtract_obstacles)."""
+        lat = float(feature["lat"])
+        lon = float(feature["lon"])
+        is_filled = type_key in MOON_AREA_TYPES or type_key in MOON_RIDGE_LIKE_TYPES
+        style = STYLE_FILLED if is_filled else STYLE_RAISED
+
+        if outline:
+            return outline, style
+
+        return MoonFeaturePipeline._synthesize_ring(feature, lat, lon, type_key, style)
+
+    @staticmethod
+    def _round_feature(
+        feature: dict[str, Any], rings: list[list[Point]], style: str
+    ) -> dict[str, Any]:
         """Round a Moon feature into its final compact record: lat/lon plus
         `geom`, one styled `S <STYLE> M/L/Z` path string per ring (see
         moon_pipeline.md). Every feature has exactly one ring except

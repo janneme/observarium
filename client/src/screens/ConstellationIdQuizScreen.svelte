@@ -33,7 +33,6 @@
 
   let loading = true
   let setupMode = true
-  let constellationsMeta = null
   let allStars = []
   let starsByHip = new Map()
   let conInfoByAbbr = new Map()
@@ -287,7 +286,9 @@
       if (isEligible(info, d)) eligible.push(info.abbr)
       else excluded.push(info.abbr)
     }
-    console.log(`@@ [ConstQuiz] buildPool difficulty=${d} eligible=${eligible.length} excluded=${excluded.length} [${excluded.join(',')}]`)
+    console.log(
+      `@@ [ConstQuiz] buildPool difficulty=${d} eligible=${eligible.length} excluded=${excluded.length} [${excluded.join(',')}]`,
+    )
     return eligible
   }
 
@@ -420,7 +421,9 @@
     options = chosen
     // Easy always uses full names; Medium/Hard randomly pick names or abbrs.
     optionsUseAbbrev = difficulty !== 'easy' && Math.random() < 0.5
-    console.log(`@@ [ConstQuiz] pickOptions correct=${correctAbbr} options=${chosen.join(',')} useAbbrev=${optionsUseAbbrev}`)
+    console.log(
+      `@@ [ConstQuiz] pickOptions correct=${correctAbbr} options=${chosen.join(',')} useAbbrev=${optionsUseAbbrev}`,
+    )
   }
 
   $: optionLabels = options.map((abbr) => (optionsUseAbbrev ? abbr : conNameByAbbr.get(abbr) || abbr))
@@ -545,11 +548,7 @@
 
   // Line-set-scope per difficulty and reveal state.
   // Easy: exclude quizzed until reveal, then all. Medium/Hard: none until reveal, then all.
-  $: lineAbbrsFilter = firstTapMade
-    ? 'all'
-    : difficulty === 'easy'
-      ? 'exclude-quizzed'
-      : 'none'
+  $: lineAbbrsFilter = firstTapMade ? 'all' : difficulty === 'easy' ? 'exclude-quizzed' : 'none'
 
   onMount(() => {
     window.addEventListener('keydown', onGlobalKeyDown, true)
@@ -557,7 +556,6 @@
       loadQuizSettings()
       settingsLoaded = true
       const [index, constellations] = await Promise.all([getSearchIndex(), getMeta('constellations')])
-      constellationsMeta = constellations
       const nameMap = new Map()
       if (constellations && typeof constellations === 'object') {
         for (const [abbr, con] of Object.entries(constellations)) {

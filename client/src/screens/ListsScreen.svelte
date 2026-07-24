@@ -372,9 +372,7 @@
             {:else}
               <button class="list-toggle" type="button" on:click={() => toggleExpand(list.id)}>
                 <span class="caret">{expandedListIds.has(list.id) ? '▾' : '▸'}</span>
-                <span class="list-title" class:active={list.active}
-                  >{list.name} ({(list.objects || []).length})</span
-                >
+                <span class="list-title" class:active={list.active}>{list.name} ({(list.objects || []).length})</span>
               </button>
             {/if}
             <span class="header-actions">
@@ -382,13 +380,7 @@
                 <button class="icon-btn" type="button" on:click={saveEditListName} title="Accept" aria-label="Accept">
                   <AcceptIcon size="1rem" aria-hidden="true" />
                 </button>
-                <button
-                  class="icon-btn"
-                  type="button"
-                  on:click={cancelEditListName}
-                  title="Cancel"
-                  aria-label="Cancel"
-                >
+                <button class="icon-btn" type="button" on:click={cancelEditListName} title="Cancel" aria-label="Cancel">
                   <CloseIcon size="1rem" aria-hidden="true" />
                 </button>
               {:else}
@@ -449,9 +441,7 @@
                     {@const obj = objectById.get(entry.id)}
                     <div
                       class="object-row"
-                      class:editing={objectEdit &&
-                        objectEdit.listId === list.id &&
-                        objectEdit.objectId === entry.id}
+                      class:editing={objectEdit && objectEdit.listId === list.id && objectEdit.objectId === entry.id}
                     >
                       <div class="object-main">
                         <span class="obj-symbol"><ObservationObjectSymbol kind={objectSymbolKind(obj)} /></span>

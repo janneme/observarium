@@ -88,7 +88,6 @@ export async function removeObjectFromList(listId, objectId) {
 
 export async function removeObjectFromLists(listIds, objectId) {
   for (const listId of listIds) {
-    // eslint-disable-next-line no-await-in-loop
     await removeObjectFromList(listId, objectId)
   }
 }
@@ -97,9 +96,7 @@ export async function updateListObjectNote(listId, objectId, note) {
   const lists = await getAllLists()
   const list = lists.find((l) => l.id === listId)
   if (!list) return null
-  const objects = (Array.isArray(list.objects) ? list.objects : []).map((o) =>
-    o.id === objectId ? { ...o, note } : o,
-  )
+  const objects = (Array.isArray(list.objects) ? list.objects : []).map((o) => (o.id === objectId ? { ...o, note } : o))
   return saveList({ ...list, objects })
 }
 

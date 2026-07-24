@@ -49,12 +49,16 @@
         )}{/if}
     {:else if moonPhasePercent !== null}
       {moonPhasePercent}%,
-      <span class="rise-set"><span class="rs-icon"><RiseIcon size="1.2rem" /></span> {formatRiseSetTime(moonRiseTime)}</span>
-      <span class="rise-set"><span class="rs-icon"><SetIcon size="1.2rem" /></span> {formatRiseSetTime(moonSetTime)}</span>
+      <span class="rise-set"
+        ><span class="rs-icon"><RiseIcon size="1.2rem" /></span> {formatRiseSetTime(moonRiseTime)}</span
+      >
+      <span class="rise-set"
+        ><span class="rs-icon"><SetIcon size="1.2rem" /></span> {formatRiseSetTime(moonSetTime)}</span
+      >
       {#if moonMaxAltitude !== null}
-        <span class="rise-set"><span class="rs-icon"><MaxHeightIcon size="1.2rem" /></span> {moonMaxAltitude.toFixed(
-            1,
-          )}°</span>
+        <span class="rise-set"
+          ><span class="rs-icon"><MaxHeightIcon size="1.2rem" /></span> {moonMaxAltitude.toFixed(1)}°</span
+        >
       {/if}
     {/if}
   </span>

@@ -145,10 +145,8 @@ def _write_chunk_zip(target: Path, zone_data: dict[int, str]) -> None:
             zf.writestr(f"{zone:04d}.csv", csv)
 
 
-def _pack_t2_chunks(
-    t2_path: Path, out_dir: Path, mag: int
-) -> tuple[list[tuple[str, list[int]]], dict]:
-    """Bin-pack zones from T2 CSV into chunk ZIPs. Returns (chunks, stats).
+def _read_t2_zones(t2_path: Path) -> tuple[dict[int, list[str]], dict]:
+    """Parse a T2 CSV into per-zone line lists plus (stars, variable) stats.
 
     T2 CSV format: z,ra,de,mg,cl,hp,hd,sp,ds,pr,pd (no header in zone blobs).
     Index 3 = mg; colon-separated range means variable star.
@@ -171,22 +169,32 @@ def _pack_t2_chunks(
             t2_stars += 1
             if len(cols) > 3 and ":" in cols[3]:
                 t2_variable += 1
+    return zones, {"stars": t2_stars, "variable": t2_variable}
 
+
+def _bin_pack_zones(
+    zones: dict[int, list[str]], out_dir: Path, mag: int
+) -> list[tuple[str, list[int]]]:
+    """Bin-pack zones into chunk ZIPs, respecting TARGET_CHUNK_BYTES."""
     chunks: list[tuple[str, list[int]]] = []
     chunk_idx = 0
     current_zones: list[int] = []
     current_estimated = 0.0
     current_zone_data: dict[int, str] = {}
 
+    def _flush() -> None:
+        nonlocal chunk_idx
+        chunk_name = f"t2_{chunk_idx:03d}_mag{mag}.zip"
+        _write_chunk_zip(out_dir / chunk_name, current_zone_data)
+        chunks.append((chunk_name, list(current_zones)))
+        chunk_idx += 1
+
     for zone_num in sorted(zones.keys()):
         zone_lines = zones[zone_num]
         zone_csv = "\n".join(zone_lines)
         zone_estimated = len(zone_csv.encode("utf-8")) / COMPRESS_RATIO
         if current_zones and current_estimated + zone_estimated > TARGET_CHUNK_BYTES:
-            chunk_name = f"t2_{chunk_idx:03d}_mag{mag}.zip"
-            _write_chunk_zip(out_dir / chunk_name, current_zone_data)
-            chunks.append((chunk_name, list(current_zones)))
-            chunk_idx += 1
+            _flush()
             current_zones = []
             current_estimated = 0.0
             current_zone_data = {}
@@ -195,11 +203,18 @@ def _pack_t2_chunks(
         current_zone_data[zone_num] = zone_csv
 
     if current_zones:
-        chunk_name = f"t2_{chunk_idx:03d}_mag{mag}.zip"
-        _write_chunk_zip(out_dir / chunk_name, current_zone_data)
-        chunks.append((chunk_name, list(current_zones)))
+        _flush()
 
-    return chunks, {"stars": t2_stars, "variable": t2_variable}
+    return chunks
+
+
+def _pack_t2_chunks(
+    t2_path: Path, out_dir: Path, mag: int
+) -> tuple[list[tuple[str, list[int]]], dict]:
+    """Bin-pack zones from T2 CSV into chunk ZIPs. Returns (chunks, stats)."""
+    zones, stats = _read_t2_zones(t2_path)
+    chunks = _bin_pack_zones(zones, out_dir, mag)
+    return chunks, stats
 
 
 def _write_images_zip(target: Path) -> None:
