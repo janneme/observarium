@@ -19,6 +19,7 @@
   import StarQuizScreen from './StarQuizScreen.svelte'
   import ConstellationIdQuizScreen from './ConstellationIdQuizScreen.svelte'
   import MoonQuizScreen from './MoonQuizScreen.svelte'
+  import DeepSkyQuizScreen from './DeepSkyQuizScreen.svelte'
   import MoonMapScreen from './MoonMapScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import ListsScreen from './ListsScreen.svelte'
@@ -119,6 +120,7 @@
   let showStarQuiz = false
   let showConstellationIdQuiz = false
   let showMoonQuiz = false
+  let showDeepSkyQuiz = false
   let showMoonMap = false
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
@@ -392,6 +394,30 @@
     showFindingPathsList = true
   }
 
+  // "q" followed shortly by m/s/c/d launches a quiz directly (Moon/Star/
+  // Constellation/Deep Sky). Two-key chord so it doesn't collide with the
+  // existing single-letter shortcuts for those same letters.
+  const QUIZ_CHORD_TIMEOUT_MS = 600
+  let quizChordArmed = false
+  let quizChordTimer = null
+
+  function armQuizChord() {
+    quizChordArmed = true
+    if (quizChordTimer) clearTimeout(quizChordTimer)
+    quizChordTimer = setTimeout(() => {
+      quizChordArmed = false
+      quizChordTimer = null
+    }, QUIZ_CHORD_TIMEOUT_MS)
+  }
+
+  function disarmQuizChord() {
+    quizChordArmed = false
+    if (quizChordTimer) {
+      clearTimeout(quizChordTimer)
+      quizChordTimer = null
+    }
+  }
+
   function openObservationSync() {
     const { valid, nearExpiry } = getTokenStatus()
     if (!valid || nearExpiry) {
@@ -435,6 +461,11 @@
       }
       if (showMoonQuiz) {
         showMoonQuiz = false
+        e.preventDefault()
+        return
+      }
+      if (showDeepSkyQuiz) {
+        showDeepSkyQuiz = false
         e.preventDefault()
         return
       }
@@ -500,8 +531,44 @@
     if (showStarQuiz) return
     if (showConstellationIdQuiz) return
     if (showMoonQuiz) return
+    if (showDeepSkyQuiz) return
     if (showMoonMap) return
     if (showLists) return
+
+    if (e.key === 'q') {
+      armQuizChord()
+      e.preventDefault()
+      return
+    }
+
+    if (quizChordArmed) {
+      disarmQuizChord()
+      if (e.key === 'm') {
+        menuOpen = false
+        showMoonQuiz = true
+        e.preventDefault()
+        return
+      }
+      if (e.key === 's') {
+        menuOpen = false
+        showStarQuiz = true
+        e.preventDefault()
+        return
+      }
+      if (e.key === 'c') {
+        menuOpen = false
+        showConstellationIdQuiz = true
+        e.preventDefault()
+        return
+      }
+      if (e.key === 'd') {
+        menuOpen = false
+        showDeepSkyQuiz = true
+        e.preventDefault()
+        return
+      }
+      // Not a recognized chord — fall through to normal key handling below.
+    }
 
     if ((e.key === 'i' || e.key === 'Enter') && get(selectedObject)) {
       objectDetailsActive.set(true)
@@ -677,6 +744,7 @@
     window.removeEventListener('keydown', handleKey)
     window.removeEventListener('wheel', handleWheel)
     clearInterval(clockInterval)
+    if (quizChordTimer) clearTimeout(quizChordTimer)
   })
 
   $: minDimFov = viewportH > 0 ? (fov * Math.min(viewportW, viewportH)) / viewportH : fov
@@ -787,6 +855,9 @@
     }}
     on:moonquiz={() => {
       showMoonQuiz = true
+    }}
+    on:deepskyquiz={() => {
+      showDeepSkyQuiz = true
     }}
     on:moonmap={() => {
       showMoonMap = true
@@ -1039,6 +1110,20 @@
       time={skyTime}
       on:close={() => {
         showMoonQuiz = false
+      }}
+    />
+  {/if}
+
+  {#if showDeepSkyQuiz}
+    <DeepSkyQuizScreen
+      {lat}
+      {lon}
+      time={skyTime}
+      viewRa0={ra0}
+      viewDec0={dec0}
+      viewFov={minDimFov}
+      on:close={() => {
+        showDeepSkyQuiz = false
       }}
     />
   {/if}

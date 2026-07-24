@@ -38,9 +38,6 @@
   function close() {
     dispatch('close')
   }
-  function stub() {
-    close()
-  }
 </script>
 
 {#if open}
@@ -230,7 +227,7 @@
           <div class="icon-wrap">
             <MoonQuizIcon size="42" />
           </div>
-          <span class="item-lbl">Moon Quiz</span>
+          <span class="item-lbl">Moon Quiz (qm)</span>
         </button>
 
         <button
@@ -244,7 +241,7 @@
           <div class="icon-wrap">
             <PlanetQuizIcon size="42" />
           </div>
-          <span class="item-lbl">Star Quiz</span>
+          <span class="item-lbl">Star Quiz (qs)</span>
         </button>
 
         <button
@@ -258,14 +255,21 @@
           <div class="icon-wrap">
             <ConstellationQuizIcon size="42" />
           </div>
-          <span class="item-lbl">Const. Quiz</span>
+          <span class="item-lbl">Const. Quiz (qc)</span>
         </button>
 
-        <button class="grid-item" on:click={stub} aria-label="Deep sky quiz">
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('deepskyquiz')
+            close()
+          }}
+          aria-label="Deep sky quiz"
+        >
           <div class="icon-wrap">
             <DsoQuizIcon size="42" />
           </div>
-          <span class="item-lbl">DSO Quiz</span>
+          <span class="item-lbl">DSO Quiz (qd)</span>
         </button>
       </div>
 

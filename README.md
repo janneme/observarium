@@ -564,33 +564,53 @@ Finder views in a 2×2 grid (each centred on a bright candidate at random
 rotation), and asks the user to pick the one that matches the displayed star
 name.
 
-## 5.10 Deep sky quiz (planned)
+## 5.10 Deep Sky Quiz
 
-Not yet implemented (the menu button is currently a stub). Envisioned as
-described below.
+Trains the observer to know where to find DSO objects identified by a catalogue number, the
+relation between an object's name and its catalogue number, and the type of object a catalogue
+number identifies. Like the Star Quiz and Constellation Quiz, the user chooses a Global or Local
+scope; unlike those two, the field of view used to render a question is fixed (40°) across all
+difficulty levels rather than varying by difficulty.
 
-At the beginning the quiz selects the deep sky objects used according to
-this guidelines:
+Difficulty affects the number of questions the user must pass (15/30/50 for Easy/Medium/Hard) and
+the pool of objects eligible to be quizzed or used as a distractor:
 
-- Easy: Select from 20 most bright deep sky objects
-- Medium: Select from 50 most bright deep sky objects
-- Hard: All deep sky objects
+- Easy: 30 brightest Messier objects (no NGC)
+- Medium: complete Messier catalogue + 30 brightest NGC objects
+- Hard: complete Messier catalogue + 200 brightest NGC objects
 
-The quiz combines questions of more types:
+Non-Messier open clusters without an image are excluded from the quiz entirely (never the quizzed
+object, a distractor, or otherwise shown).
 
-### 5.10.1 Finder View
+At the start of the quiz, a fixed number of questions is generated, each with a fixed quizzed
+object AND question type (only the distractors and sky-view orientation vary if a question is
+re-encountered). The quiz randomly mixes three question types:
 
-Same as the Finder Scope quiz, but for deep sky objects.
+### 5.10.1 Object position
 
-### 5.10.2 Image
+A square sky view (fixed 40° FOV, no swipe/pan) marks a DSO's position without indicating its
+type. Below it are four catalogue-number options (Messier number preferred over NGC when an
+object has both). For Easy/Medium, constellation lines are rendered from the start; for Hard, only
+after answering. Distractors never include an object close enough to the quizzed one to be
+ambiguous within the rendered FOV (e.g. M81 and M82 never appear together).
 
-Renders four deep sky images in a 2x2 matrix and lets the user select the image
-corresponding to the displayed name or catalogue number (here catalogue
-numbers are used only for objects without a nickname).
+### 5.10.2 Recognize object by image
 
-### 5.10.3 Object types
+A 2×2 matrix of DSO images is rendered above a question naming a catalogue number; the user taps
+the matching image directly (no separate answer buttons). Distractors are restricted to a
+different subtype than the quizzed object — globular vs. open cluster, spiral vs. elliptical vs.
+unclassified galaxy — so the user can eliminate them by known type rather than by fine visual
+detail; nebulae have no such restriction. All four objects shown must have a real image.
 
-Displays an object name and four possible object types.
+### 5.10.3 Catalogue number ↔ name
+
+Asks "What is the name of DSO_CATALOGUE_NUMBER?" or "What is the catalogue number of OBJECT_NAME?"
+with four text answer options (only an object's first listed name is used). This question type is
+only asked about objects that actually have a real name — otherwise the "name" question would be
+unanswerable. When asking for the name, all four options are real names too (never a distractor
+falling back to its own catalogue number, which would be trivially distinguishable from the
+correct answer); if too few other named objects are available, the question falls back to asking
+for the catalogue number instead.
 
 ## 5.11 Find planet quiz (planned)
 

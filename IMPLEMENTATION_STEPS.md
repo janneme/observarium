@@ -1616,6 +1616,14 @@ Implementation notes:
   `localStorage` and restored when reopening quiz setup.
 - Back/close behavior saves quiz state and returns to previous app screen via
   the quiz `close` event.
+- **Launch shortcuts:** `q` followed within 600ms by `m`/`s`/`c`/`d` opens
+  Moon/Star/Constellation/Deep Sky Quiz directly, bypassing the menu. Two-key
+  chord (armed by `q`, consumed by the next key) implemented in
+  `MainScreen.svelte`'s `handleKey` (`armQuizChord`/`disarmQuizChord`) rather
+  than a single-letter shortcut, since `m`/`s`/`c`/`d` are already bound to
+  unrelated single-key toggles (menu, solar system, constellation lines,
+  DSO). Hinted in the menu item labels (`MenuPanel.svelte`) as "(qm)" etc.,
+  matching the existing "(t)"/"(r)"-style shortcut-hint convention.
 
 ---
 
@@ -1741,18 +1749,62 @@ Implementation notes:
 
 ---
 
-### Step 38: Deep Sky Quiz
+### Step 38: Deep Sky Quiz ✅
 
-**README refs:** §5.9, §5.9.1, §5.9.2, §5.9.3  
-**Deliverable:** Multi-type DSO quiz combining Finder View, image and type
-question rounds.
+**README refs:** §5.10, §5.10.1, §5.10.2, §5.10.3  
+**Deliverable:** Multi-type DSO quiz combining object-position, recognize-by-image, and
+catalogue-number/name question rounds. Design finalized in `deep_sky_quiz.md` (repo root),
+which superseded an earlier "Finder View + Image + Object types" design.
 
 Technical notes:
 
-- Randomly interleave the three question types within a session.
-- Image questions: images must already be in IndexedDB (loaded in Step 17).
-  Display as `<img src={objectURLFromBlob}>`.
-- Only objects that have images are eligible for image-type questions.
+- Each generated question is a fixed (object, question-type) pair, decided once when the
+  question set is sampled — mastery/progress is tracked per pair, not per object.
+- Fixed 40° FOV for the position question, unlike Star/Constellation Quiz's difficulty-varying
+  FOV.
+- Easy difficulty's object pool is Messier-only (no NGC) — the 30 brightest Messier objects,
+  rather than the 30 brightest objects overall. Medium/Hard are unaffected (all Messier + top
+  30/200 brightest non-Messier NGC).
+- Image questions: images must already be in IndexedDB (loaded in Step 17), accessed via
+  `getObjectImage(objectId)`. All four tiles (target + 3 distractors) need a real image, not just
+  the quizzed object.
+- Only objects with images are eligible for image-type questions; only offered at all if the
+  eligible pool has at least 4 image-having candidates.
+- Catalogue-number↔name questions are only assigned to objects that actually have a real proper
+  name — otherwise "What is the catalogue number of <its own catalogue number>?" would be a
+  nonsense, self-referential question. When asking for the name (rather than the catalogue
+  number), all distractor options must also be real names, falling back to the
+  catalogue-number direction if fewer than 3 other named objects exist in the pool — otherwise a
+  distractor silently falling back to its own catalogue number would be trivially distinguishable
+  from the correct (real) name.
+
+Implementation notes:
+
+- Pure pool/distractor logic in `client/src/lib/deepSkyQuizPool.js` (`buildEligiblePool`,
+  `pickPositionDistractors`, `pickImageDistractors`, `pickNameDistractors`, `subtypeBucket`),
+  unit-tested in `client/test/lib/deepSkyQuizPool.test.js` — mirrors the `moonQuizPools.js` split
+  of pure logic out of the Svelte screen.
+- Implemented in `client/src/screens/DeepSkyQuizScreen.svelte` and wired from menu in
+  `MainScreen.svelte` via the `deepskyquiz` event (replacing the `DsoQuizIcon` stub button's
+  no-op `stub()` handler in `MenuPanel.svelte`).
+- Uses `quizFramework.js`'s generic pool/mastery functions unchanged — composite ids like
+  `dso_M031::position` work with no framework changes, unlike Constellation/Moon Quiz which each
+  needed their own scoring copy.
+- `firstDisplayName`/`preferredCatalogLabel` (the "first name" / "Messier number preferred"
+  rules) were exported from `search.js` (previously private) and reused here rather than
+  duplicated.
+- Subtype buckets for the image-question distractor exclusion: `spiral galaxy` /
+  `elliptical galaxy` / `galaxy` (bare/unclassified — its own bucket, since the data has no
+  distinct "irregular" subtype) / `globular cluster` / `open cluster`; all nebula `dsoType`s share
+  one `nebula` bucket that's exempt from the exclusion check.
+- Feedback icons: position and catalogue-number↔name questions (button-based answers) use
+  `ThumbUpIcon`/`ThumbDownIcon`, matching Star/Constellation/Moon Quiz. Image questions use
+  `TickIcon`/`CloseIcon` overlays on the tapped tile instead, since thumbs read oddly stamped
+  directly on a photo.
+- Catalogue-number↔name questions render inside the same bordered square footprint as the
+  position sky-view / image matrix (no separate blank placeholder box), with the question text
+  itself shown large and centred inside it — keeps the answer buttons at a consistent vertical
+  position across all three question types without an empty-looking gap.
 
 ---
 

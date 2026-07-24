@@ -289,7 +289,7 @@ export function catEntries(obj) {
   return cats
 }
 
-function firstDisplayName(name) {
+export function firstDisplayName(name) {
   const raw = String(name || '').trim()
   if (!raw) return ''
   const parts = raw
@@ -299,7 +299,7 @@ function firstDisplayName(name) {
   return parts[0] || raw
 }
 
-function preferredCatalogLabel(obj) {
+export function preferredCatalogLabel(obj) {
   if (obj.m != null) return `M ${obj.m}`
   if (obj.ngc != null) return `NGC ${obj.ngc}`
   if (obj.ic != null) return `IC ${obj.ic}`
