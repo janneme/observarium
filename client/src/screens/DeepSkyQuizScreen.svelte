@@ -9,13 +9,14 @@
   import ThumbUpIcon from '../icons/ThumbUpIcon.svelte'
   import ThumbDownIcon from '../icons/ThumbDownIcon.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
-  import { getObjectsInArea, getObjectImage, getSearchIndex } from '../lib/db.js'
+  import { getMeta, getObjectsInArea, getObjectImage, getSearchIndex } from '../lib/db.js'
   import { firstDisplayName, preferredCatalogLabel } from '../lib/search.js'
   import {
     buildEligiblePool,
     pickPositionDistractors,
     pickImageDistractors,
     pickNameDistractors,
+    subtypeBucket,
     QUESTION_COUNTS,
   } from '../lib/deepSkyQuizPool.js'
   import {
@@ -38,7 +39,7 @@
   const QUIZ_TYPE = 'deepsky'
   const QUIZ_SETTINGS_KEY = 'observarium.deepSkyQuiz.settings'
   // Fixed across all difficulties (unlike Star/Constellation Quiz) — see deep_sky_quiz.md.
-  const DEEP_SKY_QUIZ_FOV_DEG = 40
+  const DEEP_SKY_QUIZ_FOV_DEG = 70
   // Below this angular separation from the target, a candidate distractor is
   // too easily confused with it in the rendered FOV (e.g. M81/M82, ~0.6deg
   // apart) to be a fair "position" question distractor.
@@ -80,6 +81,8 @@
   let qDec0 = 0
   let qObjects = []
   let imageUrls = new Map() // objectId -> blob URL, for the current question's tiles
+  let conNameByAbbr = new Map()
+  let imageFeedback = null // { correct, cat, name, dsoType, constellation } for the image question type
 
   function parseComposite(compositeId) {
     const idx = compositeId.lastIndexOf('::')
@@ -190,6 +193,23 @@
     return !!firstDisplayName(dsosById.get(objId)?.name)
   }
 
+  function constellationFullName(dso) {
+    const abbr = dso?.constellation
+    return (abbr && conNameByAbbr.get(abbr)) || abbr || 'unknown constellation'
+  }
+
+  function buildImageFeedback(objId, correct) {
+    const dso = dsosById.get(objId)
+    if (!dso) return null
+    return {
+      correct,
+      cat: catalogLabel(dso),
+      name: firstDisplayName(dso.name),
+      dsoType: dso.dsoType || 'object',
+      constellation: constellationFullName(dso),
+    }
+  }
+
   function optionLabel(objId) {
     const dso = dsosById.get(objId)
     if (currentType === 'position') return catalogLabel(dso)
@@ -232,10 +252,26 @@
       options = [objId, ...distractors].sort(() => Math.random() - 0.5)
     } else if (qType === 'image') {
       let distractors = pickImageDistractors(objId, base, dsosById, dsoImageIds, 3)
+      console.log(
+        '@@ image question target',
+        objId,
+        subtypeBucket(target?.dsoType),
+        'bucket-matched distractors',
+        distractors.map((id) => `${id}(${subtypeBucket(dsosById.get(id)?.dsoType)})`),
+      )
       if (distractors.length < 3) {
         const padding = [...dsoImageIds].filter((id) => id !== objId && !distractors.includes(id) && dsosById.has(id))
-        distractors = [...distractors, ...sampleIds(padding, 3 - distractors.length)]
+        const added = sampleIds(padding, 3 - distractors.length)
+        console.log(
+          '@@ image question PADDING FALLBACK (no subtype filter) added',
+          added.map((id) => `${id}(${subtypeBucket(dsosById.get(id)?.dsoType)})`),
+        )
+        distractors = [...distractors, ...added]
       }
+      console.log(
+        '@@ image question FINAL options',
+        [objId, ...distractors].map((id) => `${id}(${subtypeBucket(dsosById.get(id)?.dsoType)})`),
+      )
       options = [objId, ...distractors].sort(() => Math.random() - 0.5)
       await loadImageTiles(options)
     } else {
@@ -264,6 +300,7 @@
     firstTapMade = false
     wrongTapped = new Set()
     feedback = ''
+    imageFeedback = null
     await loadQuestionContent(objId, qType)
   }
 
@@ -331,6 +368,7 @@
     if (currentType === 'position') revealLines = true
     const correct = optionId === currentObjId
     scoreAnswer(correct)
+    if (currentType === 'image') imageFeedback = buildImageFeedback(optionId, correct)
     if (correct) {
       resolved = true
     } else {
@@ -370,9 +408,16 @@
     ;(async () => {
       loadQuizSettings()
       settingsLoaded = true
-      const index = await getSearchIndex()
+      const [index, constellations] = await Promise.all([getSearchIndex(), getMeta('constellations')])
       allDsos = index.filter((x) => x.type === 'dso' && Array.isArray(x.pos))
       dsosById = new Map(allDsos.map((d) => [d.id, d]))
+      if (constellations && typeof constellations === 'object') {
+        const names = new Map()
+        for (const [abbr, con] of Object.entries(constellations)) {
+          if (con?.name) names.set(abbr, con.name)
+        }
+        conNameByAbbr = names
+      }
       const imageChecks = await Promise.all(
         allDsos.map(async (d) => ((await getObjectImage(d.id))?.blob ? d.id : null)),
       )
@@ -388,6 +433,21 @@
 </script>
 
 <div class="overlay" on:pointerdown|stopPropagation>
+  <svg style="display:none" aria-hidden="true">
+    <defs>
+      <!-- Same red-scale conversion as ObjectDetails.svelte's "About object" image, for nightly mode. -->
+      <filter id="deep-sky-quiz-nightly-red-scale" color-interpolation-filters="sRGB">
+        <feColorMatrix
+          type="matrix"
+          values="0.2126 0.7152 0.0722 0 0
+                  0      0      0      0 0
+                  0      0      0      0 0
+                  0      0      0      1 0"
+        />
+      </filter>
+    </defs>
+  </svg>
+
   <div class="header">
     <button class="back-btn" type="button" on:click={handleBack} aria-label="Back">
       <BackIcon size="1.2rem" aria-hidden="true" />
@@ -505,13 +565,24 @@
                 <img src={imageUrls.get(oid)} alt="" />
               {/if}
               {#if resolved && isCorrect}
-                <span class="tile-overlay correct"><TickIcon size="2rem" aria-hidden="true" /></span>
+                <span class="tile-overlay correct"
+                  ><span class="tile-overlay-badge"><TickIcon size="2.6rem" aria-hidden="true" /></span></span
+                >
               {:else if isWrongTapped}
-                <span class="tile-overlay wrong"><CloseIcon size="2rem" aria-hidden="true" /></span>
+                <span class="tile-overlay wrong"
+                  ><span class="tile-overlay-badge"><CloseIcon size="2.6rem" aria-hidden="true" /></span></span
+                >
               {/if}
             </button>
           {/each}
         </div>
+        {#if imageFeedback}
+          <p class="image-feedback" class:correct={imageFeedback.correct} class:wrong={!imageFeedback.correct}>
+            {imageFeedback.correct ? 'Yes' : 'No'}, this is <strong>{imageFeedback.cat}</strong>{imageFeedback.name
+              ? ` (${imageFeedback.name})`
+              : ''}, {imageFeedback.dsoType} in the constellation <strong>{imageFeedback.constellation}</strong>
+          </p>
+        {/if}
       {:else}
         <div
           class="name-box"
@@ -688,6 +759,15 @@
     filter: brightness(0.35);
   }
 
+  :global([data-theme='nightly']) .image-tile img {
+    filter: url(#deep-sky-quiz-nightly-red-scale);
+  }
+
+  :global([data-theme='nightly']) .image-tile.wrong img,
+  :global([data-theme='nightly']) .image-tile.skipped img {
+    filter: url(#deep-sky-quiz-nightly-red-scale) brightness(0.35);
+  }
+
   .tile-overlay {
     position: absolute;
     inset: 0;
@@ -695,6 +775,17 @@
     align-items: center;
     justify-content: center;
     color: #fff;
+  }
+
+  .tile-overlay-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.4rem;
+    height: 4.4rem;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.65);
+    box-shadow: 0 0 0 2px currentColor;
   }
 
   .tile-overlay.correct {
@@ -707,6 +798,10 @@
 
   .tile-overlay.wrong {
     color: rgba(255, 90, 90, 1);
+  }
+
+  :global([data-theme='nightly']) .tile-overlay.wrong {
+    color: #cc0000;
   }
 
   .answers {
@@ -771,6 +866,30 @@
 
   .msg.error {
     color: rgba(200, 0, 0, 0.9);
+  }
+
+  .image-feedback {
+    margin: 0;
+    font-size: 1.08rem;
+    text-align: center;
+    max-width: 520px;
+    align-self: center;
+  }
+
+  .image-feedback.correct {
+    color: rgba(170, 190, 255, 1);
+  }
+
+  :global([data-theme='nightly']) .image-feedback.correct {
+    color: #ff0044;
+  }
+
+  .image-feedback.wrong {
+    color: rgba(255, 90, 90, 1);
+  }
+
+  :global([data-theme='nightly']) .image-feedback.wrong {
+    color: #cc0000;
   }
 
   .done {

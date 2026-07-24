@@ -1760,7 +1760,7 @@ Technical notes:
 
 - Each generated question is a fixed (object, question-type) pair, decided once when the
   question set is sampled — mastery/progress is tracked per pair, not per object.
-- Fixed 40° FOV for the position question, unlike Star/Constellation Quiz's difficulty-varying
+- Fixed 70° FOV for the position question, unlike Star/Constellation Quiz's difficulty-varying
   FOV.
 - Easy difficulty's object pool is Messier-only (no NGC) — the 30 brightest Messier objects,
   rather than the 30 brightest objects overall. Medium/Hard are unaffected (all Messier + top
@@ -1800,7 +1800,18 @@ Implementation notes:
 - Feedback icons: position and catalogue-number↔name questions (button-based answers) use
   `ThumbUpIcon`/`ThumbDownIcon`, matching Star/Constellation/Moon Quiz. Image questions use
   `TickIcon`/`CloseIcon` overlays on the tapped tile instead, since thumbs read oddly stamped
-  directly on a photo.
+  directly on a photo — each icon sits in a solid circular badge (not just a bare glyph) so it
+  stays visible against any image content, at 2.6rem (bumped up from an initial 2rem that was
+  easy to overlook, e.g. against a busy globular-cluster photo).
+- Image-question tiles get the same nightly-mode red-scale treatment as the "About object"
+  screen's image: an identical `feColorMatrix` SVG filter (luminance → red channel only),
+  duplicated under a screen-local id (`deep-sky-quiz-nightly-red-scale`) rather than shared with
+  `ObjectDetails.svelte`, to avoid any DOM id collision if both screens were ever mounted at once.
+- Every tap on an image-question tile (correct or incorrect) shows a text line below the matrix
+  identifying the tapped object: catalogue label, first name if any, `dsoType`, and the
+  constellation's full name. Constellation abbreviation → full name is resolved via
+  `getMeta('constellations')`, fetched once in `onMount` — the same map-building pattern
+  `StarQuizScreen.svelte` already uses for its own constellation labels.
 - Catalogue-number↔name questions render inside the same bordered square footprint as the
   position sky-view / image matrix (no separate blank placeholder box), with the question text
   itself shown large and centred inside it — keeps the answer buttons at a consistent vertical

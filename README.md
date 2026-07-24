@@ -569,7 +569,7 @@ name.
 Trains the observer to know where to find DSO objects identified by a catalogue number, the
 relation between an object's name and its catalogue number, and the type of object a catalogue
 number identifies. Like the Star Quiz and Constellation Quiz, the user chooses a Global or Local
-scope; unlike those two, the field of view used to render a question is fixed (40°) across all
+scope; unlike those two, the field of view used to render a question is fixed (70°) across all
 difficulty levels rather than varying by difficulty.
 
 Difficulty affects the number of questions the user must pass (15/30/50 for Easy/Medium/Hard) and
@@ -588,7 +588,7 @@ re-encountered). The quiz randomly mixes three question types:
 
 ### 5.10.1 Object position
 
-A square sky view (fixed 40° FOV, no swipe/pan) marks a DSO's position without indicating its
+A square sky view (fixed 70° FOV, no swipe/pan) marks a DSO's position without indicating its
 type. Below it are four catalogue-number options (Messier number preferred over NGC when an
 object has both). For Easy/Medium, constellation lines are rendered from the start; for Hard, only
 after answering. Distractors never include an object close enough to the quizzed one to be
@@ -601,6 +601,10 @@ the matching image directly (no separate answer buttons). Distractors are restri
 different subtype than the quizzed object — globular vs. open cluster, spiral vs. elliptical vs.
 unclassified galaxy — so the user can eliminate them by known type rather than by fine visual
 detail; nebulae have no such restriction. All four objects shown must have a real image.
+
+Every tap — correct or incorrect — shows a message below the matrix identifying the tapped
+object: "Yes/No, this is CATALOGUE_NUMBER (NAME), OBJECT_TYPE in the constellation
+CONSTELLATION_NAME" (the "(NAME)" part is omitted for objects without a proper name).
 
 ### 5.10.3 Catalogue number ↔ name
 

@@ -2,13 +2,23 @@
 // against each other on one comparable scale. See lists.md §3.
 //
 // Object shapes (see db.js/datasync.js ingestion):
-// - star: { type: 'star', mag: number|[minMag,maxMag], ... }
+// - star: { type: 'star', mag: number|[minMag,maxMag], dbl?: 'p'|'a'|'m'|Array<{pairs}>, pos, ... }
 // - dso:  { type: 'dso', mag: number|[mag,...], size: [majorArcmin, minorArcmin], ... }
 // - double star: { type: 'double_star', pairs: [{ mag: [mag1, mag2], sep: number|[min,max] }], ... }
-//   (pairs[0] is the primary/brightest pair — systems are sorted brightest-first at ingestion)
+//
+// A star that is the primary component of a cataloged double star carries a
+// truthy `dbl` flag (same convention as ObjectDetails.svelte/TopBar.svelte)
+// but usually does NOT embed the pair's separation/companion magnitude
+// directly — that lives on a separate `double_star` record found by
+// position via db.js's getDoubleStarNear(). `dsById`, when provided below,
+// supplies that pre-resolved record per star object id so this module can
+// stay synchronous/pure while still scoring split difficulty correctly
+// instead of silently falling back to the star's own point-source
+// magnitude (which is what a list of double stars added by common name —
+// e.g. "Albireo", "Algieba" — was doing: those searches resolve to the
+// plain star entry, not the double_star WDS record, since double_star
+// records don't carry proper names to search against).
 
-// Double-star index tuning constants — rough starting values, not yet
-// empirically validated against known-difficulty pairs.
 const DOUBLE_STAR_K1 = 0.3 // weight of magnitude difference between components
 const DOUBLE_STAR_K2 = 0.15 // weight of the primary's own magnitude
 
@@ -34,8 +44,18 @@ export function dsoDifficulty(obj) {
   return (Number.isFinite(mag) ? mag : 0) + 2.5 * Math.log10(major * minor)
 }
 
-export function doubleStarDifficulty(obj) {
-  const pair = Array.isArray(obj?.pairs) ? obj.pairs[0] : null
+// Resolves the list of WDS pairs for a double star's primary, whichever form
+// it's carried in — mirrors ObjectDetails.svelte's dblPairs().
+export function dblPairs(obj, ds = null) {
+  if (obj?.type === 'double_star') return obj.pairs || []
+  if (Array.isArray(obj?.dbl)) return obj.dbl.flatMap((entry) => entry.pairs || [])
+  if (obj?.dbl && ds) return ds.pairs || []
+  return []
+}
+
+export function doubleStarDifficulty(obj, ds = null) {
+  const pairs = dblPairs(obj, ds)
+  const pair = pairs.find((p) => p.comp === 'AB') || pairs[0] || null
   const separation = Math.max(scalarSep(pair?.sep) || 0.01, 0.01)
   const mags = Array.isArray(pair?.mag) ? pair.mag : []
   const primaryMag = Number.isFinite(Number(mags[0])) ? Number(mags[0]) : 0
@@ -49,17 +69,19 @@ export function starDifficulty(obj) {
   return Number.isFinite(mag) ? mag : 0
 }
 
-// Category an object falls into for difficulty purposes.
+// Category an object falls into for difficulty purposes. A star that's the
+// primary of a cataloged double star (obj.dbl truthy) is scored as a double
+// star, not by its own point-source magnitude.
 export function difficultyCategory(obj) {
   if (obj?.type === 'dso') return 'dso'
-  if (obj?.type === 'double_star') return 'doubleStar'
+  if (obj?.type === 'double_star' || (obj?.type === 'star' && !!obj?.dbl)) return 'doubleStar'
   return 'star'
 }
 
-export function rawDifficulty(obj) {
+export function rawDifficulty(obj, ds = null) {
   const category = difficultyCategory(obj)
   if (category === 'dso') return dsoDifficulty(obj)
-  if (category === 'doubleStar') return doubleStarDifficulty(obj)
+  if (category === 'doubleStar') return doubleStarDifficulty(obj, ds)
   return starDifficulty(obj)
 }
 
@@ -76,8 +98,12 @@ export function percentileRank(values) {
 
 // Sorts a mixed list of objects (stars, double stars, DSOs) easiest-first by
 // normalizing each object's raw difficulty index to a percentile within its
-// own category, then ordering by that normalized value.
-export function computeListDifficultyOrder(objects) {
+// own category, then ordering by that normalized value. `dsById`, if given,
+// maps a double-star-primary star's object id to its resolved double_star
+// record (see getDoubleStarNear in db.js) — pass it so double stars added to
+// the list under their star entry are scored by split difficulty rather
+// than raw point-source magnitude.
+export function computeListDifficultyOrder(objects, dsById = null) {
   const byCategory = new Map()
   for (const obj of objects) {
     const category = difficultyCategory(obj)
@@ -87,7 +113,7 @@ export function computeListDifficultyOrder(objects) {
 
   const normalizedById = new Map()
   for (const items of byCategory.values()) {
-    const raws = items.map(rawDifficulty)
+    const raws = items.map((obj) => rawDifficulty(obj, dsById?.get(obj.id)))
     const percentiles = percentileRank(raws)
     items.forEach((obj, i) => normalizedById.set(obj.id, percentiles[i]))
   }

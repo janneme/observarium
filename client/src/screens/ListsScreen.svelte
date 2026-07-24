@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { getObjectsByIds } from '../lib/db.js'
+  import { getObjectsByIds, getDoubleStarNear } from '../lib/db.js'
   import {
     getAllLists,
     saveList,
@@ -42,6 +42,10 @@
 
   let lists = []
   let objectById = new Map()
+  // Star objects that are a cataloged double star's primary (obj.dbl truthy,
+  // not already carrying pairs inline) need their double_star record looked
+  // up by position for difficulty scoring — see listDifficulty.js.
+  let linkedDsById = new Map()
   let expandedListIds = new Set()
   let loading = true
   let errorMsg = ''
@@ -145,6 +149,17 @@
     for (const list of lists_) for (const entry of list.objects || []) allIds.add(entry.id)
     const found = await getObjectsByIds([...allIds])
     objectById = found
+
+    // Double-star primaries whose pairs aren't embedded inline need a
+    // position lookup to find their double_star record (see
+    // listDifficulty.js's dblPairs/doubleStarDifficulty).
+    const needsLookup = [...found.values()].filter(
+      (obj) => obj.type === 'star' && obj.dbl && !Array.isArray(obj.dbl) && Array.isArray(obj.pos),
+    )
+    const dsEntries = await Promise.all(
+      needsLookup.map(async (obj) => [obj.id, await getDoubleStarNear(obj.pos[0], obj.pos[1])]),
+    )
+    linkedDsById = new Map(dsEntries.filter(([, ds]) => ds))
   }
 
   async function loadData() {
@@ -297,7 +312,10 @@
     if (list.sortType === 'difficulty') {
       const withObj = entries.map((e) => ({ entry: e, obj: objectById.get(e.id) })).filter((x) => x.obj)
       const withoutObj = entries.filter((e) => !objectById.get(e.id))
-      const ordered = computeListDifficultyOrder(withObj.map((x) => x.obj))
+      const ordered = computeListDifficultyOrder(
+        withObj.map((x) => x.obj),
+        linkedDsById,
+      )
       const entryByObjId = new Map(withObj.map((x) => [x.obj.id, x.entry]))
       return [...ordered.map((obj) => entryByObjId.get(obj.id)), ...withoutObj]
     }
