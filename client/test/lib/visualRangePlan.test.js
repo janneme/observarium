@@ -8,9 +8,7 @@ import { generatePlan } from '../../src/lib/visualRangePlan.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const OUT_DIR = path.resolve(__dirname, '../../../data_prep/output')
 
-const COLOR_PALETTE = [
-  '#92b5ff', '#b2c5ff', '#cad8ff', '#f8f7ff', '#fff4e8', '#ffd2a1', '#ff8f6b', '#ffffff',
-]
+const COLOR_PALETTE = ['#92b5ff', '#b2c5ff', '#cad8ff', '#f8f7ff', '#fff4e8', '#ffd2a1', '#ff8f6b', '#ffffff']
 
 const T1_MAG_LIMIT = 9.0
 
@@ -101,12 +99,7 @@ function parseT1Csv(text) {
     const name = cols[13] ? cols[13].trim() || undefined : undefined
     const constellation = cols[16] ? cols[16].trim() || undefined : undefined
     const bay = cols[11] ? cols[11].trim() || undefined : undefined
-    const id =
-      hip && !isNaN(hip)
-        ? `star_HIP${hip}`
-        : hd && !isNaN(hd)
-          ? `star_HD${hd}`
-          : `star_t1_${ra}_${dec}`
+    const id = hip && !isNaN(hip) ? `star_HIP${hip}` : hd && !isNaN(hd) ? `star_HD${hd}` : `star_t1_${ra}_${dec}`
     const star = { id, type: 'star', pos: [ra, dec], mag, clr }
     if (hip != null && !isNaN(hip)) star.hip = hip
     if (hd != null && !isNaN(hd)) star.hd = hd
@@ -135,12 +128,7 @@ function parseT2Csv(text) {
     const clr = COLOR_PALETTE[parseInt(cols[4], 10)] ?? COLOR_PALETTE[7]
     const hip = cols[5] ? parseInt(cols[5], 10) : undefined
     const hd = cols[6] ? parseInt(cols[6], 10) : undefined
-    const id =
-      hip && !isNaN(hip)
-        ? `star_HIP${hip}`
-        : hd && !isNaN(hd)
-          ? `star_HD${hd}`
-          : `star_t2_${ra}_${dec}`
+    const id = hip && !isNaN(hip) ? `star_HIP${hip}` : hd && !isNaN(hd) ? `star_HD${hd}` : `star_t2_${ra}_${dec}`
     const star = { id, type: 'star', pos: [ra, dec], mag, clr }
     if (hip != null && !isNaN(hip)) star.hip = hip
     if (hd != null && !isNaN(hd)) star.hd = hd
@@ -202,12 +190,7 @@ async function loadT2CsvFiltered(filePath, anchorPositions) {
     const clr = COLOR_PALETTE[parseInt(cols[4], 10)] ?? COLOR_PALETTE[7]
     const hip = cols[5] ? parseInt(cols[5], 10) : undefined
     const hd = cols[6] ? parseInt(cols[6], 10) : undefined
-    const id =
-      hip && !isNaN(hip)
-        ? `star_HIP${hip}`
-        : hd && !isNaN(hd)
-          ? `star_HD${hd}`
-          : `star_t2_${ra}_${dec}`
+    const id = hip && !isNaN(hip) ? `star_HIP${hip}` : hd && !isNaN(hd) ? `star_HD${hd}` : `star_t2_${ra}_${dec}`
     const star = { id, type: 'star', pos: [ra, dec], mag, clr }
     if (hip != null && !isNaN(hip)) star.hip = hip
     if (hd != null && !isNaN(hd)) star.hd = hd
@@ -239,25 +222,30 @@ const TELESCOPES = [
 
 // Dynamically pick the smallest catalog that exceeds the 0.85*N threshold for every telescope
 const _availMags = fs.existsSync(OUT_DIR)
-  ? fs.readdirSync(OUT_DIR)
-      .map((f) => { const m = f.match(/^stars_t1\.m(\d+)\.csv$/); return m ? parseInt(m[1], 10) : null })
+  ? fs
+      .readdirSync(OUT_DIR)
+      .map((f) => {
+        const m = f.match(/^stars_t1\.m(\d+)\.csv$/)
+        return m ? parseInt(m[1], 10) : null
+      })
       .filter((n) => n !== null)
       .sort((a, b) => a - b)
   : []
 const _maxNeeded = Math.max(...TELESCOPES.map((tel) => 0.85 * (2.1 + 5 * Math.log10(tel.diameter))))
-const bestMag = _availMags.find((m) => m > _maxNeeded) ?? (_availMags.length > 0 ? _availMags[_availMags.length - 1] : null)
+const bestMag =
+  _availMags.find((m) => m > _maxNeeded) ?? (_availMags.length > 0 ? _availMags[_availMags.length - 1] : null)
 
 const T1_PATH = bestMag ? path.join(OUT_DIR, `stars_t1.m${bestMag}.csv`) : null
 const T2_PATH = bestMag ? path.join(OUT_DIR, `stars_t2.m${bestMag}.csv`) : null
 const hasT1 = !!T1_PATH
 // Synchronous check — used in shouldSkip which is evaluated at test-collection time, before beforeAll
-const maxCatalogMag = (T2_PATH && fs.existsSync(T2_PATH)) ? bestMag : T1_MAG_LIMIT
+const maxCatalogMag = T2_PATH && fs.existsSync(T2_PATH) ? bestMag : T1_MAG_LIMIT
 
 // --------------------------------------------------------------------------
 // IDB simulator state (populated in beforeAll)
 // --------------------------------------------------------------------------
 
-let _t1Cache = []          // sorted by mag ascending (as-is from CSV)
+let _t1Cache = [] // sorted by mag ascending (as-is from CSV)
 let _t2ZoneMap = new Map() // Map<zoneId, star[]> sorted by mag ascending
 let dsos = []
 
@@ -296,24 +284,21 @@ function simulateGetObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_limit = 
 // --------------------------------------------------------------------------
 
 const START_STARS = [
-  { name: 'Vega',       hip: 91262 },
-  { name: 'Mizar',      hip: 65378 },
-  { name: 'Arcturus',   hip: 69673 },
-  { name: 'Mirach',     hip: 5447  },
+  { name: 'Vega', hip: 91262 },
+  { name: 'Mizar', hip: 65378 },
+  { name: 'Arcturus', hip: 69673 },
+  { name: 'Mirach', hip: 5447 },
   { name: 'Betelgeuse', hip: 27989 },
+  { name: 'Polaris', hip: 11767 }, // near-pole edge case (regression test for RA-search-span widening)
 ]
 
-// Guide-path search dead-ends for these real sky positions (too few mutually-visible
-// bright guide-star pairs) — not fixable by tuning MAX_INITIAL_STEPS/MAX_MOVE_STEPS or
-// MOVE_STARS_MIN_MAG_DIFF alone. Needs an algorithm improvement in findGuidePath;
-// see the TODO in README.md §5.21 Visual Range.
-const KNOWN_FAILING_COMBOS = new Set([
-  '6" f/5|Mizar',
-  '6" f/5|Mirach',
-  '12" f/4|Mizar',
-  '12" f/4|Arcturus',
-  '12" f/4|Betelgeuse',
-])
+// Previously dead-ended (too few guide stars within initialMag - MOVE_STARS_MIN_MAG_DIFF
+// of the start star itself, confirmed via instrumentation) until guideMagCeiling()
+// (visualRangePlan.js) added a floor of initialMag + INITIAL_GUIDE_MAG_OFFSET,
+// which keeps early hops from being stricter than the plan's own starting
+// brightness — all 5 combos below now pass. Kept as an empty set (rather than
+// removed outright) so any future regression has a place to land.
+const KNOWN_FAILING_COMBOS = new Set([])
 
 beforeAll(async () => {
   if (!hasT1) return
@@ -323,9 +308,7 @@ beforeAll(async () => {
 
   if (T2_PATH && fs.existsSync(T2_PATH)) {
     // Find anchor positions (test star coords) from T1 to drive the spatial filter.
-    const anchorPositions = START_STARS
-      .map((s) => _t1Cache.find((t) => t.hip === s.hip)?.pos)
-      .filter(Boolean)
+    const anchorPositions = START_STARS.map((s) => _t1Cache.find((t) => t.hip === s.hip)?.pos).filter(Boolean)
     // Stream T2 line by line — loading the full file (400+ MB) would OOM.
     for (const star of await loadT2CsvFiltered(T2_PATH, anchorPositions)) {
       const z = _zoneOf(star.pos[0], star.pos[1])
@@ -354,68 +337,65 @@ describe('generatePlan', () => {
     describe(`telescope ${tel.label}`, () => {
       for (const star of START_STARS) {
         const shouldSkip =
-          !hasT1 ||
-          maxCatalogMag <= 0.85 * theoreticalMax ||
-          KNOWN_FAILING_COMBOS.has(`${tel.label}|${star.name}`)
+          !hasT1 || maxCatalogMag <= 0.85 * theoreticalMax || KNOWN_FAILING_COMBOS.has(`${tel.label}|${star.name}`)
 
-        test.skipIf(shouldSkip)(
-          `start star ${star.name}: plan found`,
-          async () => {
-            const startStar = _t1Cache.find((s) => s.hip === star.hip)
-            if (!startStar) return // star absent at this mag limit
+        test.skipIf(shouldSkip)(`start star ${star.name}: plan found`, async () => {
+          const startStar = _t1Cache.find((s) => s.hip === star.hip)
+          if (!startStar) return // star absent at this mag limit
 
-            let fetchMs = 0
-            function timedSimulator(ra_min, ra_max, dec_min, dec_max, mag_limit) {
-              const tf = Date.now()
-              const r = simulateGetObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_limit)
-              fetchMs += Date.now() - tf
-              return r
-            }
-            const t0 = Date.now()
-            const result = await generatePlan({
-              getObjectsInArea: timedSimulator,
-              dsos,
-              startStar,
-              telescope: { focalLength: tel.focalLength, diameter: tel.diameter },
-              eyepiece: tel.eyepiece,
-              initialMag,
+          let fetchMs = 0
+          function timedSimulator(ra_min, ra_max, dec_min, dec_max, mag_limit) {
+            const tf = Date.now()
+            const r = simulateGetObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_limit)
+            fetchMs += Date.now() - tf
+            return r
+          }
+          const t0 = Date.now()
+          const result = await generatePlan({
+            getObjectsInArea: timedSimulator,
+            dsos,
+            startStar,
+            telescope: { focalLength: tel.focalLength, diameter: tel.diameter },
+            eyepiece: tel.eyepiece,
+            initialMag,
+          })
+          const totalMs = Date.now() - t0
+          const elapsed = (totalMs / 1000).toFixed(1)
+          const planMs = totalMs - fetchMs
+
+          expect(result.ok, result.ok ? '' : `plan failed: ${result.reason}`).toBe(true)
+          expect(result.steps.length).toBeGreaterThanOrEqual(1)
+          for (const step of result.steps) {
+            expect(Array.isArray(step.centre)).toBe(true)
+            expect(step.centre).toHaveLength(2)
+            expect(Array.isArray(step.candidates)).toBe(true)
+            expect(step.candidates.length).toBeGreaterThanOrEqual(2)
+            expect(Array.isArray(step.moves)).toBe(true)
+          }
+          const totalMoves = result.steps.reduce((sum, s) => sum + s.moves.length, 0)
+          let n = 0
+          const chain = result.steps
+            .flatMap((step) => {
+              const items = []
+              for (const mv of step.moves) {
+                const fromMag = _firstMag(mv.from).toFixed(1)
+                const toLabel = mv.via
+                  ? `${mv.via.frac.toFixed(2)}·[${_firstMag(mv.via.b).toFixed(1)},${_firstMag(mv.via.c).toFixed(1)}]`
+                  : _firstMag(mv.to).toFixed(1)
+                items.push(`${++n}) mv ${mv.multiplier}x(${fromMag}, ${toLabel})`)
+              }
+              const mags = step.candidates
+                .slice(0, 2)
+                .map((c) => _firstMag(c).toFixed(1))
+                .join('/')
+              items.push(`${++n}) see ${mags}`)
+              return items
             })
-            const totalMs = Date.now() - t0
-            const elapsed = (totalMs / 1000).toFixed(1)
-            const planMs = totalMs - fetchMs
-
-            expect(result.ok, result.ok ? '' : `plan failed: ${result.reason}`).toBe(true)
-            expect(result.steps.length).toBeGreaterThanOrEqual(1)
-            for (const step of result.steps) {
-              expect(Array.isArray(step.centre)).toBe(true)
-              expect(step.centre).toHaveLength(2)
-              expect(Array.isArray(step.candidates)).toBe(true)
-              expect(step.candidates.length).toBeGreaterThanOrEqual(2)
-              expect(Array.isArray(step.moves)).toBe(true)
-            }
-            const totalMoves = result.steps.reduce((sum, s) => sum + s.moves.length, 0)
-            let n = 0
-            const chain = result.steps
-              .flatMap((step) => {
-                const items = []
-                for (const mv of step.moves) {
-                  const fromMag = _firstMag(mv.from).toFixed(1)
-                  const toMag = _firstMag(mv.to).toFixed(1)
-                  items.push(`${++n}) mv ${mv.multiplier}x(${fromMag}, ${toMag})`)
-                }
-                const mags = step.candidates
-                  .slice(0, 2)
-                  .map((c) => _firstMag(c).toFixed(1))
-                  .join('/')
-                items.push(`${++n}) see ${mags}`)
-                return items
-              })
-              .join('  ')
-            console.log(
-              `  ${star.name} (${tel.label}) [${elapsed}s, fetch:${fetchMs}ms plan:${planMs}ms]: ${result.steps.length} measurements, ${totalMoves} movements: ${chain}`,
-            )
-          },
-        )
+            .join('  ')
+          console.log(
+            `  ${star.name} (${tel.label}) [${elapsed}s, fetch:${fetchMs}ms plan:${planMs}ms]: ${result.steps.length} measurements, ${totalMoves} movements: ${chain}`,
+          )
+        })
       }
     })
   }

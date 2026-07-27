@@ -125,8 +125,12 @@
         <button
           class="grid-item"
           class:off={!$showFovCircle}
-          on:click={() => showFovCircle.update((v) => !v)}
-          aria-label="Toggle FOV circle"
+          on:click={() => {
+            showFovCircle.set(true)
+            dispatch('fovcircle')
+            close()
+          }}
+          aria-label="FOV circle"
         >
           <div class="icon-wrap">
             <FovCircleIcon size="42" />

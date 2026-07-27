@@ -28,6 +28,8 @@
   let planning = false
   let planError = ''
   let planResult = null
+  let degradedSteps = null
+  let planDegraded = false
   let showMeasure = false
   let _mounted = false
 
@@ -161,6 +163,7 @@
   async function handleBegin() {
     planning = true
     planError = ''
+    degradedSteps = null
     try {
       const tel = selectedTelescope
       const ep = selectedEyepiece
@@ -177,15 +180,26 @@
       })
       if (result.ok) {
         planResult = result
+        planDegraded = false
         showMeasure = true
       } else {
         planError = result.reason
+        degradedSteps = result.degradedSteps ?? null
       }
     } catch (err) {
       planError = err?.message || 'An error occurred while computing the plan.'
     } finally {
       planning = false
     }
+  }
+
+  // A degraded plan is geometrically valid but a step lands near a bright star
+  // that would wash out the view — offer it anyway, since the observer can
+  // usually nudge the telescope slightly to clear the glare.
+  function useDegradedAnyway() {
+    planResult = { ok: true, steps: degradedSteps }
+    planDegraded = true
+    showMeasure = true
   }
 </script>
 
@@ -197,6 +211,7 @@
     {lon}
     {time}
     plan={planResult}
+    degraded={planDegraded}
     startStar={selectedStar}
     telescope={selectedTelescope}
     eyepiece={selectedEyepiece}
@@ -270,6 +285,13 @@
 
       {#if planError}
         <p class="plan-error">{planError}</p>
+        {#if degradedSteps}
+          <p class="plan-degraded-hint">
+            A guide path was found, but it passes near a bright star that may wash out the view — you can usually clear
+            this by nudging the telescope slightly once there.
+          </p>
+          <button class="begin-btn" on:click={useDegradedAnyway}>Use this guidance anyway</button>
+        {/if}
       {:else}
         <button class="begin-btn" disabled={!canBegin} on:click={handleBegin}>
           {planning ? 'Computing…' : 'Begin'}
@@ -439,6 +461,17 @@
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
     margin: 0;
+  }
+
+  .plan-degraded-hint {
+    font-size: 0.85rem;
+    color: var(--fg);
+    opacity: 0.85;
+    background: rgba(200, 0, 0, 0.05);
+    border: 1px dashed rgba(200, 0, 0, 0.3);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin: 0.4rem 0 0;
   }
 
   .begin-btn {

@@ -1569,6 +1569,75 @@ Technical notes:
 
 ---
 
+### Step 34e: Visual Range — Guide-Path Algorithm Rewrite ✅
+
+**Deliverable:** Replaced the beam-limited BFS in `findGuidePath`
+(`client/src/lib/visualRangePlan.js`) with a depth-first search over a richer
+hop vocabulary, after real-world testing (Mizar, Betelgeuse, Polaris) showed
+the original 2-star-only, integer-multiplier BFS dead-ending in star-sparse or
+near-pole regions even when the target position itself was perfectly
+reachable — confirmed by instrumentation that these were navigation-search
+failures, not a lack of suitable measurement candidates.
+
+Technical notes:
+
+- **Hop vocabulary:** in addition to the original 2-star hop (centre on real
+  star `A`, move a multiplier toward real star `B`), added a **3-star hop**:
+  centre on `A`, move toward a point interpolated at `frac ∈ {1/3, 1/2, 2/3}`
+  between two other real guide stars `B`/`C` (`TRIPLE_FRACTIONS`). Both hop
+  types share one multiplier scheme: `1, 1.5, 2, …` (`MULTIPLIER_STEP = 0.5`)
+  while `vectorLength × multiplier ≤ fovDeg`, capped at `MAX_MULTIPLIER = 4` —
+  large extrapolations aren't realistically estimable by an observer, even
+  though the earlier BFS's `k ∈ {1,2,3}` / `≤ 2×fovDeg` scheme technically
+  allowed them. Guide-star pool enumeration is capped separately for pairs
+  vs. triples (`MAX_GUIDE_POOL_PAIRS = 40`, `MAX_GUIDE_POOL_TRIPLES = 15`,
+  cubic growth for triples) to bound worst-case cost in dense fields.
+- **Search:** `BFS_BEAM_WIDTH` replaced by depth-first backtracking with a
+  fixed `DFS_NODE_BUDGET = 400`. Candidates at each node are tiered — those
+  making monotonic progress toward the target (`MONOTONIC_PROGRESS_EPS_REL`)
+  are preferred over non-monotonic ones — rather than always taking the
+  globally-closest candidate, so a chain doesn't need to backtrack toward
+  itself within its own hops.
+- **`guideMagCeiling(M, initialMag)`:** guide stars must be brighter than
+  `M − MOVE_STARS_MIN_MAG_DIFF`, but never stricter than
+  `initialMag + INITIAL_GUIDE_MAG_OFFSET` (0.5) — without this floor, the
+  very first hop (where `M = initialMag`) was the most restrictive of the
+  whole plan, which is exactly backwards near a bright naked-eye start star
+  with few equally-bright neighbours.
+- **Phase-1 risk preference:** instead of committing to the first pair with a
+  valid guide path, evaluates up to `PHASE1_CLEAN_CANDIDATES_TO_CONSIDER = 10`
+  clean candidates and picks the one with the lowest `moveRisk` (max
+  multiplier used) — an unlucky large first jump can strand the rest of the
+  chain in an even sparser region one step later (observed with Mizar).
+- **Clean vs. degraded plans:** `checkMaxMagDiff` is now re-verified at the
+  hop's *actual* landing point (resolving multiplier overshoot), not just the
+  intended target — replacing the old `lastHopClear` approximation. A
+  geometrically valid path that only fails because a bright star washes out
+  the actual landing spot is kept as a `degradedSteps` fallback
+  (`generatePlan` returns `{ ok: false, reason, degradedSteps }`) rather than
+  discarded — `VisualRangeSetupScreen.svelte` offers it to the user as
+  "Use this guidance anyway", and `VisualRangeMeasureScreen.svelte` shows a
+  persistent hint that nudging the telescope slightly usually clears it.
+- **cos(declination) fix:** `queryInRadius`/`queryInFineRadius`'s zone
+  selection, and `generatePlan`'s initial `getObjectsInArea` bounding box, now
+  widen their RA search span by `1/cos(dec)` (`raSearchSpan`, capped near the
+  pole). Both previously used a flat RA range with no declination correction,
+  silently under-fetching/under-searching a high-declination start star's true
+  angular neighbourhood — found via Polaris (Dec +89.26°), added as a
+  permanent regression case in `client/test/lib/visualRangePlan.test.js`.
+- **`SkyCanvas.svelte` overlay additions:** a new connector-segment overlay
+  type (`segFromRa/segToRa` + `tickRa/tickDec`) draws the 3-star hop's B–C
+  reference line (same stroke weight/colour as the guide arrow, dashed to
+  stay visually distinct) with a tick at the interpolated aim point. The
+  guide arrow's multiplier label now rotates to run along the arrow's own
+  angle (flipped upright when needed) instead of sitting horizontal, so it no
+  longer crosses the stroke at steep angles.
+- **Tests:** all 5 originally-disabled combinations
+  (`client/test/lib/visualRangePlan.test.js`) now pass; `KNOWN_FAILING_COMBOS`
+  is empty. Polaris (HIP 11767) added as a 6th start star.
+
+---
+
 ## Phase 8 — Quizzes
 
 ### Step 35: Quiz framework ✅

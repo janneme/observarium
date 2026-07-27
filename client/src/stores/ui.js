@@ -20,6 +20,12 @@ function persistedWritable(key, defaultValue) {
 }
 
 export const showFovCircle = persistedWritable('showFovCircle', true)
+export const FINDER_FOV_DEG = 7.5
+export const fovCircleInstrument = persistedWritable('fovCircleInstrument', {
+  mode: 'finder', // 'finder' | 'telescope'
+  telescopeId: null,
+  eyepieceId: null,
+})
 export const showConstellationLines = persistedWritable('showConstellationLines', false)
 export const showConstellationNames = persistedWritable('showConstellationNames', false)
 export const showConstellationBoundaries = persistedWritable('showConstellationBoundaries', false)

@@ -8,6 +8,7 @@
   export let lon = 0
   export let time = new Date()
   export let plan = null
+  export let degraded = false
   export let startStar = null
   export let telescope = null
   export let eyepiece = null
@@ -127,17 +128,26 @@
 
   $: if (viewCentre && fovDeg > 0) _loadStarsForView(viewCentre, fovDeg, magLimitForView)
 
-  // A hop lands at the `to` guide star (multiplier 1 = "center on the star you
-  // can see"); for k>1 it extrapolates (k-1) more hops past it. Each move is
-  // self-contained, so only the *last* move of a step's chain determines where
-  // that step actually ends up — not an accumulation from the step's start.
+  // Shortest-path signed RA delta — keeps hops near the 0/360 seam extrapolating
+  // the right way (mirrors raDelta in visualRangePlan.js).
+  function _raDelta(ra1, ra2) {
+    let d = (((ra2 - ra1) % 360) + 360) % 360
+    if (d > 180) d -= 360
+    return d
+  }
+
+  // A hop is centered on `from` (a real star) and aims at `to` (multiplier 1 =
+  // "center on the star/point you can see"); for k>1 it extrapolates further
+  // along that same direction. Each move is self-contained, so only the *last*
+  // move of a step's chain determines where that step actually ends up — not
+  // an accumulation from the step's start.
   function _applyMoves(startPos, moves) {
     if (moves.length === 0) return startPos
     const m = moves[moves.length - 1]
     const k = m.multiplier ?? 1
-    const dRa = m.to.pos[0] - m.from.pos[0]
+    const dRa = _raDelta(m.from.pos[0], m.to.pos[0])
     const dDec = m.to.pos[1] - m.from.pos[1]
-    return [(((m.to.pos[0] + (k - 1) * dRa) % 360) + 360) % 360, m.to.pos[1] + (k - 1) * dDec]
+    return [(((m.from.pos[0] + k * dRa) % 360) + 360) % 360, m.from.pos[1] + k * dDec]
   }
 
   // Precompute the telescope's starting position for each step by applying
@@ -185,7 +195,7 @@
 
   $: guideArrows = (() => {
     if (phase === 'move' && currentMove) {
-      return [
+      const arrows = [
         {
           fromRa: currentMove.from.pos[0],
           fromDec: currentMove.from.pos[1],
@@ -194,6 +204,17 @@
           label: currentMove.multiplier > 1 ? `×${currentMove.multiplier}` : undefined,
         },
       ]
+      if (currentMove.via) {
+        arrows.push({
+          segFromRa: currentMove.via.b.pos[0],
+          segFromDec: currentMove.via.b.pos[1],
+          segToRa: currentMove.via.c.pos[0],
+          segToDec: currentMove.via.c.pos[1],
+          tickRa: currentMove.to.pos[0],
+          tickDec: currentMove.to.pos[1],
+        })
+      }
+      return arrows
     }
     if (phase === 'test' && currentCandidate) {
       return [{ markerRa: currentCandidate.pos[0], markerDec: currentCandidate.pos[1] }]
@@ -201,11 +222,25 @@
     return []
   })()
 
+  function _fracDescription(frac, bLbl, cLbl) {
+    if (Math.abs(frac - 0.5) < 1e-6) return `the midpoint between ${bLbl} and ${cLbl}`
+    if (frac < 0.5) return `about one third of the way from ${bLbl} to ${cLbl}`
+    return `about two thirds of the way from ${bLbl} to ${cLbl}`
+  }
+
   $: instructionText = (() => {
     if (phase === 'move' && currentMove) {
       const fromLbl = preferredStarLabel(currentMove.from)
-      const toLbl = preferredStarLabel(currentMove.to)
       const k = currentMove.multiplier
+      if (currentMove.via) {
+        const bLbl = preferredStarLabel(currentMove.via.b)
+        const cLbl = preferredStarLabel(currentMove.via.c)
+        const aimDesc = _fracDescription(currentMove.via.frac, bLbl, cLbl)
+        return k > 1
+          ? `Center on ${fromLbl}, then hop ×${k} the distance toward ${aimDesc}`
+          : `Center on ${fromLbl}, then move to ${aimDesc}`
+      }
+      const toLbl = preferredStarLabel(currentMove.to)
       return k > 1
         ? `Find ${fromLbl} → ${toLbl}, then hop ×${k} that distance onward`
         : `Use ${fromLbl} → ${toLbl} to reach the next field`
@@ -269,10 +304,7 @@
     step.moves.forEach((m, mi) => {
       const fromDist = _vrAngSep(startPos, m.from.pos)
       const toDist = _vrAngSep(startPos, m.to.pos)
-      const ep = [
-        startPos[0] + m.multiplier * (m.to.pos[0] - m.from.pos[0]),
-        startPos[1] + m.multiplier * (m.to.pos[1] - m.from.pos[1]),
-      ]
+      const ep = _applyMoves(startPos, [m])
       console.log(
         `[VR]   move[${mi}] from=(${_vrFmt(m.from.pos)}) fromDist=${fromDist.toFixed(3)}° inFov=${fromDist <= fovR}  to=(${_vrFmt(m.to.pos)}) toDist=${toDist.toFixed(3)}° inFov=${toDist <= fovR}  x${m.multiplier}  endpoint=(${_vrFmt(ep)})`,
       )
@@ -377,6 +409,9 @@
   </div>
 
   <div class="body">
+    {#if degraded}
+      <p class="degraded-hint">This guidance passes near a bright star — nudge the view slightly if it washes out.</p>
+    {/if}
     <div class="canvas-wrap">
       <SkyCanvas
         ra0={viewCentre[0]}
@@ -509,6 +544,19 @@
 
   :global([data-theme='nightly']) .canvas-wrap {
     border-color: #0000ff;
+  }
+
+  .degraded-hint {
+    font-size: 0.85rem;
+    color: var(--fg);
+    opacity: 0.85;
+    background: rgba(200, 0, 0, 0.05);
+    border: 1px dashed rgba(200, 0, 0, 0.3);
+    border-radius: 6px;
+    padding: 0.4rem 0.65rem;
+    margin: 0;
+    max-width: 26rem;
+    text-align: center;
   }
 
   .instruction {

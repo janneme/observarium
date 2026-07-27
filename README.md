@@ -1035,19 +1035,17 @@ A guided measurement tool that determines the actual limiting magnitude reachabl
 telescope/eyepiece at a chosen part of the sky, so the observer can judge current viewing conditions
 and what magnitude of DSO is realistically reachable. The user picks a telescope (with eyepiece), a
 start star, and an initial magnitude estimate to verify; Observarium computes a star-hopping guide
-path (arrows from star to star, as in Object Finding Paths, §5.13) that moves the telescope while
-avoiding bright stars in the field, then asks the observer to confirm visibility of progressively
-fainter candidate stars, raising the confirmed limiting magnitude one step at a time until the
-observer fails to see a candidate twice in a row.
+path that moves the telescope while avoiding bright stars in the field, then asks the observer to
+confirm visibility of progressively fainter candidate stars, raising the confirmed limiting
+magnitude one step at a time until the observer fails to see a candidate twice in a row.
 
-TODO: the guide-path planner (`client/src/lib/visualRangePlan.js`, `findGuidePath`) currently fails
-to find any plan for some real start-star/telescope combinations — e.g. Mizar, where the BFS search
-dead-ends after a single hop because the surrounding sky region lacks enough mutually-visible bright
-guide-star pairs. This isn't fixable by raising the step-count limits (`MAX_INITIAL_STEPS`/
-`MAX_MOVE_STEPS`); confirmed by experiment that increasing them has zero effect on the failures.
-Loosening `MOVE_STARS_MIN_MAG_DIFF` (the guide-star brightness margin) has partial leverage but no
-value fixes all cases without making the "guide star" requirement unrealistically weak. The
-underlying algorithm needs a real improvement (e.g. relaxing the mutual-visibility/interior-FOV
-constraints adaptively, or falling back to single-star hops) to handle sparse star fields — not just
-parameter tuning. Five combinations in `client/test/lib/visualRangePlan.test.js` are currently
-disabled pending this fix.
+Each guide-path hop is either a **2-star hop** (centre on a real star, then move a multiple of the
+distance toward a second real star) or a **3-star hop** (centre on a real star, then move toward a
+point interpolated 1/3, 1/2, or 2/3 of the way between two other real stars — drawn as an arrow to
+the interpolated aim point plus an auxiliary line connecting the two reference stars). Multipliers
+are capped (`MAX_MULTIPLIER`) so a hop never asks for a larger jump than an observer could reasonably
+estimate by eye. A depth-first search (`findGuidePath`, `client/src/lib/visualRangePlan.js`) finds
+the hop chain, preferring hops that make monotonic progress toward the target and bounded by a fixed
+node budget rather than an exhaustive search. If the only reachable position is one where a bright
+star would wash out the view, the plan is still offered to the observer as a "degraded" fallback
+(with a hint that nudging the telescope slightly usually clears it), rather than failing outright.

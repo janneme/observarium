@@ -4,11 +4,33 @@ const STEP_MAG_TOLERANCE = 0.2
 const MAX_INITIAL_STEPS = 3
 const MAX_MOVE_STEPS = 3
 const MOVE_STARS_MIN_MAG_DIFF = 1.5
+// Guide stars never have to be brighter than this relative to the plan's
+// starting magnitude — keeps early hops (near the naked-eye start star, where
+// M - MOVE_STARS_MIN_MAG_DIFF is at its strictest) from over-restricting the
+// guide-star pool.
+const INITIAL_GUIDE_MAG_OFFSET = 0.5
+// How many clean initial candidates to evaluate (rather than stopping at the
+// first) before committing to the lowest-risk one found — bounds the extra
+// DFS cost of looking beyond "first success" for a safer opening jump.
+const PHASE1_CLEAN_CANDIDATES_TO_CONSIDER = 10
 const MAX_MAG_DIFF = 6.0
 const CLOSE_NEIGHBOURHOOD_REL_RADIUS = 0.02
 const DSO_MAX_SB = 24.0
-const BFS_BEAM_WIDTH = 30
 const PLAN_SEARCH_RADIUS_FACTOR = 2.5
+
+// Guide-path DFS search
+const DFS_NODE_BUDGET = 400
+const TRIPLE_FRACTIONS = [1 / 3, 1 / 2, 2 / 3]
+const MULTIPLIER_STEP = 0.5
+// A user can't reliably eyeball/estimate a large extrapolation multiple —
+// cap how far a hop is allowed to overshoot past its aim point.
+const MAX_MULTIPLIER = 4
+const MONOTONIC_PROGRESS_EPS_REL = 0.02
+// Guide-star pool size caps for hop-candidate enumeration — pairs grow O(k^2),
+// triples grow O(k^3), so triples get a tighter cap to bound worst-case cost
+// in dense bright-star fields.
+const MAX_GUIDE_POOL_PAIRS = 40
+const MAX_GUIDE_POOL_TRIPLES = 15
 
 export const INITIAL_STAR_MAX_MAG = 4.0
 export const INITIAL_MAG_MIN = 7.0
@@ -120,10 +142,26 @@ function getStarMag(star) {
   return typeof star.mag === 'number' ? star.mag : star.mag[0]
 }
 
-function midpointRa(ra1, ra2) {
+function wrapRa(ra) {
+  return ((ra % 360) + 360) % 360
+}
+
+// Shortest-path signed RA delta from ra1 to ra2, in (-180, 180] — needed so
+// hop vectors near the 0/360 seam extrapolate the right way instead of the
+// long way around the sky.
+function raDelta(ra1, ra2) {
   let d = (((ra2 - ra1) % 360) + 360) % 360
   if (d > 180) d -= 360
-  return (((ra1 + d / 2) % 360) + 360) % 360
+  return d
+}
+
+function midpointRa(ra1, ra2) {
+  return wrapRa(ra1 + raDelta(ra1, ra2) / 2)
+}
+
+// Point a fraction `frac` of the way from ra1/dec1 to ra2/dec2.
+function fracPoint(ra1, dec1, ra2, dec2, frac) {
+  return [wrapRa(ra1 + raDelta(ra1, ra2) * frac), dec1 + (dec2 - dec1) * frac]
 }
 
 // --------------------------------------------------------------------------
@@ -153,8 +191,20 @@ function buildFineIndex(stars) {
   return buckets
 }
 
+// RA degrees needed to cover an angular radius at a given declination — near
+// the poles, a degree of RA covers much less sky than a degree of Dec, so the
+// zone search must widen in RA or it silently misses real in-radius stars
+// whose RA offset (in raw degrees) exceeds `radius` even though their true
+// angular separation doesn't.
+function raSearchSpan(dec, radius) {
+  const edgeDec = Math.min(89.9, Math.abs(dec) + radius)
+  const cosDec = Math.max(Math.cos((edgeDec * Math.PI) / 180), 0.01)
+  return radius / cosDec
+}
+
 function queryInRadius(buckets, ra, dec, radius) {
-  const zones = _zonesForArea(ra - radius, ra + radius, dec - radius, dec + radius)
+  const raSpan = raSearchSpan(dec, radius)
+  const zones = _zonesForArea(ra - raSpan, ra + raSpan, dec - radius, dec + radius)
   const seen = new Set()
   const results = []
   for (const z of zones) {
@@ -172,7 +222,8 @@ function queryInRadius(buckets, ra, dec, radius) {
 // No deduplication — safe because each star is stored in exactly one fine zone,
 // and _fineZonesForArea emits each zone ID at most once for non-wraparound boxes.
 function queryInFineRadius(fineBuckets, ra, dec, radius) {
-  const zones = _fineZonesForArea(ra - radius, ra + radius, dec - radius, dec + radius)
+  const raSpan = raSearchSpan(dec, radius)
+  const zones = _fineZonesForArea(ra - raSpan, ra + raSpan, dec - radius, dec + radius)
   const results = []
   for (const z of zones) {
     const bucket = fineBuckets.get(z)
@@ -273,19 +324,9 @@ function computeEndpoint(origin, moves) {
   if (moves.length === 0) return origin
   const mv = moves[moves.length - 1]
   const k = mv.multiplier ?? 1
-  const dRa = mv.to.pos[0] - mv.from.pos[0]
+  const dRa = raDelta(mv.from.pos[0], mv.to.pos[0])
   const dDec = mv.to.pos[1] - mv.from.pos[1]
-  return [(((mv.to.pos[0] + (k - 1) * dRa) % 360) + 360) % 360, mv.to.pos[1] + (k - 1) * dDec]
-}
-
-// After finding a guide path, the last hop's `to` star lands within fovRadius of the
-// BFS position, which is up to fovRadius/2 from `centre` — so it can slip past
-// checkMaxMagDiff's fovRadius search. Verify it explicitly.
-function lastHopClear(moves, centre, M, fovRadius) {
-  if (moves.length === 0) return true
-  const lastTo = moves[moves.length - 1].to
-  const dist = angSepDeg(lastTo.pos[0], lastTo.pos[1], centre[0], centre[1])
-  return dist >= fovRadius || M - getStarMag(lastTo) <= MAX_MAG_DIFF
+  return [wrapRa(mv.from.pos[0] + k * dRa), mv.from.pos[1] + k * dDec]
 }
 
 function checkMaxMagDiff(centre, M, buckets, fovRadius) {
@@ -300,12 +341,86 @@ function checkMaxMagDiff(centre, M, buckets, fovRadius) {
 }
 
 // --------------------------------------------------------------------------
-// BFS guide path
+// Guide-path DFS
 // --------------------------------------------------------------------------
 
+// Multipliers 1, 1.5, 2, 2.5, ... for a hop of length vecLenDeg, capped so the
+// extrapolated distance never exceeds one FOV.
+function multipliersFor(vecLenDeg, fovDeg) {
+  const mults = []
+  if (vecLenDeg <= 0) return mults
+  for (let m = 1; m <= MAX_MULTIPLIER + 1e-9 && vecLenDeg * m <= fovDeg + 1e-9; m += MULTIPLIER_STEP) {
+    mults.push(Math.round(m * 2) / 2)
+  }
+  return mults
+}
+
+// A hop is always centered on a real, visible guide star `from`; the aim point
+// is either another real guide star (2-star) or a point interpolated between
+// two other guide stars (3-star, `via`) — never a synthetic *origin*, since the
+// observer needs a nameable star to center on before moving.
+function generateHopCandidates(pairPool, triplePool, fovDeg) {
+  const candidates = []
+
+  for (const A of pairPool) {
+    for (const B of pairPool) {
+      if (B.id === A.id) continue
+      const vecLen = angSepDeg(A.pos[0], A.pos[1], B.pos[0], B.pos[1])
+      const dRa = raDelta(A.pos[0], B.pos[0])
+      const dDec = B.pos[1] - A.pos[1]
+      for (const m of multipliersFor(vecLen, fovDeg)) {
+        const newRa = wrapRa(A.pos[0] + m * dRa)
+        const newDec = A.pos[1] + m * dDec
+        if (newDec < -90 || newDec > 90) continue
+        candidates.push({ move: { from: A, to: B, multiplier: m }, pos: [newRa, newDec] })
+      }
+    }
+  }
+
+  for (const A of triplePool) {
+    for (let i = 0; i < triplePool.length; i++) {
+      const B = triplePool[i]
+      if (B.id === A.id) continue
+      for (let j = i + 1; j < triplePool.length; j++) {
+        const C = triplePool[j]
+        if (C.id === A.id) continue
+        for (const frac of TRIPLE_FRACTIONS) {
+          const [viaRa, viaDec] = fracPoint(B.pos[0], B.pos[1], C.pos[0], C.pos[1], frac)
+          const vecLen = angSepDeg(A.pos[0], A.pos[1], viaRa, viaDec)
+          const dRa = raDelta(A.pos[0], viaRa)
+          const dDec = viaDec - A.pos[1]
+          for (const m of multipliersFor(vecLen, fovDeg)) {
+            const newRa = wrapRa(A.pos[0] + m * dRa)
+            const newDec = A.pos[1] + m * dDec
+            if (newDec < -90 || newDec > 90) continue
+            candidates.push({
+              move: {
+                from: A,
+                to: { pos: [viaRa, viaDec] },
+                multiplier: m,
+                via: { b: B, c: C, frac },
+              },
+              pos: [newRa, newDec],
+            })
+          }
+        }
+      }
+    }
+  }
+
+  return candidates
+}
+
+// Depth-first, backtracking search for a chain of hops from origin to target.
+// Prefers (but does not require) hops that make monotonic progress toward the
+// target, so a chain doesn't double back on itself within its own moves.
+// Bounded by a fixed node budget rather than exhaustive exploration — this is
+// a heuristic, "good chance of succeeding" search, not a complete one.
 function findGuidePath(origin, target, maxSteps, guideMaxMag, buckets, fovRadius, fovDeg) {
   if (angSepDeg(origin[0], origin[1], target[0], target[1]) <= fovRadius / 2) return []
 
+  const guideInnerR = fovRadius * 0.85
+  const monotonicEps = MONOTONIC_PROGRESS_EPS_REL * fovRadius
   const cellSize = fovRadius / 4
 
   function snapKey(ra, dec) {
@@ -313,67 +428,46 @@ function findGuidePath(origin, target, maxSteps, guideMaxMag, buckets, fovRadius
   }
 
   const visited = new Set([snapKey(origin[0], origin[1])])
-  let beam = [{ pos: origin, path: [] }]
+  let nodeBudget = DFS_NODE_BUDGET
 
-  for (let depth = 0; depth < maxSteps; depth++) {
-    const children = []
+  function recurse(pos, depth, path) {
+    if (depth >= maxSteps) return null
 
-    for (const state of beam) {
-      const [pRa, pDec] = state.pos
+    const guidePool = queryInRadius(buckets, pos[0], pos[1], guideInnerR)
+      .filter((s) => getStarMag(s) <= guideMaxMag)
+      .sort((a, b) => getStarMag(a) - getStarMag(b))
+    if (guidePool.length < 2) return null
 
-      const guideInnerR = fovRadius * 0.85
-      const guideS = queryInRadius(buckets, pRa, pDec, guideInnerR).filter((s) => getStarMag(s) <= guideMaxMag)
+    const pairPool = guidePool.slice(0, MAX_GUIDE_POOL_PAIRS)
+    const triplePool = guidePool.slice(0, MAX_GUIDE_POOL_TRIPLES)
+    const candidates = generateHopCandidates(pairPool, triplePool, fovDeg)
+    if (candidates.length === 0) return null
 
-      for (const sS of guideS) {
-        const guideE = queryInRadius(buckets, sS.pos[0], sS.pos[1], fovRadius).filter(
-          (s) => getStarMag(s) <= guideMaxMag && s.id !== sS.id,
-        )
+    const curDist = angSepDeg(pos[0], pos[1], target[0], target[1])
+    for (const c of candidates) {
+      c.dist = angSepDeg(c.pos[0], c.pos[1], target[0], target[1])
+      c.tier = c.dist < curDist - monotonicEps ? 0 : 1
+    }
+    candidates.sort((a, b) => a.tier - b.tier || a.dist - b.dist)
 
-        for (const eE of guideE) {
-          // Both guide stars must be clearly interior to the FOV (not at the edge)
-          if (angSepDeg(pRa, pDec, eE.pos[0], eE.pos[1]) > guideInnerR) continue
+    for (const c of candidates) {
+      if (nodeBudget <= 0) return null
+      const key = snapKey(c.pos[0], c.pos[1])
+      if (visited.has(key)) continue
+      visited.add(key)
+      nodeBudget--
 
-          const sep = angSepDeg(sS.pos[0], sS.pos[1], eE.pos[0], eE.pos[1])
+      const newPath = [...path, c.move]
+      if (c.dist <= fovRadius / 2) return newPath
 
-          for (const k of [1, 2, 3]) {
-            if (sep * k > 2 * fovDeg) continue
-
-            const dRa = eE.pos[0] - sS.pos[0]
-            const dDec = eE.pos[1] - sS.pos[1]
-            // Anchor the hop at the "to" guide star (k=1 = center directly on it),
-            // not at the current position — `sS` is just a nearby reference star,
-            // not necessarily where the view is actually centered.
-            const newRa = (((eE.pos[0] + (k - 1) * dRa) % 360) + 360) % 360
-            const newDec = eE.pos[1] + (k - 1) * dDec
-
-            if (newDec < -90 || newDec > 90) continue
-
-            const key = snapKey(newRa, newDec)
-            if (visited.has(key)) continue
-
-            const dist = angSepDeg(newRa, newDec, target[0], target[1])
-
-            if (dist <= fovRadius / 2) {
-              return [...state.path, { from: sS, to: eE, multiplier: k }]
-            }
-
-            visited.add(key)
-            children.push({
-              pos: [newRa, newDec],
-              path: [...state.path, { from: sS, to: eE, multiplier: k }],
-              dist,
-            })
-          }
-        }
-      }
+      const result = recurse(c.pos, depth + 1, newPath)
+      if (result !== null) return result
     }
 
-    if (children.length === 0) break
-    children.sort((a, b) => a.dist - b.dist)
-    beam = children.slice(0, BFS_BEAM_WIDTH)
+    return null
   }
 
-  return null
+  return recurse(origin, 0, [])
 }
 
 // --------------------------------------------------------------------------
@@ -413,6 +507,24 @@ function sortedCandidates(c1, c2) {
   return getStarMag(c1) >= getStarMag(c2) ? [c1, c2] : [c2, c1]
 }
 
+// Guide stars must be brighter than M - MOVE_STARS_MIN_MAG_DIFF, but never
+// stricter than initialMag + INITIAL_GUIDE_MAG_OFFSET — a floor tied to the
+// plan's own starting point, not the (possibly much brighter) current M.
+function guideMagCeiling(M, initialMag) {
+  return Math.max(M - MOVE_STARS_MIN_MAG_DIFF, initialMag + INITIAL_GUIDE_MAG_OFFSET)
+}
+
+// Larger multipliers mean longer, less certain extrapolations — they're also
+// more likely to land the telescope in an even sparser patch of sky than the
+// start star's own neighbourhood, stranding the rest of the chain one step
+// later (observed with Mizar: a big first jump reached a spot with no further
+// guide stars at all). Used to prefer safer initial jumps over merely-nearest ones.
+function moveRisk(moves) {
+  let risk = 0
+  for (const mv of moves) risk = Math.max(risk, mv.multiplier ?? 1)
+  return risk
+}
+
 // --------------------------------------------------------------------------
 // Main export
 // --------------------------------------------------------------------------
@@ -427,9 +539,14 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
   const theoreticalMax = 2.1 + 5 * Math.log10(telescope.diameter)
   const planCeiling = theoreticalMax
 
+  // getObjectsInArea (db.js, and this test harness's simulator) filters by a
+  // flat RA range with no declination correction — widen the RA half-width
+  // ourselves near the pole, or a high-declination start star (e.g. Polaris)
+  // silently starves itself of most of its own true angular neighbourhood.
+  const raSearchHalfWidth = raSearchSpan(startStar.pos[1], planSearchRadius)
   const _raw = await getObjectsInArea(
-    startStar.pos[0] - planSearchRadius,
-    startStar.pos[0] + planSearchRadius,
+    startStar.pos[0] - raSearchHalfWidth,
+    startStar.pos[0] + raSearchHalfWidth,
     startStar.pos[1] - planSearchRadius,
     startStar.pos[1] + planSearchRadius,
     planCeiling + STEP_MAG_TOLERANCE,
@@ -459,12 +576,18 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
 
   let initialStep = null
   let initialActualEndpoint = null
+  let initialDegraded = null
+  let overallDegraded = false
+
+  let bestClean = null // { step, endpoint, risk } — lowest-risk clean candidate seen so far
+  let cleanCandidatesSeen = 0
 
   for (const pair of initPairs) {
     if (pair.dist > planSearchRadius) break
+    if (cleanCandidatesSeen >= PHASE1_CLEAN_CANDIDATES_TO_CONSIDER) break
     if (!checkMaxMagDiff(pair.centre, initialMag, allBuckets, fovRadius)) continue
 
-    const guideMaxMag = initialMag - MOVE_STARS_MIN_MAG_DIFF
+    const guideMaxMag = guideMagCeiling(initialMag, initialMag)
     const moves = findGuidePath(
       startStar.pos,
       pair.centre,
@@ -474,23 +597,46 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
       fovRadius,
       fovDeg,
     )
+    if (moves === null) continue
 
-    if (moves !== null && lastHopClear(moves, pair.centre, initialMag, fovRadius)) {
-      const actualEndpoint = computeEndpoint(startStar.pos, moves)
-      const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
-      if (
-        angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
-        angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
-      )
-        continue
-      initialStep = { centre: pair.centre, candidates: [c1, c2], moves }
-      initialActualEndpoint = actualEndpoint
-      break
+    const actualEndpoint = computeEndpoint(startStar.pos, moves)
+    const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
+    if (
+      angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
+      angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
+    )
+      continue
+
+    // Geometrically valid — classify as clean (keep looking for a safer one,
+    // up to the evaluation cap) or degraded (a bright star washes out the
+    // actual landing spot; keep searching for a clean alternative, but
+    // remember this as a fallback).
+    const step = { centre: pair.centre, candidates: [c1, c2], moves }
+    if (checkMaxMagDiff(actualEndpoint, initialMag, allBuckets, fovRadius)) {
+      cleanCandidatesSeen++
+      const risk = moveRisk(moves)
+      if (!bestClean || risk < bestClean.risk) {
+        bestClean = { step, endpoint: actualEndpoint, risk }
+      }
+    } else if (!initialDegraded) {
+      initialDegraded = { step, endpoint: actualEndpoint }
     }
   }
 
+  if (bestClean) {
+    initialStep = bestClean.step
+    initialActualEndpoint = bestClean.endpoint
+  }
+
   if (!initialStep) {
-    return { ok: false, reason: 'Could not find a guide path to any initial test position.' }
+    if (!initialDegraded) {
+      return { ok: false, reason: 'Could not find a guide path to any initial test position.' }
+    }
+    // No clean position reachable, but a bright-star-affected one is — offer it
+    // as a backup; the user can usually nudge the view to clear the glare.
+    initialStep = initialDegraded.step
+    initialActualEndpoint = initialDegraded.endpoint
+    overallDegraded = true
   }
 
   const steps = [initialStep]
@@ -524,11 +670,12 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
     )
     const movePairs = buildPairs(safeReachable, fovRadius, currentCentre)
     let moved = false
+    let moveDegraded = null
 
     for (const pair of movePairs) {
       if (!checkMaxMagDiff(pair.centre, nextM, allBuckets, fovRadius)) continue
 
-      const guideMaxMag = nextM - MOVE_STARS_MIN_MAG_DIFF
+      const guideMaxMag = guideMagCeiling(nextM, initialMag)
       const moves = findGuidePath(
         currentCentre,
         pair.centre,
@@ -538,25 +685,48 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
         fovRadius,
         fovDeg,
       )
+      if (moves === null) continue
 
-      if (moves !== null && lastHopClear(moves, pair.centre, nextM, fovRadius)) {
-        const actualEndpoint = computeEndpoint(currentCentre, moves)
-        const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
-        if (
-          angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
-          angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
-        )
-          continue
-        steps.push({ centre: pair.centre, candidates: [c1, c2], moves })
+      const actualEndpoint = computeEndpoint(currentCentre, moves)
+      const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
+      if (
+        angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
+        angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
+      )
+        continue
+
+      const step = { centre: pair.centre, candidates: [c1, c2], moves }
+      if (checkMaxMagDiff(actualEndpoint, nextM, allBuckets, fovRadius)) {
+        steps.push(step)
         currentCentre = actualEndpoint
         nextM = Math.round((getStarMag(c1) + MEASURE_STEP) * 10) / 10
         moved = true
         break
+      } else if (!moveDegraded) {
+        moveDegraded = { step, endpoint: actualEndpoint }
       }
     }
 
-    if (!moved) break
+    if (!moved) {
+      if (moveDegraded) {
+        // Same backup logic as phase 1: no clean move found, but a
+        // bright-star-affected one is — take it and keep the chain going.
+        steps.push(moveDegraded.step)
+        currentCentre = moveDegraded.endpoint
+        nextM = Math.round((getStarMag(moveDegraded.step.candidates[0]) + MEASURE_STEP) * 10) / 10
+        overallDegraded = true
+        continue
+      }
+      break
+    }
   }
 
+  if (overallDegraded) {
+    return {
+      ok: false,
+      reason: 'Plan only reachable via a position affected by a nearby bright star.',
+      degradedSteps: steps,
+    }
+  }
   return { ok: true, steps }
 }

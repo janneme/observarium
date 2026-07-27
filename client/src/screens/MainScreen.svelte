@@ -16,6 +16,7 @@
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import VisualRangeSetupScreen from './VisualRangeSetupScreen.svelte'
+  import FovInstrumentPanel from '../components/FovInstrumentPanel.svelte'
   import StarQuizScreen from './StarQuizScreen.svelte'
   import ConstellationIdQuizScreen from './ConstellationIdQuizScreen.svelte'
   import MoonQuizScreen from './MoonQuizScreen.svelte'
@@ -24,7 +25,7 @@
   import ObservationsScreen from './ObservationsScreen.svelte'
   import ListsScreen from './ListsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
-  import { getObjectsInArea, migrateLegacyPendingToSyncDirty, getSyncDirtyTotalCount } from '../lib/db.js'
+  import { getObjectsInArea, migrateLegacyPendingToSyncDirty, getSyncDirtyTotalCount, getMeta } from '../lib/db.js'
   import { activeListObjectIds, refreshActiveListObjectIds } from '../lib/lists.js'
   import { getTokenStatus } from '../lib/auth.js'
   import { zenith } from '../lib/horizon.js'
@@ -32,6 +33,8 @@
   import { selectedObject } from '../stores/selectedObject.js'
   import {
     showFovCircle,
+    fovCircleInstrument,
+    FINDER_FOV_DEG,
     showConstellationLines,
     showConstellationNames,
     showConstellationBoundaries,
@@ -117,6 +120,22 @@
   let showFindingPathsList = false
   let findingPathsListTargetChip = null
   let showVisualRange = false
+  let showFovInstrumentPanel = false
+  let fovCircleTelescopes = []
+  let fovCircleEyepieces = []
+
+  $: fovCircleDeg = (() => {
+    const sel = $fovCircleInstrument
+    if (sel.mode === 'telescope' && sel.telescopeId && sel.eyepieceId) {
+      const tel = fovCircleTelescopes.find((t) => t.id === sel.telescopeId)
+      const ep = fovCircleEyepieces.find((e) => e.id === sel.eyepieceId)
+      if (tel && ep) {
+        const magnification = tel.focalLengthMm / ep.focalLengthMm
+        return ep.fovDeg / magnification
+      }
+    }
+    return FINDER_FOV_DEG
+  })()
   let showStarQuiz = false
   let showConstellationIdQuiz = false
   let showMoonQuiz = false
@@ -352,6 +371,19 @@
       hits = hits.filter((h) => h.obj.type !== 'double_star')
     }
     if (hits.length === 0) {
+      if (get(showFovCircle)) {
+        const fovRad = (fov * Math.PI) / 180
+        const r = (Math.tan(((fovCircleDeg / 2) * Math.PI) / 180) * H) / fovRad
+        const distFromCentre = Math.hypot(tapX - W / 2, tapY - H / 2)
+        // Anywhere inside the disk counts as "tapped the circle" — not just its
+        // thin dashed stroke — with a minimum comfortable tap target, same as
+        // the planet hit-radius handling just above.
+        const hitR = Math.max(TAP_RADIUS, r)
+        if (r <= Math.min(W, H) / 2 && distFromCentre <= hitR) {
+          showFovInstrumentPanel = true
+          return
+        }
+      }
       selectedObject.set(null)
     } else if (hits.length === 1) {
       if (get(selectedObject)?.id === hits[0].obj.id) {
@@ -528,6 +560,7 @@
     if (showFindingPathsList) return
     if (showFindingPaths) return
     if (showVisualRange) return
+    if (showFovInstrumentPanel) return
     if (showStarQuiz) return
     if (showConstellationIdQuiz) return
     if (showMoonQuiz) return
@@ -722,6 +755,10 @@
       .then(() => getSyncDirtyTotalCount())
       .then((count) => pendingChanges.set(count))
     refreshActiveListObjectIds()
+    Promise.all([getMeta('telescopes'), getMeta('eyepieces')]).then(([tels, eps]) => {
+      fovCircleTelescopes = Array.isArray(tels) ? tels : []
+      fovCircleEyepieces = Array.isArray(eps) ? eps : []
+    })
     window.addEventListener('keydown', handleKey)
     window.addEventListener('wheel', handleWheel, { passive: false })
     clockInterval = setInterval(() => {
@@ -782,6 +819,7 @@
       {lon}
       time={skyTime}
       showFovCircle={$showFovCircle}
+      {fovCircleDeg}
       showConstellationLines={$showConstellationLines}
       showConstellationNames={$showConstellationNames}
       showConstellationBoundaries={$showConstellationBoundaries}
@@ -843,6 +881,9 @@
     }}
     on:visualrange={() => {
       showVisualRange = true
+    }}
+    on:fovcircle={() => {
+      showFovInstrumentPanel = true
     }}
     on:sync={() => {
       openObservationSync()
@@ -1076,6 +1117,14 @@
       time={skyTime}
       on:close={() => {
         showVisualRange = false
+      }}
+    />
+  {/if}
+
+  {#if showFovInstrumentPanel}
+    <FovInstrumentPanel
+      on:close={() => {
+        showFovInstrumentPanel = false
       }}
     />
   {/if}

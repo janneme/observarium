@@ -27,6 +27,7 @@
   export let lon = 0
   export let time = new Date()
   export let showFovCircle = false
+  export let fovCircleDeg = 7.5
   export let showConstellationLines = false
   export let showConstellationNames = false
   export let showConstellationBoundaries = false
@@ -87,6 +88,7 @@
     lon
     time
     showFovCircle
+    fovCircleDeg
     showConstellationLines
     showConstellationNames
     showConstellationBoundaries
@@ -732,11 +734,9 @@
     ctx.globalAlpha = 1
   }
 
-  const FINDER_FOV = 7.5
-
   function drawFovCircle(ctx) {
     const fovRad = (fov * Math.PI) / 180
-    const r = (Math.tan(((FINDER_FOV / 2) * Math.PI) / 180) * H) / fovRad
+    const r = (Math.tan(((fovCircleDeg / 2) * Math.PI) / 180) * H) / fovRad
     if (r > Math.min(W, H) / 2) return
     ctx.beginPath()
     ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2)
@@ -1195,6 +1195,34 @@
           ctx.restore()
           continue
         }
+        if (arr.segFromRa != null && arr.segToRa != null) {
+          const segFrom = projectToPixel(arr.segFromRa, arr.segFromDec, ra0, dec0, W, H, fov, rotation)
+          const segTo = projectToPixel(arr.segToRa, arr.segToDec, ra0, dec0, W, H, fov, rotation)
+          if (segFrom && segTo) {
+            ctx.save()
+            ctx.strokeStyle = arrowColor
+            ctx.lineWidth = 1.5
+            ctx.setLineDash([5, 4])
+            ctx.beginPath()
+            ctx.moveTo(segFrom.px, segFrom.py)
+            ctx.lineTo(segTo.px, segTo.py)
+            ctx.stroke()
+            ctx.setLineDash([])
+            ctx.restore()
+            if (arr.tickRa != null && arr.tickDec != null) {
+              const tick = projectToPixel(arr.tickRa, arr.tickDec, ra0, dec0, W, H, fov, rotation)
+              if (tick) {
+                ctx.save()
+                ctx.fillStyle = nightly ? '#0000ff' : 'rgba(255,255,255,0.6)'
+                ctx.beginPath()
+                ctx.arc(tick.px, tick.py, 4, 0, 2 * Math.PI)
+                ctx.fill()
+                ctx.restore()
+              }
+            }
+          }
+          continue
+        }
         if (arr.boundaryDirRa != null && arr.boundaryDirDec != null) {
           const pt = projectToPixel(arr.boundaryDirRa, arr.boundaryDirDec, ra0, dec0, W, H, fov, rotation)
           if (pt) {
@@ -1262,13 +1290,22 @@
           ctx.stroke()
         }
         if (arr.label) {
+          // Rotate the label to run along the arrow instead of sitting
+          // horizontal — keeps it from crossing the stroke at steep angles
+          // without needing per-angle offset special-casing.
+          let labelAngle = Math.atan2(dy, dx)
+          if (labelAngle > Math.PI / 2 || labelAngle < -Math.PI / 2) labelAngle += Math.PI
+          const mx = (startX + tipX) / 2
+          const my = (startY + tipY) / 2
+          ctx.save()
+          ctx.translate(mx - uy * 11, my + ux * 11)
+          ctx.rotate(labelAngle)
           ctx.fillStyle = labelColor
           ctx.font = 'bold 22px sans-serif'
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
-          const mx = (startX + tipX) / 2
-          const my = (startY + tipY) / 2
-          ctx.fillText(arr.label, mx - uy * 11, my + ux * 11)
+          ctx.fillText(arr.label, 0, 0)
+          ctx.restore()
         }
       }
       ctx.restore()
