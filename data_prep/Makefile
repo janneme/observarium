@@ -58,7 +58,7 @@ test-network: ## Run only the network-marked tests (requires prior `make init`)
 # Run linters using tools installed in the venv. Do not perform any installs.
 lint: ## Run ruff and pylint
 	PYTHONPATH=.. uv run --extra dev ruff check .
-	PYTHONPATH=.. uv run --extra dev pylint $$(find . -name '*.py' -not -path './.venv/*' -not -path './tests/*' | sort) || true
+	PYTHONPATH=.. uv run --extra dev pylint $$(find . -name '*.py' -not -path './.venv/*' -not -path './tests/*' -not -path './build/*' | sort) || true
 	PYTHONPATH=.. uv run --extra dev pylint --disable=missing-function-docstring,missing-class-docstring,protected-access $$(find ./tests -name '*.py' | sort) || true
 
 # Auto-fix lintable issues with ruff, then re-run lint target

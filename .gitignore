@@ -3,6 +3,7 @@
 data_prep/output/
 data_prep/cache/
 data_prep/tmp/
+data_prep/build/
 
 # Local storage artifacts
 storage/
