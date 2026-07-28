@@ -20,6 +20,7 @@
   import ObservationsIcon from '../icons/ObservationsIcon.svelte'
   import FindingPathsIcon from '../icons/FindingPathsIcon.svelte'
   import RangeIcon from '../icons/RangeIcon.svelte'
+  import RiseSetIcon from '../icons/RiseSetIcon.svelte'
   import ListIcon from '../icons/ListIcon.svelte'
   import TelescopeIcon from '../icons/TelescopeIcon.svelte'
   import ConstellationQuizIcon from '../icons/ConstellationQuizIcon.svelte'
@@ -82,8 +83,6 @@
         </button>
       </div>
 
-      <hr class="section-sep" />
-
       <!-- Section 2: Sky object toggles -->
       <div class="section-row">
         <button
@@ -138,8 +137,6 @@
           <span class="item-lbl">FOV<br />Circle</span>
         </button>
       </div>
-
-      <hr class="section-sep" />
 
       <!-- Section 3: Records -->
       <div class="section-row">
@@ -214,9 +211,21 @@
           </div>
           <span class="item-lbl">Visual Range (r)</span>
         </button>
-      </div>
 
-      <hr class="section-sep" />
+        <button
+          class="grid-item"
+          on:click={() => {
+            dispatch('risesettimes')
+            close()
+          }}
+          aria-label="Rise/Set Times"
+        >
+          <div class="icon-wrap">
+            <RiseSetIcon size="42" />
+          </div>
+          <span class="item-lbl">Rise/Set Times (T)</span>
+        </button>
+      </div>
 
       <!-- Section 4: Quizzes -->
       <div class="section-row">
@@ -276,8 +285,6 @@
           <span class="item-lbl">DSO Quiz (qd)</span>
         </button>
       </div>
-
-      <hr class="section-sep" />
 
       <!-- Section 5: Data management -->
       <div class="section-row">
@@ -367,12 +374,6 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-start;
-  }
-
-  .section-sep {
-    border: none;
-    border-top: 1px solid rgba(127, 127, 127, 0.15);
-    margin: 6px 0;
   }
 
   .grid-item {

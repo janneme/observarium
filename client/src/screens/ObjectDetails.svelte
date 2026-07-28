@@ -1,15 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
-  import {
-    Observer,
-    AstroTime,
-    SearchRiseSet,
-    SearchHourAngle,
-    MoonPhase,
-    Illumination,
-    Body,
-    DefineStar,
-  } from 'astronomy-engine'
+  import { AstroTime, MoonPhase, Illumination, Body, DefineStar } from 'astronomy-engine'
+  import { SOLAR_BODY_NAME_MAP, computeRiseSetTransit } from '../lib/solarBodyEphemeris.js'
   import { selectedObject } from '../stores/selectedObject.js'
   import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
   import { getObservationByDate, getObjectImage, getDoubleStarNear, resolveObservationDateKey } from '../lib/db.js'
@@ -333,10 +325,6 @@
     planetPhaseFraction = null
 
     try {
-      const observer = new Observer(lat, lon, 0)
-      const midnight = new Date(time)
-      midnight.setHours(0, 0, 0, 0)
-      const startTime = new AstroTime(midnight)
       const astroNow = new AstroTime(time)
 
       let body
@@ -346,25 +334,13 @@
         body = Body.Star1
       } else {
         // solar system fallback
-        const nameMap = {
-          Mercury: Body.Mercury,
-          Venus: Body.Venus,
-          Mars: Body.Mars,
-          Jupiter: Body.Jupiter,
-          Saturn: Body.Saturn,
-          Uranus: Body.Uranus,
-          Neptune: Body.Neptune,
-          Pluto: Body.Pluto,
-          Moon: Body.Moon,
-          Sun: Body.Sun,
-        }
-        body = nameMap[o.name] ?? Body.Sun
+        body = SOLAR_BODY_NAME_MAP[o.name] ?? Body.Sun
       }
 
-      riseTime = SearchRiseSet(body, observer, +1, startTime, 1)
-      setTime = SearchRiseSet(body, observer, -1, startTime, 1)
-      const transitResult = SearchHourAngle(body, observer, 0, startTime)
-      transitAltitude = transitResult?.hor?.altitude ?? null
+      const riseSetTransit = computeRiseSetTransit(body, lat, lon, time)
+      riseTime = riseSetTransit.riseTime
+      setTime = riseSetTransit.setTime
+      transitAltitude = riseSetTransit.maxAltitudeDeg
 
       // Moon phase
       if (o.name === 'Moon' || body === Body.Moon) {

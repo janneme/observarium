@@ -16,6 +16,7 @@
   import ObjectDetails from '../screens/ObjectDetails.svelte'
   import TelescopesScreen from '../screens/TelescopesScreen.svelte'
   import VisualRangeSetupScreen from './VisualRangeSetupScreen.svelte'
+  import RiseSetTimesScreen from './RiseSetTimesScreen.svelte'
   import FovInstrumentPanel from '../components/FovInstrumentPanel.svelte'
   import StarQuizScreen from './StarQuizScreen.svelte'
   import ConstellationIdQuizScreen from './ConstellationIdQuizScreen.svelte'
@@ -120,6 +121,7 @@
   let showFindingPathsList = false
   let findingPathsListTargetChip = null
   let showVisualRange = false
+  let showRiseSetTimes = false
   let showFovInstrumentPanel = false
   let fovCircleTelescopes = []
   let fovCircleEyepieces = []
@@ -560,6 +562,7 @@
     if (showFindingPathsList) return
     if (showFindingPaths) return
     if (showVisualRange) return
+    if (showRiseSetTimes) return
     if (showFovInstrumentPanel) return
     if (showStarQuiz) return
     if (showConstellationIdQuiz) return
@@ -696,6 +699,12 @@
     if (e.key === 't') {
       menuOpen = false
       showTelescopes = true
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'T') {
+      menuOpen = false
+      showRiseSetTimes = true
       e.preventDefault()
       return
     }
@@ -881,6 +890,9 @@
     }}
     on:visualrange={() => {
       showVisualRange = true
+    }}
+    on:risesettimes={() => {
+      showRiseSetTimes = true
     }}
     on:fovcircle={() => {
       showFovInstrumentPanel = true
@@ -1117,6 +1129,17 @@
       time={skyTime}
       on:close={() => {
         showVisualRange = false
+      }}
+    />
+  {/if}
+
+  {#if showRiseSetTimes}
+    <RiseSetTimesScreen
+      {lat}
+      {lon}
+      time={skyTime}
+      on:close={() => {
+        showRiseSetTimes = false
       }}
     />
   {/if}
