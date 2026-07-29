@@ -30,11 +30,20 @@
   // Mirrors data_prep/config.py: star catalogue only covers dec >= -35°. Views
   // whose southern edge would fall below this must be shifted north.
   const EUROPE_MIN_DEC = -35
+  // A constellation whose IAU boundary dips south of EUROPE_MIN_DEC is still
+  // includable if most of it is usable: either its boundary area above the
+  // data floor is large on its own, or it's moderately large AND anchored by
+  // a not-too-southern Alpha star (so the "identity" of the constellation
+  // isn't dominated by the missing-data sliver).
+  const AREA_RULE_HIGH_FRACTION = 0.75
+  const AREA_RULE_LOW_FRACTION = 0.55
+  const AREA_RULE_ALPHA_MIN_DEC = -30
 
   let loading = true
   let setupMode = true
   let allStars = []
   let starsByHip = new Map()
+  let alphaDecByAbbr = new Map()
   let conInfoByAbbr = new Map()
   let conNameByAbbr = new Map()
   let schemaFallbackByHip = null
@@ -117,6 +126,15 @@
       return s.chain >= (s.everWrong ? 3 : 2)
     })
 
+  // handleSkyTap only advances via nextQuestion() (which clears saved state)
+  // when resolved && !allPassed — so finishing the *last* question correctly
+  // never goes through it (allPassed flips true immediately) and the
+  // completed pool/mastery would otherwise linger in localStorage, causing a
+  // stale "Continue previous quiz" offer next time this difficulty is opened.
+  $: if (!setupMode && allPassed) {
+    clearQuizState(QUIZ_TYPE, difficulty, scope)
+  }
+
   function updateHasSaved() {
     hasSaved = !!loadQuizState(QUIZ_TYPE, difficulty, scope)
   }
@@ -168,6 +186,77 @@
       y += Math.sin(r)
     }
     return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+  }
+
+  // Fraction of a constellation's IAU boundary polygon's sky area that lies
+  // above `thresholdDec`, via grid quadrature (weighted by cos(dec) for true
+  // spherical area) + ray-casting point-in-polygon against the boundary
+  // edges. Boundary edges are near-axis-aligned in RA/dec (constant-RA or
+  // constant-dec IAU grid lines, only slightly tilted by J2000 precession),
+  // so edge order doesn't matter for ray-casting — any set of segments that
+  // closes the polygon works.
+  function computeAreaFractionAboveDec(bounds, thresholdDec) {
+    const rawEdges = []
+    const allRa = []
+    for (const seg of bounds) {
+      if (!Array.isArray(seg)) continue
+      for (let i = 0; i < seg.length - 1; i++) {
+        const a = seg[i]
+        const b = seg[i + 1]
+        if (!Array.isArray(a) || !Array.isArray(b)) continue
+        rawEdges.push([a[0], a[1], b[0], b[1]])
+        allRa.push(a[0], b[0])
+      }
+    }
+    if (rawEdges.length === 0) return null
+
+    // RA here is in hours (0-24) — unwrap across the 0h/24h seam if this
+    // constellation's boundary straddles it, so ray-casting isn't confused
+    // by a spurious large jump.
+    const raMin = Math.min(...allRa)
+    const raMax = Math.max(...allRa)
+    const wraps = raMax - raMin > 12
+    const edges = rawEdges.map(([ra1, d1, ra2, d2]) => [
+      wraps && ra1 < 12 ? ra1 + 24 : ra1,
+      d1,
+      wraps && ra2 < 12 ? ra2 + 24 : ra2,
+      d2,
+    ])
+
+    let raLo = Infinity,
+      raHi = -Infinity,
+      decLo = Infinity,
+      decHi = -Infinity
+    for (const [ra1, d1, ra2, d2] of edges) {
+      raLo = Math.min(raLo, ra1, ra2)
+      raHi = Math.max(raHi, ra1, ra2)
+      decLo = Math.min(decLo, d1, d2)
+      decHi = Math.max(decHi, d1, d2)
+    }
+
+    const NGRID = 80
+    const dRa = (raHi - raLo) / NGRID
+    const dDec = (decHi - decLo) / NGRID
+    let totalW = 0
+    let aboveW = 0
+    for (let i = 0; i < NGRID; i++) {
+      const raC = raLo + (i + 0.5) * dRa
+      for (let j = 0; j < NGRID; j++) {
+        const decC = decLo + (j + 0.5) * dDec
+        let crossings = 0
+        for (const [ra1, d1, ra2, d2] of edges) {
+          if (ra1 > raC === ra2 > raC) continue
+          const t = (raC - ra1) / (ra2 - ra1)
+          if (d1 + t * (d2 - d1) > decC) crossings++
+        }
+        if (crossings % 2 === 1) {
+          const w = Math.cos((decC * Math.PI) / 180)
+          totalW += w
+          if (decC > thresholdDec) aboveW += w
+        }
+      }
+    }
+    return totalW > 0 ? aboveW / totalW : null
   }
 
   function buildConInfo(constellations) {
@@ -223,6 +312,16 @@
           }
         }
       }
+      // A boundary partly below the data floor doesn't sink the whole view —
+      // for view-fitting math (below), pretend the southern edge is the
+      // floor itself, since nothing south of it has star data to show
+      // anyway. Whether such a constellation is *eligible* for the quiz at
+      // all is decided separately, from the real (unclamped) boundary via
+      // the area/alpha-star rule — see isEligible/meetsDataFloorRule.
+      const viewMinDec = Math.max(boundaryMinDec, EUROPE_MIN_DEC)
+      const areaFractionAboveFloor =
+        boundaryMinDec >= EUROPE_MIN_DEC ? 1 : computeAreaFractionAboveDec(bounds, EUROPE_MIN_DEC)
+      const alphaDec = alphaDecByAbbr.get(abbr) ?? null
       info.set(abbr, {
         abbr,
         name: con.name || abbr,
@@ -235,6 +334,9 @@
         thresholdMag,
         boundaryMinDec,
         boundaryMaxDec,
+        viewMinDec,
+        areaFractionAboveFloor,
+        alphaDec,
       })
     }
     return info
@@ -255,19 +357,37 @@
   // C_MIN_DEG (edge midpoint at south) and C_MAX_DEG (corner at south).
   //
   // Returns the [decLow, decHigh] range of centre dec such that some rotation
-  // makes the canvas both (a) contain the entire constellation boundary and
-  // (b) not include any sky south of EUROPE_MIN_DEC. Returns null if no dec0
-  // works — e.g. the boundary itself extends below the data floor.
+  // makes the canvas both (a) contain the constellation's viewable boundary
+  // (viewMinDec..boundaryMaxDec — see viewMinDec's definition in
+  // buildConInfo) and (b) not include any sky south of EUROPE_MIN_DEC.
+  // Returns null if no dec0 works.
   function validDec0Range(info) {
-    if (!Number.isFinite(info.boundaryMinDec) || info.boundaryMinDec < EUROPE_MIN_DEC) return null
+    if (!Number.isFinite(info.viewMinDec)) return null
     const decLow = Math.max(
       EUROPE_MIN_DEC + C_MIN_DEG,
       info.boundaryMaxDec - C_MAX_DEG,
       (info.boundaryMaxDec + EUROPE_MIN_DEC) / 2,
     )
-    const decHigh = info.boundaryMinDec + C_MAX_DEG
+    const decHigh = info.viewMinDec + C_MAX_DEG
     if (decHigh < decLow) return null
     return [decLow, decHigh]
+  }
+
+  // A constellation whose real IAU boundary dips below the data floor is
+  // still includable if most of its sky area lies above it: either the area
+  // above the floor is large on its own (AREA_RULE_HIGH_FRACTION), or it's
+  // moderately large and anchored by an Alpha star that isn't itself too far
+  // south (AREA_RULE_LOW_FRACTION + AREA_RULE_ALPHA_MIN_DEC) — otherwise the
+  // constellation's identity would lean on the very part that's missing.
+  function meetsDataFloorRule(info) {
+    if (info.boundaryMinDec >= EUROPE_MIN_DEC) return true
+    const area = info.areaFractionAboveFloor
+    if (area == null) return false
+    if (area >= AREA_RULE_HIGH_FRACTION) return true
+    if (area >= AREA_RULE_LOW_FRACTION && info.alphaDec != null && info.alphaDec >= AREA_RULE_ALPHA_MIN_DEC) {
+      return true
+    }
+    return false
   }
 
   function isEligible(info, d) {
@@ -275,6 +395,7 @@
     if (d === 'medium' && info.brightestMag >= MEDIUM_MIN_BRIGHT_MAG) return false
     const minSatisfying = Math.max(info.thresholdMag, VISUAL_RANGE_MIN)
     if (minSatisfying > VISUAL_RANGE_MAX) return false
+    if (!meetsDataFloorRule(info)) return false
     if (!validDec0Range(info)) return false
     return true
   }
@@ -286,9 +407,6 @@
       if (isEligible(info, d)) eligible.push(info.abbr)
       else excluded.push(info.abbr)
     }
-    console.log(
-      `@@ [ConstQuiz] buildPool difficulty=${d} eligible=${eligible.length} excluded=${excluded.length} [${excluded.join(',')}]`,
-    )
     return eligible
   }
 
@@ -341,7 +459,7 @@
     // in [cLow, cHigh] where c(R) = arctan(a / max(|sin R|, |cos R|)) in
     // degrees. Convert that to a range of m = max(|sin R|, |cos R|) and
     // reject-sample R uniformly until one lands in that range.
-    const cLow = Math.max(C_MIN_DEG, dec0 - info.boundaryMinDec, info.boundaryMaxDec - dec0)
+    const cLow = Math.max(C_MIN_DEG, dec0 - info.viewMinDec, info.boundaryMaxDec - dec0)
     const cHigh = Math.min(C_MAX_DEG, dec0 - EUROPE_MIN_DEC)
     // Larger c → smaller m, so mMin comes from cHigh and mMax from cLow.
     const mMin = Math.max(1 / Math.SQRT2, CANVAS_HALF_A / Math.tan((cHigh * Math.PI) / 180))
@@ -368,9 +486,6 @@
       rotation = quadrant * (Math.PI / 2) + (flip ? Math.PI / 2 - base : base)
     }
 
-    console.log(
-      `@@ [ConstQuiz] computeViewCenter abbr=${info.abbr} centroidDec=${info.centroidDec.toFixed(2)} boundaryDec=[${info.boundaryMinDec.toFixed(2)}, ${info.boundaryMaxDec.toFixed(2)}] dec0=${dec0.toFixed(2)} rotDeg=${((rotation * 180) / Math.PI).toFixed(1)} cRange=[${cLow.toFixed(2)}, ${cHigh.toFixed(2)}] mRange=[${mMin.toFixed(3)}, ${mMax.toFixed(3)}] attempts=${attempts}`,
-    )
     return { ra0, dec0, rotation }
   }
 
@@ -378,6 +493,41 @@
     const minSatisfying = Math.max(info.thresholdMag, VISUAL_RANGE_MIN)
     if (minSatisfying > VISUAL_RANGE_MAX) return null
     return minSatisfying + Math.random() * (VISUAL_RANGE_MAX - minSatisfying)
+  }
+
+  // Speculative prefetch of the *next* question's sky data (the slow part —
+  // an IndexedDB zone-blob read that can take ~1s on mobile — while the
+  // *current* question is still on screen), so nextQuestion() can apply it
+  // instantly instead of awaiting a fresh fetch. Valid regardless of how the
+  // current question is answered: pickNextUnpassed(currentQuestion) only
+  // scores *other* pool entries, and answering the current question never
+  // mutates their mastery.
+  let prefetched = null
+
+  async function prefetchNext() {
+    const abbr = pickNextUnpassed(currentQuestion)
+    if (!abbr) {
+      prefetched = null
+      return
+    }
+    const info = conInfoByAbbr.get(abbr)
+    if (!info) {
+      prefetched = null
+      return
+    }
+    const view = computeViewCenter(info)
+    const renderMag = pickVisualRange(info) ?? VISUAL_RANGE_MAX
+    const margin = QUIZ_FOV_DEG * 0.9
+    const cosDec = Math.max(0.05, Math.cos((view.dec0 * Math.PI) / 180))
+    const raMargin = Math.min(180, margin / cosDec)
+    const objects = await getObjectsInArea(
+      view.ra0 - raMargin,
+      view.ra0 + raMargin,
+      view.dec0 - margin,
+      view.dec0 + margin,
+      renderMag,
+    )
+    prefetched = { abbr, view, renderMag, objects }
   }
 
   async function loadQuestionSky(abbr) {
@@ -389,16 +539,12 @@
     qRotation = view.rotation
     qFov = QUIZ_FOV_DEG
     qRenderMag = pickVisualRange(info) ?? VISUAL_RANGE_MAX
-    console.log(
-      `@@ [ConstQuiz] loadQuestionSky abbr=${abbr} difficulty=${difficulty} qRa0=${qRa0.toFixed(2)} qDec0=${qDec0.toFixed(2)} qRenderMag=${qRenderMag.toFixed(2)} brightest=${info.brightestMag.toFixed(2)} threshold=${info.thresholdMag.toFixed(2)} angularSize=${info.angularSize.toFixed(2)} schemaStars=${info.schemaStars.length}`,
-    )
 
     const margin = QUIZ_FOV_DEG * 0.9
     const cosDec = Math.max(0.05, Math.cos((qDec0 * Math.PI) / 180))
     const raMargin = Math.min(180, margin / cosDec)
     qObjects = await getObjectsInArea(qRa0 - raMargin, qRa0 + raMargin, qDec0 - margin, qDec0 + margin, qRenderMag)
     updateFilteredObjects()
-    console.log(`@@ [ConstQuiz] loadQuestionSky loaded ${qObjects.length} objects, filtered=${qObjectsFiltered.length}`)
   }
 
   function updateFilteredObjects() {
@@ -421,9 +567,6 @@
     options = chosen
     // Easy always uses full names; Medium/Hard randomly pick names or abbrs.
     optionsUseAbbrev = difficulty !== 'easy' && Math.random() < 0.5
-    console.log(
-      `@@ [ConstQuiz] pickOptions correct=${correctAbbr} options=${chosen.join(',')} useAbbrev=${optionsUseAbbrev}`,
-    )
   }
 
   $: optionLabels = options.map((abbr) => (optionsUseAbbrev ? abbr : conNameByAbbr.get(abbr) || abbr))
@@ -452,6 +595,7 @@
   }
 
   async function beginQuiz(continuePrev) {
+    prefetched = null
     const freshPool = buildPool(difficulty)
     if (freshPool.length < 4) {
       feedback = 'Not enough constellations for this difficulty.'
@@ -479,12 +623,15 @@
     if (currentQuestion) {
       pickOptions(currentQuestion)
       await loadQuestionSky(currentQuestion)
+      prefetchNext()
     }
     saveState()
   }
 
   async function nextQuestion() {
-    const next = pickNextUnpassed(currentQuestion)
+    const cached = prefetched && pool.includes(prefetched.abbr) && !isPassed(prefetched.abbr) ? prefetched : null
+    const next = cached ? cached.abbr : pickNextUnpassed(currentQuestion)
+    prefetched = null
     if (!next) {
       currentQuestion = null
       clearQuizState(QUIZ_TYPE, difficulty, scope)
@@ -496,8 +643,19 @@
     wrongTapped = new Set()
     feedback = ''
     pickOptions(currentQuestion)
-    await loadQuestionSky(currentQuestion)
+    if (cached) {
+      qRa0 = cached.view.ra0
+      qDec0 = cached.view.dec0
+      qRotation = cached.view.rotation
+      qFov = QUIZ_FOV_DEG
+      qRenderMag = cached.renderMag
+      qObjects = cached.objects
+      updateFilteredObjects()
+    } else {
+      await loadQuestionSky(currentQuestion)
+    }
     saveState()
+    prefetchNext()
   }
 
   async function handleAnswer(optionAbbr) {
@@ -537,7 +695,16 @@
     const tag = String(t?.tagName || '').toLowerCase()
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || t?.isContentEditable) return
     const key = String(e.key || '').toLowerCase()
-    const idx = key === 'a' ? 0 : key === 'b' ? 1 : key === 'c' ? 2 : key === 'd' ? 3 : -1
+    const idx =
+      key === 'a' || key === '1'
+        ? 0
+        : key === 'b' || key === '2'
+          ? 1
+          : key === 'c' || key === '3'
+            ? 2
+            : key === 'd' || key === '4'
+              ? 3
+              : -1
     if (idx < 0 || idx >= options.length) return
     e.preventDefault()
     handleAnswer(options[idx])
@@ -570,6 +737,22 @@
         if (Number.isFinite(hip)) nextStarsByHip.set(hip, s)
       }
       starsByHip = nextStarsByHip
+      // Alpha star's declination per constellation, from the star catalogue's
+      // Bayer-designation field — used by meetsDataFloorRule (via
+      // buildConInfo) to decide whether a boundary partly below the data
+      // floor is still anchored by a not-too-southern Alpha star. Note the
+      // catalogue itself is filtered to dec >= EUROPE_MIN_DEC at data-prep
+      // time, so a constellation whose Alpha star is south of that (e.g.
+      // Sagittarius's Rukbat, Eridanus's Achernar) simply won't have an
+      // entry here — fine, since those are only ever needed for the
+      // area-fraction-only qualification path, not the Alpha-star path.
+      const nextAlphaDecByAbbr = new Map()
+      for (const s of allStars) {
+        if (!s.bay || s.bay[0] !== 'α' || !s.constellation) continue
+        if (!Number.isFinite(s.pos?.[1])) continue
+        if (!nextAlphaDecByAbbr.has(s.constellation)) nextAlphaDecByAbbr.set(s.constellation, s.pos[1])
+      }
+      alphaDecByAbbr = nextAlphaDecByAbbr
       conInfoByAbbr = buildConInfo(constellations)
       // Build a global HIP → [ra, dec] fallback so SkyCanvas can draw any
       // constellation line whose endpoint is fainter than the quiz's visual
@@ -581,9 +764,6 @@
         }
       }
       schemaFallbackByHip = fallback
-      console.log(
-        `@@ [ConstQuiz] onMount ready: ${conInfoByAbbr.size} constellations, ${fallback.size} schema HIPs in fallback`,
-      )
       loading = false
     })()
   })
@@ -668,6 +848,7 @@
             showSpecialStarSymbols={false}
             showHorizon={false}
             showSolarSystem={false}
+            showSelectedMarker={false}
           />
         </div>
 

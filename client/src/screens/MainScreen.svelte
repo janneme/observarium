@@ -77,7 +77,12 @@
   let fetching = false
 
   const NORMAL_VIEW_MIN_FOV = 0.001
-  const NORMAL_VIEW_MAX_FOV = 120
+  // `fov` is expressed relative to the viewport's larger dimension, but what's
+  // actually rendered (and what the user perceives as "zoom") is minDimFov —
+  // fov scaled down to the smaller dimension. On a portrait phone that ratio
+  // can be ~0.5, so a raw cap of 120 only ever renders up to ~FOV 60-64. Cap
+  // the rendered FOV directly instead, and derive the raw `fov` ceiling from it.
+  const NORMAL_VIEW_MAX_RENDERED_FOV = 90
   const EUROPE_MIN_DEC = -35
   const TAP_THRESHOLD = 5
   const TAP_RADIUS = 20
@@ -88,6 +93,7 @@
   let loupeDec0 = 0
   let loupeFov = 1
   let loupeMagLim = 10
+  let loupeObjects = []
   const pointers = new Map()
 
   let menuOpen = false
@@ -288,7 +294,7 @@
       const prevDist = Math.hypot(prev.x - other.x, prev.y - other.y)
       const currDist = Math.hypot(e.clientX - other.x, e.clientY - other.y)
       if (prevDist > 1) {
-        fov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(NORMAL_VIEW_MAX_FOV, fov / (currDist / prevDist)))
+        fov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(fovMax, fov / (currDist / prevDist)))
         maybeReload()
       }
     }
@@ -407,6 +413,21 @@
       loupeRa0 = centRa
       loupeDec0 = centDec
       loupeMagLim = fovToMagLimit(fov)
+      // Loupe needs its own tappable candidates for solar-system bodies —
+      // `objects` only holds the star/DSO catalog, so without this a planet
+      // among the ambiguous hits could never be selected in the zoomed view.
+      loupeObjects = get(showSolarSystem)
+        ? [
+            ...objects,
+            ...get(solarSystemPositions).map((body) => ({
+              id: `solar_${body.imageId || body.name.toLowerCase()}`,
+              name: body.name,
+              pos: [body.ra, body.dec],
+              type: 'solar_system_body',
+              bodyClass: body.bodyClass,
+            })),
+          ]
+        : objects
       showLoupe = true
     }
   }
@@ -732,7 +753,7 @@
     if (e.key === '+' || e.key === '=') {
       fov = Math.max(0.1, fov * (1 - FOV_STEP))
     } else if (e.key === '-') {
-      fov = Math.min(180, fov * (1 + FOV_STEP))
+      fov = Math.min(fovMax, fov * (1 + FOV_STEP))
     } else if (e.key === 'ArrowRight') {
       const step = (fov * PAN_STEP) / Math.cos((dec0 * Math.PI) / 180)
       ra0 = (((ra0 + step) % 360) + 360) % 360
@@ -754,7 +775,7 @@
     // ctrlKey=true is how Chrome/Safari report trackpad pinch on desktop
     if (e.ctrlKey) {
       e.preventDefault()
-      fov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(NORMAL_VIEW_MAX_FOV, fov * Math.pow(1.008, e.deltaY)))
+      fov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(fovMax, fov * Math.pow(1.008, e.deltaY)))
       maybeReload()
     }
   }
@@ -794,6 +815,10 @@
   })
 
   $: minDimFov = viewportH > 0 ? (fov * Math.min(viewportW, viewportH)) / viewportH : fov
+  $: fovMax =
+    viewportH > 0 && viewportW > 0
+      ? (NORMAL_VIEW_MAX_RENDERED_FOV * viewportH) / Math.min(viewportW, viewportH)
+      : NORMAL_VIEW_MAX_RENDERED_FOV
   $: _vpRange = computeViewportMagRange(
     objects,
     Math.min(adaptiveMagLimit(minDimFov), parseFloat(localStorage.getItem('selectedMag') || '14')),
@@ -1220,7 +1245,7 @@
       ra0={loupeRa0}
       dec0={loupeDec0}
       fov={loupeFov}
-      {objects}
+      objects={loupeObjects}
       {lat}
       {lon}
       time={skyTime}

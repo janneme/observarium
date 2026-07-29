@@ -614,10 +614,12 @@ function _zonesForArea(ra_min, ra_max, dec_min, dec_max) {
   const rc_min = Math.floor(ra0 / RA_BUCKET)
   const rc_max = Math.floor(ra1 / RA_BUCKET)
 
+  // See the matching comment in getObjectsInArea: a full-sky RA span computed
+  // as ra0∓180 can round to just under 360, so this needs the same epsilon.
   const zones = []
   for (let dc = dc_min; dc <= dc_max; dc++) {
     const base = dc * ZONE_RA_CELLS
-    if (span >= 360) {
+    if (span >= 360 - 1e-6) {
       for (let rc = 0; rc < ZONE_RA_CELLS; rc++) zones.push(base + rc)
     } else if (rc_min <= rc_max) {
       for (let rc = rc_min; rc <= rc_max; rc++) zones.push(base + rc)
@@ -644,9 +646,18 @@ export async function getObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_lim
   const ra0n = ((ra_min % 360) + 360) % 360
   const ra1n = ((ra_max % 360) + 360) % 360
   const wraps = ra0n > ra1n
+  // Callers with a wide-enough dec margin (near the poles) clamp their RA
+  // margin to exactly 180, making `span` mathematically exactly 360 — but
+  // ra_min/ra_max are computed as ra0∓180 independently, so floating-point
+  // rounding can leave `span` a hair under 360 (observed ~4% of the time).
+  // Without the epsilon, that drops this out of the full-sky fast path into
+  // the wrap-around branch below, where ra0n and ra1n land on nearly the same
+  // point post-modulo — collapsing the "accept everything" window down to
+  // almost nothing and rejecting nearly every star.
+  const isFullSkyRA = span >= 360 - 1e-6
 
   function _inRA(ra) {
-    if (span >= 360) return true // full-sky RA span; accept all
+    if (isFullSkyRA) return true
     return wraps ? ra >= ra0n || ra <= ra1n : ra >= ra0n && ra <= ra1n
   }
   const results = []
@@ -690,7 +701,7 @@ export async function getObjectsInArea(ra_min, ra_max, dec_min, dec_max, mag_lim
   const queries = []
   for (let dc = dc_min; dc <= dc_max; dc++) {
     const base = dc * ZONE_RA_CELLS
-    if (span >= 360) {
+    if (isFullSkyRA) {
       queries.push(idx.getAll(IDBKeyRange.bound(base, base + ZONE_RA_CELLS - 1)))
     } else if (rc_min <= rc_max) {
       queries.push(idx.getAll(IDBKeyRange.bound(base + rc_min, base + rc_max)))

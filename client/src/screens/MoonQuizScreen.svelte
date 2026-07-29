@@ -306,7 +306,16 @@
     const tag = String(t?.tagName || '').toLowerCase()
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || t?.isContentEditable) return
     const key = String(e.key || '').toLowerCase()
-    const idx = key === 'a' ? 0 : key === 'b' ? 1 : key === 'c' ? 2 : key === 'd' ? 3 : -1
+    const idx =
+      key === 'a' || key === '1'
+        ? 0
+        : key === 'b' || key === '2'
+          ? 1
+          : key === 'c' || key === '3'
+            ? 2
+            : key === 'd' || key === '4'
+              ? 3
+              : -1
     if (idx < 0 || idx >= options.length) return
     e.preventDefault()
     handleAnswer(options[idx])

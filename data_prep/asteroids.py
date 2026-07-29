@@ -1,4 +1,4 @@
-"""Solar system pipeline: planet metadata + MPC Orbit Database → solar_system.json."""
+"""Solar system pipeline: planet metadata + MPC Orbit/Comet Databases → solar_system.json."""
 
 import gzip
 import json
@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from config import ASTEROID_MAX_MAGNITUDE, MPCORB_FILENAME, MPCORB_URL
+from comets import CometPipeline
+from config import ASTEROID_MAX_MAGNITUDE, COMET_MAX_MAGNITUDE, MPCORB_FILENAME, MPCORB_URL
 from downloader import Downloader
 
 
@@ -168,7 +169,7 @@ def _get_planet_catalog(sources_dir: Path) -> list[dict[str, Any]]:
 
 
 class SolarSystemPipeline:
-    """Generate solar_system.json: planet metadata + minor-planet orbital elements."""
+    """Generate solar_system.json: planet metadata + minor-planet + comet orbital elements."""
 
     def __init__(
         self,
@@ -182,35 +183,45 @@ class SolarSystemPipeline:
         self._debug = debug
         cache = cache_dir or sources_dir
         self._downloader = Downloader(cache, debug=debug)
+        self._comet_pipeline = CometPipeline(cache, debug=debug)
 
-    def run(self, max_mag: float | None = None) -> Path:
+    def run(self, max_mag: float | None = None, comet_max_mag: float | None = None) -> Path:
         """Execute full pipeline and return output path.
 
         Args:
             max_mag: Maximum apparent magnitude at opposition for minor planets.
+            comet_max_mag: Maximum estimated peak apparent magnitude for comets.
 
         Returns:
             Path to solar_system.json.
         """
         source = self._downloader.fetch(MPCORB_URL, MPCORB_FILENAME)
         minor_planets = self._process_minor_planets(source, max_mag=max_mag)
+        comets = self._comet_pipeline.fetch_comets(max_mag=comet_max_mag)
         planets = _get_planet_catalog(self._sources_dir)
-        output = self._write(planets, minor_planets)
-        self._print_summary(planets, minor_planets, output, max_mag)
+        output = self._write(planets, minor_planets, comets)
+        self._print_summary(planets, minor_planets, comets, output, max_mag, comet_max_mag)
         return output
 
     def _print_summary(
         self,
         planets: list[dict[str, Any]],
         minor_planets: list[dict[str, Any]],
+        comets: list[dict[str, Any]],
         output_path: Path,
         max_mag: float | None,
+        comet_max_mag: float | None,
     ) -> None:
         """Print concise pipeline summary similar to other data-prep commands."""
         cutoff = ASTEROID_MAX_MAGNITUDE if max_mag is None else max_mag
+        comet_cutoff = COMET_MAX_MAGNITUDE if comet_max_mag is None else comet_max_mag
         size_mb = output_path.stat().st_size / 1_048_576
         print(f"Planets       : {len(planets)} loaded from sources/planets.json")
         print(f"Asteroids     : {len(minor_planets):,} with opposition mag <= {cutoff:g}")
+        print(
+            f"Comets        : {len(comets):,} with estimated peak mag <= {comet_cutoff:g} "
+            "(brightness predictions are approximate)"
+        )
         print(f"Output        : {output_path} ({size_mb:.2f} MB)")
 
     def _process_minor_planets(
@@ -263,13 +274,17 @@ class SolarSystemPipeline:
         return asteroids
 
     def _write(
-        self, planets: list[dict[str, Any]], minor_planets: list[dict[str, Any]]
+        self,
+        planets: list[dict[str, Any]],
+        minor_planets: list[dict[str, Any]],
+        comets: list[dict[str, Any]],
     ) -> Path:
         """Write solar system data to JSON output file.
 
         Args:
             planets: List of planet metadata records.
             minor_planets: List of minor-planet (asteroid) orbital element records.
+            comets: List of comet orbital-element records.
 
         Returns:
             Path to solar_system.json.
@@ -277,7 +292,7 @@ class SolarSystemPipeline:
         self._output_dir.mkdir(parents=True, exist_ok=True)
         output_path = self._output_dir / "solar_system.json"
 
-        data = {"planets": planets, "minor_planets": minor_planets}
+        data = {"planets": planets, "minor_planets": minor_planets, "comets": comets}
 
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)

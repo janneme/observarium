@@ -18,6 +18,7 @@ from pathlib import Path
 from asteroids import SolarSystemPipeline
 from config import (
     ASTEROID_MAX_MAGNITUDE,
+    COMET_MAX_MAGNITUDE,
     DSO_MAX_MAG,
     EXTREME_STARS_NUM,
     MAX_STAR_MAGNITUDE,
@@ -164,6 +165,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--comet-max-mag",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        dest="comet_max_mag",
+        help=(
+            "Maximum estimated peak comet apparent magnitude "
+            f"(default: {COMET_MAX_MAGNITUDE:g}; predictions are approximate)."
+        ),
+    )
+    parser.add_argument(
         "--image-limit",
         type=int,
         default=None,
@@ -283,7 +295,7 @@ def _build_runners(
         ).run(min_item_size=args.mon_object_min_size),
         "solar_system": lambda: SolarSystemPipeline(
             _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
-        ).run(max_mag=args.asteroid_max_mag),
+        ).run(max_mag=args.asteroid_max_mag, comet_max_mag=args.comet_max_mag),
         "images": lambda: ImagePipeline(
             _SOURCES_DIR, _OUTPUT_DIR, cache_dir=_CACHE_DIR, debug=args.debug
         ).run(limit=args.image_limit),

@@ -3,6 +3,7 @@
   import { get } from 'svelte/store'
   import { projectToPixel, isOnScreen } from '../lib/skymath.js'
   import { isAboveHorizon, getLST } from '../lib/horizon.js'
+  import { cometPosition } from '../lib/cometPosition.js'
   import { theme } from '../stores/theme.js'
   import { getMeta, getObjectImage } from '../lib/db.js'
   import { selectedObject } from '../stores/selectedObject.js'
@@ -36,6 +37,7 @@
   export let magLimitOverride = null
   export let finderMode = false
   export let showSolarSystem = true
+  export let showSelectedMarker = true
   export let overlayArrows = []
   export let starRadiusScale = 1
   export let nightlyStarRadiusScale = 1.5
@@ -95,6 +97,7 @@
     showDsos
     showHorizon
     showSolarSystem
+    showSelectedMarker
     magLimitOverride
     finderMode
     overlayArrows
@@ -418,6 +421,27 @@
       }
     }
 
+    for (const comet of solarSystem.comets ?? []) {
+      try {
+        const pos = cometPosition(comet, t)
+        bodies.push({
+          name: comet.name,
+          symbol: '',
+          color: '#888888',
+          type: 'comet',
+          bodyClass: 'comet',
+          imageId: null,
+          ra: pos.ra,
+          dec: pos.dec,
+          mag: pos.mag,
+          distAU: pos.distAU,
+          above: isAboveHorizon(pos.ra, pos.dec, latV, lonV, timeV),
+        })
+      } catch {
+        /* ignore */
+      }
+    }
+
     solarSystemBodies = bodies
     solarSystemPositions.set(bodies)
     dirty = true
@@ -481,10 +505,21 @@
       const img = planetImages.get(body.name.toLowerCase())
       const useImage = img && imgR >= 3
 
+      // Comets have no fixed physical color of their own — render them like an
+      // ordinary uncoloured star (the same fallback used for stars without a
+      // catalogued spectral colour) so they read as "a star that grew a tail"
+      // rather than a faint, indistinct dot.
+      const starLikeColor = nightly ? '#ff0000' : '#ffffff'
+
       let dotR
       if (body.type === 'sun') dotR = 10
       else if (body.type === 'moon') dotR = 7
       else if (body.type === 'planet') dotR = 5
+      // Comet magnitude estimates are rough (see cometPosition.js) and often
+      // sit right at the display's faint end, where the shared star-scaling
+      // curve shrinks toward a near-invisible ~0.12vmin dot — floor it well
+      // above that so a comet, once shown at all, stays clearly identifiable.
+      else if (body.type === 'comet') dotR = Math.max(4.5, starRadius(body.mag))
       else dotR = 3
 
       const labelR = useImage ? imgR : dotR
@@ -499,6 +534,30 @@
           _drawPhaseOverlay(ctx, pt.px, pt.py, imgR, body.phaseFraction, body.litOnRight ?? false)
         }
         ctx.restore()
+      } else if (body.type === 'comet') {
+        // Head (star-like dot) plus a short tail, mirroring the comet glyph
+        // used elsewhere in the app (ObservationObjectSymbol.svelte).
+        const tailLen = dotR * 3.5
+        const tailAngle = -Math.PI / 4 // up-and-to-the-right, matching the glyph
+        const tx = pt.px + Math.cos(tailAngle) * tailLen
+        const ty = pt.py + Math.sin(tailAngle) * tailLen
+        // A comet marker exists to be noticed — don't let it fade toward
+        // invisible just because it's below the horizon right now, the way
+        // routine planet dots do.
+        const cometAlpha = body.above ? 1 : 0.45
+        ctx.strokeStyle = starLikeColor
+        ctx.lineCap = 'round'
+        ctx.lineWidth = Math.max(1, dotR * 0.35)
+        ctx.globalAlpha = cometAlpha * 0.6
+        ctx.beginPath()
+        ctx.moveTo(pt.px, pt.py)
+        ctx.lineTo(tx, ty)
+        ctx.stroke()
+        ctx.globalAlpha = cometAlpha
+        ctx.beginPath()
+        ctx.arc(pt.px, pt.py, dotR, 0, Math.PI * 2)
+        ctx.fillStyle = starLikeColor
+        ctx.fill()
       } else {
         const color =
           body.type === 'sun'
@@ -531,7 +590,8 @@
           ctx.fillText(body.symbol, pt.px, pt.py - labelR - 1)
         }
 
-        ctx.fillStyle = nightly ? 'rgba(204,68,0,0.85)' : 'rgba(255,255,200,0.85)'
+        ctx.fillStyle =
+          body.type === 'comet' ? starLikeColor : nightly ? 'rgba(204,68,0,0.85)' : 'rgba(255,255,200,0.85)'
         ctx.font = '10px system-ui, sans-serif'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'top'
@@ -1015,7 +1075,7 @@
   }
 
   function drawSelectedMarker(ctx) {
-    if (!currentSelectedObj?.pos) return
+    if (!showSelectedMarker || !currentSelectedObj?.pos) return
     const [ra, dec] = currentSelectedObj.pos
     const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
     if (!pt || !isOnScreen(pt.px, pt.py, W, H, 30)) return

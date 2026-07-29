@@ -74,6 +74,21 @@
       <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.2" />
       <circle cx="10" cy="10" r="1.5" fill="currentColor" />
     </svg>
+  {:else if kind === 'comet'}
+    <svg viewBox="0 0 20 20" class="svg" fill="none">
+      <circle cx="7" cy="13" r="2.5" fill="currentColor" />
+      <line x1="9" y1="11" x2="17" y2="3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+      <line
+        x1="9"
+        y1="12.5"
+        x2="16"
+        y2="6.5"
+        stroke="currentColor"
+        stroke-width="1.1"
+        stroke-linecap="round"
+        opacity="0.6"
+      />
+    </svg>
   {:else if isSolar(kind)}
     <span class="glyph">{solarGlyph[kind]}</span>
   {:else}

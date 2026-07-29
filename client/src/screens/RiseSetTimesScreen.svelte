@@ -1,10 +1,12 @@
 <script>
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, onMount } from 'svelte'
   import {
     computeBodyEphemeris,
+    computeCometEphemeris,
     computeNightWindow,
     computeAstronomicalNightWindow,
   } from '../lib/solarBodyEphemeris.js'
+  import { getMeta } from '../lib/db.js'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
   import RiseIcon from '../icons/RiseIcon.svelte'
@@ -20,6 +22,12 @@
   const dispatch = createEventDispatcher()
 
   const PLANET_NAMES = ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto']
+
+  let comets = []
+  onMount(async () => {
+    const solarSystem = await getMeta('solar_system')
+    comets = solarSystem?.comets ?? []
+  })
 
   function formatTime(astroTime) {
     if (!astroTime) return '—'
@@ -43,15 +51,23 @@
     return w ? `${formatHM(w.start)}-${formatHM(w.end)}` : '—'
   }
 
-  // Recomputed whenever the received `time` changes (mount included) — no
-  // timer, since this is a snapshot for a given observing date, not a live
-  // clock display.
+  // Recomputed whenever the received `time` (or the loaded comet list)
+  // changes — no timer, since this is a snapshot for a given observing date,
+  // not a live clock display.
   $: rows = (() => {
     const moon = computeBodyEphemeris('Moon', lat, lon, time)
     const planets = PLANET_NAMES.map((name) => computeBodyEphemeris(name, lat, lon, time)).sort(
       (a, b) => a.distanceAu - b.distanceAu,
     )
-    return [moon, ...planets]
+    // Comet brightness/visibility predictions are rough estimates — only
+    // list ones currently observable that night and currently brighter than
+    // mag 9 (the catalog's peak-magnitude cutoff doesn't guarantee that —
+    // a comet can be included for its perihelion peak but much fainter now).
+    const cometRows = comets
+      .map((c) => ({ ...computeCometEphemeris(c, lat, lon, time), isComet: true }))
+      .filter((r) => r.observableAtNight !== false && r.mag <= 9.0)
+      .sort((a, b) => a.distanceAu - b.distanceAu)
+    return [moon, ...planets, ...cometRows]
   })()
 
   $: headerDate = `Rise/Set Times for ${time.getDate()}. ${time.getMonth() + 1}. ${time.getFullYear()}`
@@ -97,7 +113,9 @@
       {#each rows as row (row.name)}
         <div class="table-row" class:row-faint={row.observableAtNight === false}>
           <span class="col-object">
-            <span class="obj-icon"><ObservationObjectSymbol kind={row.name.toLowerCase()} /></span>
+            <span class="obj-icon">
+              <ObservationObjectSymbol kind={row.isComet ? 'comet' : row.name.toLowerCase()} />
+            </span>
             {row.name}
           </span>
           <span class="col-const">{row.constellationAbbr}</span>

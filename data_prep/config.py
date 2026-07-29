@@ -217,3 +217,19 @@ MPCORB_FILENAME: str = "MPCORB.DAT.gz"
 #: Maximum apparent magnitude at opposition for asteroids to include.
 #: Set to 9.0 to match approximate reach of 8×50 binoculars.
 ASTEROID_MAX_MAGNITUDE: float = 9.0
+
+# ---------------------------------------------------------------------------
+# Comets (MPC Comet Orbit Database)
+# ---------------------------------------------------------------------------
+
+#: MPC comet elements — orbital elements for all known comets.
+#: Source: https://www.minorplanetcenter.net/iau/MPCORB/
+#: Format: Fixed-width text, updated regularly. Licence: Public domain.
+COMET_ELEMENTS_URL: str = "https://www.minorplanetcenter.net/iau/MPCORB/CometEls.txt"
+COMET_ELEMENTS_FILENAME: str = "CometEls.txt"
+
+#: Maximum estimated peak apparent magnitude for comets to include.
+#: Comet brightness predictions are notoriously unreliable (real comets often
+#: over- or under-perform the catalogue's magnitude law), so this is a rough
+#: filter, not a promise of visibility.
+COMET_MAX_MAGNITUDE: float = 9.0

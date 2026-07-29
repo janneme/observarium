@@ -64,8 +64,10 @@
     } else calMonth++
   }
   function selectDay(d) {
-    if (d) selDate = new Date(calYear, calMonth, d)
+    if (!d) return
+    selDate = new Date(calYear, calMonth, d)
     applyLive()
+    close()
   }
 
   // ── Time ────────────────────────────────────────────────

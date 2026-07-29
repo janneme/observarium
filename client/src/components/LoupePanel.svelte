@@ -49,7 +49,7 @@
         if (m > magLimit) continue
       } else if (obj.type === 'dso') {
         if ((obj.mag ?? 8) > dsoMagLim) continue
-      } else {
+      } else if (obj.type !== 'solar_system_body') {
         continue
       }
       const [ra, dec] = obj.pos

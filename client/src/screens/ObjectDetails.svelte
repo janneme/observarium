@@ -1,10 +1,16 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
   import { AstroTime, MoonPhase, Illumination, Body, DefineStar } from 'astronomy-engine'
-  import { SOLAR_BODY_NAME_MAP, computeRiseSetTransit } from '../lib/solarBodyEphemeris.js'
+  import { SOLAR_BODY_NAME_MAP, computeRiseSetTransit, computeCometEphemeris } from '../lib/solarBodyEphemeris.js'
   import { selectedObject } from '../stores/selectedObject.js'
   import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
-  import { getObservationByDate, getObjectImage, getDoubleStarNear, resolveObservationDateKey } from '../lib/db.js'
+  import {
+    getObservationByDate,
+    getObjectImage,
+    getDoubleStarNear,
+    resolveObservationDateKey,
+    getMeta,
+  } from '../lib/db.js'
   import { applyDsPatch } from '../lib/customObjects.js'
   import { getAllLists, getListsForObject, addObjectToList, removeObjectFromLists } from '../lib/lists.js'
   import ObservationFormPanel from '../components/ObservationFormPanel.svelte'
@@ -102,6 +108,17 @@
     return m.toFixed(2)
   }
 
+  // Comet orbital elements aren't in the tapped object itself (just name/
+  // bodyClass) — look them up from solar_system.json's `comets` array,
+  // loaded lazily and cached for the component's lifetime.
+  let _cometElementsPromise = null
+  async function findCometElements(name) {
+    if (!_cometElementsPromise) _cometElementsPromise = getMeta('solar_system')
+    const solarSystem = await _cometElementsPromise
+    const target = String(name || '').toLowerCase()
+    return (solarSystem?.comets ?? []).find((c) => String(c.name || '').toLowerCase() === target) ?? null
+  }
+
   function catNumbers(o) {
     const parts = []
     if (o.bay) parts.push(o.constellation ? `${o.bay} ${o.constellation}` : o.bay)
@@ -180,6 +197,7 @@
       if (cls === 'planet') return ['Planet']
       if (cls === 'dwarf_planet') return ['Dwarf planet']
       if (cls === 'asteroid') return ['Asteroid']
+      if (cls === 'comet') return ['Comet']
       if (cls === 'moon') return ['Moon']
       if (cls === 'star') return ['Star']
       const name = String(o.name || '').toLowerCase()
@@ -327,31 +345,43 @@
     try {
       const astroNow = new AstroTime(time)
 
-      let body
-      if (o.type === 'star' || o.type === 'dso' || o.type === 'double_star') {
-        const distLy = o.dist ? o.dist * 3.26156 : 1000
-        DefineStar(Body.Star1, raHours(o), decDeg(o), distLy)
-        body = Body.Star1
+      if (o.bodyClass === 'comet') {
+        // Comets aren't part of astronomy-engine's Body enum — their
+        // position comes from our own orbital-element propagator instead.
+        const cometElem = await findCometElements(o.name)
+        if (cometElem) {
+          const ephemeris = computeCometEphemeris(cometElem, lat, lon, time)
+          riseTime = ephemeris.riseTime
+          setTime = ephemeris.setTime
+          transitAltitude = ephemeris.maxAltitudeDeg
+        }
       } else {
-        // solar system fallback
-        body = SOLAR_BODY_NAME_MAP[o.name] ?? Body.Sun
-      }
+        let body
+        if (o.type === 'star' || o.type === 'dso' || o.type === 'double_star') {
+          const distLy = o.dist ? o.dist * 3.26156 : 1000
+          DefineStar(Body.Star1, raHours(o), decDeg(o), distLy)
+          body = Body.Star1
+        } else {
+          // solar system fallback
+          body = SOLAR_BODY_NAME_MAP[o.name] ?? Body.Sun
+        }
 
-      const riseSetTransit = computeRiseSetTransit(body, lat, lon, time)
-      riseTime = riseSetTransit.riseTime
-      setTime = riseSetTransit.setTime
-      transitAltitude = riseSetTransit.maxAltitudeDeg
+        const riseSetTransit = computeRiseSetTransit(body, lat, lon, time)
+        riseTime = riseSetTransit.riseTime
+        setTime = riseSetTransit.setTime
+        transitAltitude = riseSetTransit.maxAltitudeDeg
 
-      // Moon phase
-      if (o.name === 'Moon' || body === Body.Moon) {
-        moonPhaseDeg = MoonPhase(astroNow)
-        moonIllumination = (1 - Math.cos((moonPhaseDeg * Math.PI) / 180)) / 2
-      }
+        // Moon phase
+        if (o.name === 'Moon' || body === Body.Moon) {
+          moonPhaseDeg = MoonPhase(astroNow)
+          moonIllumination = (1 - Math.cos((moonPhaseDeg * Math.PI) / 180)) / 2
+        }
 
-      // Inner planet phase
-      if (o.inner || body === Body.Mercury || body === Body.Venus) {
-        const illum = Illumination(body, astroNow)
-        planetPhaseFraction = illum.phase_fraction
+        // Inner planet phase
+        if (o.inner || body === Body.Mercury || body === Body.Venus) {
+          const illum = Illumination(body, astroNow)
+          planetPhaseFraction = illum.phase_fraction
+        }
       }
     } catch (err) {
       console.warn('[ObjectDetails] astronomy computation failed:', err)
@@ -470,7 +500,10 @@
       if (Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1) return 'variable_star'
       return 'star'
     }
-    if (obj.type === 'solar_system_body') return String(obj.name || '').toLowerCase() || 'generic'
+    if (obj.type === 'solar_system_body') {
+      if (obj.bodyClass === 'comet') return 'comet'
+      return String(obj.name || '').toLowerCase() || 'generic'
+    }
     const type = String(obj.dsoType || '').toLowerCase()
     if (type === 'open cluster') return 'open_cluster'
     if (type === 'globular cluster') return 'globular_cluster'
