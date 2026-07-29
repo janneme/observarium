@@ -493,7 +493,7 @@
 
   :global([data-theme='nightly']) .panel {
     background: #110000;
-    color: #ff8080;
+    color: #ff0000;
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8);
   }
 

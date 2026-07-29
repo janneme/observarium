@@ -7,13 +7,25 @@
   export let id = ''
   export let mask = false
   export let outlined = false
+  // Real <input> attributes. Only the login form sets these meaningfully
+  // (type="password"/autocomplete="current-password" etc.) — every other
+  // caller (search boxes, list/telescope names, ...) is fine with the
+  // text/off defaults, which keep the browser from offering unrelated
+  // autofill suggestions on them.
+  export let type = 'text'
+  export let name = ''
+  export let autocomplete = 'off'
 
   const dispatch = createEventDispatcher()
 
   let cursor = 0
+  let inputEl
 
+  // Fallback path when execCommand is unsupported/fails: a plain scripted
+  // .value assignment, which fires no trusted input event at all.
   function setValue(v) {
     value = v
+    if (inputEl && inputEl.value !== v) inputEl.value = v
     dispatch('input', value)
   }
 
@@ -21,7 +33,36 @@
     cursor = Math.max(0, Math.min(value.length, pos))
   }
 
+  // Some browsers have historically restricted selectionStart/setSelectionRange
+  // on type="password" inputs (a security-motivated quirk, since relaxed in
+  // most engines but not worth relying on) — guard against a thrown error
+  // there breaking typing entirely.
+  function syncNativeSelection() {
+    try {
+      inputEl?.setSelectionRange(cursor, cursor)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Insert/delete via execCommand rather than a direct `.value =`
+  // assignment — the latter is a silent scripted mutation that fires no
+  // input event at all (or, if dispatched manually, only an untrusted one),
+  // which browsers' save-password heuristics specifically distrust: it
+  // looks identical to a page quietly prefilling the field rather than the
+  // user actually typing. execCommand runs through the browser's real
+  // text-editing pipeline instead, producing a genuine trusted `input`
+  // event — the standard trick custom/virtual-keyboard widgets use to stay
+  // compatible with autofill and "save this password?" prompts. Native
+  // selection is synced to our own tracked `cursor` first since real
+  // keydown is blocked (see the input's on:keydown below), so the browser's
+  // own selection state can otherwise drift from ours.
   function insertChar(ch) {
+    if (inputEl) {
+      inputEl.focus()
+      syncNativeSelection()
+      if (document.execCommand && document.execCommand('insertText', false, ch)) return
+    }
     const before = value.slice(0, cursor)
     const after = value.slice(cursor)
     setValue(before + ch + after)
@@ -30,6 +71,11 @@
 
   function backspace() {
     if (cursor === 0) return
+    if (inputEl) {
+      inputEl.focus()
+      syncNativeSelection()
+      if (document.execCommand && document.execCommand('delete', false)) return
+    }
     const before = value.slice(0, cursor)
     const after = value.slice(cursor)
     setValue(before.slice(0, -1) + after)
@@ -38,9 +84,11 @@
 
   function moveLeft() {
     if (cursor > 0) setCursor(cursor - 1)
+    syncNativeSelection()
   }
   function moveRight() {
     if (cursor < value.length) setCursor(cursor + 1)
+    syncNativeSelection()
   }
   function moveUp() {
     /* no-op for single-line */
@@ -49,11 +97,10 @@
     /* no-op for single-line */
   }
 
-  let el
   let focused = false
 
   export function focus() {
-    el?.focus()
+    inputEl?.focus()
   }
 
   function onFocus() {
@@ -67,14 +114,28 @@
     unregister(api)
   }
 
+  // Real DOM `input` events on the native element — fires both for
+  // insertChar/backspace's own execCommand calls (see above) and for
+  // browser/password-manager autofill, which sets .value directly. Either
+  // way, the native element's own value/selection is the source of truth
+  // here (autofill has no notion of our tracked `cursor` to preserve, and
+  // execCommand already moved the real caret to the right place) — physical
+  // keydown typing is blocked (see the input's on:keydown below), so this
+  // never needs to reconcile a real caret against a stale tracked one.
+  function onNativeInput() {
+    value = inputEl.value
+    setCursor(inputEl.selectionStart ?? value.length)
+    dispatch('input', value)
+  }
+
   function enter() {
     dispatch('enter')
-    el.blur()
+    inputEl.blur()
   }
 
   function shiftEnter() {
     dispatch('shiftEnter')
-    el.blur()
+    inputEl.blur()
   }
 
   function tab() {
@@ -92,71 +153,102 @@
   $: if (cursor > value.length) cursor = value.length
 </script>
 
-<div
-  bind:this={el}
-  tabindex="0"
-  class="custom-input"
-  class:outlined
-  on:focus={onFocus}
-  on:blur={onBlur}
-  role="textbox"
-  aria-label="custom input"
->
-  <!-- hidden native input so <label for="..."> associates correctly -->
-  {#if id}
-    <input
-      {id}
-      {value}
-      tabindex="-1"
-      aria-hidden="true"
-      style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;"
-    />
-  {/if}
+<div class="custom-input" class:outlined>
+  <!-- The real, focusable field — kept visible-sized and in-place (not
+       offscreen) so browsers treat it as a genuine input worth autofilling
+       or offering to save (this is what didn't work before: a hidden,
+       off-screen input that browsers/password managers ignore). Real
+       keystrokes are blocked (preventDefault on keydown) since text entry
+       is meant to go through the app's own nightly-safe on-screen keyboard
+       only — inputmode="none" additionally tells mobile browsers not to pop
+       up their own on-screen keyboard when this gets focus. Visually
+       transparent; the decorative spans below are what's actually seen. -->
+  <input
+    bind:this={inputEl}
+    {id}
+    {type}
+    {name}
+    {autocomplete}
+    inputmode="none"
+    class="native-input"
+    aria-label={id ? undefined : placeholder || undefined}
+    {value}
+    on:focus={onFocus}
+    on:blur={onBlur}
+    on:input={onNativeInput}
+    on:keydown|preventDefault
+  />
 
-  {#if focused}
-    {#if value.length}
-      {#if mask}
-        <span class="before">{'•'.repeat(cursor)}</span><span class="caret" aria-hidden="true"></span><span
-          class="after">{'•'.repeat(value.length - cursor)}</span
-        >
+  <div class="display" aria-hidden="true">
+    {#if focused}
+      {#if value.length}
+        {#if mask}
+          <span class="before">{'•'.repeat(cursor)}</span><span class="caret"></span><span class="after"
+            >{'•'.repeat(value.length - cursor)}</span
+          >
+        {:else}
+          <span class="before">{value.slice(0, cursor)}</span><span class="caret"></span><span class="after"
+            >{value.slice(cursor)}</span
+          >
+        {/if}
       {:else}
-        <span class="before">{value.slice(0, cursor)}</span><span class="caret" aria-hidden="true"></span><span
-          class="after">{value.slice(cursor)}</span
-        >
+        <span class="caret"></span><span class="placeholder">{placeholder}</span>
       {/if}
+    {:else if value.length}
+      <span>{mask ? '•'.repeat(value.length) : value}</span>
     {:else}
-      <span class="caret" aria-hidden="true"></span><span class="placeholder">{placeholder}</span>
+      <span class="placeholder">{placeholder}</span>
     {/if}
-  {:else if value.length}
-    <span>{mask ? '•'.repeat(value.length) : value}</span>
-  {:else}
-    <span class="placeholder">{placeholder}</span>
-  {/if}
+  </div>
 </div>
 
 <style>
   .custom-input {
+    position: relative;
     min-height: 2rem;
     padding: 0.25rem 0.5rem;
     border: 1px solid rgba(127, 127, 127, 0.08);
     border-radius: 4px;
-    outline: none;
     font-size: 1.2rem;
     font-family: monospace;
+    display: flex;
+    align-items: center;
   }
-  .custom-input:focus {
+  .custom-input:focus-within {
     box-shadow: 0 0 0 2px rgba(59, 99, 255, 0.06);
   }
-  :global([data-theme='nightly']) .custom-input:focus {
+  :global([data-theme='nightly']) .custom-input:focus-within {
     box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.25);
   }
   .custom-input.outlined {
     border-color: rgba(127, 127, 127, 0.45);
   }
-  .custom-input.outlined:focus {
+  .custom-input.outlined:focus-within {
     border-color: rgba(127, 127, 127, 0.65);
     box-shadow: 0 0 0 2px rgba(59, 99, 255, 0.25);
   }
+
+  .native-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: transparent;
+    caret-color: transparent;
+    font: inherit;
+    opacity: 0;
+  }
+
+  .display {
+    position: relative;
+    width: 100%;
+    pointer-events: none;
+  }
+
   .placeholder {
     opacity: 0.5;
   }

@@ -36,10 +36,12 @@
   }
 </script>
 
-<div class="login-form">
+<form class="login-form" on:submit|preventDefault={handleSubmit}>
   <label for="lf-username">Username</label>
   <CustomInput
     id="lf-username"
+    name="username"
+    autocomplete="username"
     bind:value={username}
     bind:this={usernameRef}
     outlined={true}
@@ -51,6 +53,9 @@
   <label for="lf-password">Password</label>
   <CustomInput
     id="lf-password"
+    name="password"
+    type="password"
+    autocomplete="current-password"
     bind:value={password}
     bind:this={passwordRef}
     outlined={true}
@@ -64,10 +69,10 @@
     <div class="error-msg">{errorMsg}</div>
   {/if}
 
-  <button class="submit-btn" type="button" on:click={handleSubmit} disabled={loading}>
+  <button class="submit-btn" type="submit" disabled={loading}>
     {loading ? 'Logging in…' : submitLabel}
   </button>
-</div>
+</form>
 
 <style>
   .login-form {
@@ -86,6 +91,10 @@
     font-size: 0.82rem;
     color: #ff9a9a;
     padding: 0.15rem 0;
+  }
+
+  :global([data-theme='nightly']) .error-msg {
+    color: #cc0000;
   }
 
   .submit-btn {
