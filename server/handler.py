@@ -135,6 +135,18 @@ def handle_images_hash() -> dict:
         return {"hash": None}
 
 
+
+# Manifest URLs are all presigned in one batch, at the moment the client
+# fetches the manifest, then downloaded one at a time in a single client-side
+# pass (see datasync.js) rather than re-presigned partway through. The
+# default 300s (see _generate_presigned_get) is enough for a fast connection
+# but not for a full mag-14 download over a slow mobile one, where the later
+# chunks' URLs can go stale before the client gets to them — surfaced to the
+# user as a 403 partway through. An hour comfortably covers even a slow full
+# sync of the largest set.
+MANIFEST_URL_EXPIRES_SECONDS = 3600
+
+
 def handle_manifest(mag: int | None = None) -> dict:
     """Read manifest.json; inject presigned URLs for `mag` set when mag is given."""
     backend = storage_backend.get_backend()
@@ -143,13 +155,15 @@ def handle_manifest(mag: int | None = None) -> dict:
         for s in manifest.get("sets", []):
             if s.get("mag") == mag:
                 s["stars_t1"]["url"] = backend.generate_presigned_get(
-                    s["stars_t1"]["filename"]
+                    s["stars_t1"]["filename"], MANIFEST_URL_EXPIRES_SECONDS
                 )
                 s["objects"]["url"] = backend.generate_presigned_get(
-                    s["objects"]["filename"]
+                    s["objects"]["filename"], MANIFEST_URL_EXPIRES_SECONDS
                 )
                 for chunk in s.get("t2_chunks", []):
-                    chunk["url"] = backend.generate_presigned_get(chunk["filename"])
+                    chunk["url"] = backend.generate_presigned_get(
+                        chunk["filename"], MANIFEST_URL_EXPIRES_SECONDS
+                    )
                 break
     return manifest
 

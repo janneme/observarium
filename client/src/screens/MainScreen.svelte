@@ -7,6 +7,7 @@
   import AboutPanel from '../components/AboutPanel.svelte'
   import DataSyncPanel from '../components/DataSyncPanel.svelte'
   import SyncSetupScreen from './SyncSetupScreen.svelte'
+  import DataSourceScreen from './DataSourceScreen.svelte'
   import SyncReportScreen from './SyncReportScreen.svelte'
   import FinderPanel from '../components/FinderPanel.svelte'
   import LoupePanel from '../components/LoupePanel.svelte'
@@ -100,6 +101,8 @@
   let showPicker = false
   let showAbout = false
   let showSync = false
+  let showDataSourcePicker = false
+  let updateSource = 'local'
   let showSyncSetup = false
   let showSyncReport = false
   let syncCategories = {
@@ -473,6 +476,18 @@
     }
   }
 
+  // The dev server's magnitude sets can differ from the deployed cloud
+  // one's, so which backend to check must be picked before the manifest is
+  // even fetched (DataSyncPanel fetches it as soon as it mounts) — only
+  // meaningful in dev, since production has no local backend to choose.
+  function openDataUpdate() {
+    if (import.meta.env.DEV) {
+      showDataSourcePicker = true
+    } else {
+      showSync = true
+    }
+  }
+
   function openObservationSync() {
     const { valid, nearExpiry } = getTokenStatus()
     if (!valid || nearExpiry) {
@@ -731,7 +746,7 @@
     }
     if (e.key === 'u') {
       menuOpen = false
-      showSync = true
+      openDataUpdate()
       e.preventDefault()
       return
     }
@@ -899,7 +914,7 @@
       showAbout = true
     }}
     on:update={() => {
-      showSync = true
+      openDataUpdate()
     }}
     on:telescopes={() => {
       showTelescopes = true
@@ -963,6 +978,19 @@
     <AboutPanel
       on:close={() => {
         showAbout = false
+      }}
+    />
+  {/if}
+
+  {#if showDataSourcePicker}
+    <DataSourceScreen
+      bind:source={updateSource}
+      on:close={() => {
+        showDataSourcePicker = false
+      }}
+      on:selected={() => {
+        showDataSourcePicker = false
+        showSync = true
       }}
     />
   {/if}
