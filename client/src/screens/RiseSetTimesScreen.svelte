@@ -138,7 +138,16 @@
               {formatTime(row.setTime)}
             {/if}
           </span>
-          <span class="col-icon">{formatAltitude(row.maxAltitudeDeg)}</span>
+          <span class="col-icon max-alt-cell">
+            {#if row.observableAtNight === false}
+              <span>—</span>
+            {:else}
+              <span>{formatAltitude(row.maxAltitudeAtNightDeg)}</span>
+              {#if row.maxAltitudeAtNightTime}
+                <span class="max-alt-time">{formatHM(row.maxAltitudeAtNightTime)}</span>
+              {/if}
+            {/if}
+          </span>
         </div>
       {/each}
     </div>
@@ -271,6 +280,16 @@
     align-items: center;
     gap: 0.4rem;
     font-size: 1rem;
+  }
+
+  .max-alt-cell {
+    flex-direction: column;
+    gap: 0.05rem;
+  }
+
+  .max-alt-time {
+    font-size: 0.72em;
+    opacity: 0.7;
   }
 
   .obj-icon {

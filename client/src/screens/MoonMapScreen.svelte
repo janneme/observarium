@@ -1,12 +1,13 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte'
-  import { MoonPhase, Observer, AstroTime, SearchRiseSet, SearchHourAngle, Body } from 'astronomy-engine'
+  import { MoonPhase, Observer, AstroTime, SearchRiseSet, Body } from 'astronomy-engine'
   import MoonMapHeader from '../components/MoonMapHeader.svelte'
   import MoonCanvas from '../components/MoonCanvas.svelte'
   import MoonDisambiguationOverlay from '../components/MoonDisambiguationOverlay.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
   import ObservationFormPanel from '../components/ObservationFormPanel.svelte'
   import { getMeta } from '../lib/db.js'
+  import { computeRiseSetTransit } from '../lib/solarBodyEphemeris.js'
   import {
     flattenMoonFeatures,
     realViewingConditions,
@@ -74,13 +75,21 @@
   function updateMoonRiseSetPhase() {
     try {
       const phaseDeg = MoonPhase(time)
-      moonPhasePercent = Math.round((1 - Math.cos((phaseDeg * Math.PI) / 180)) * 50)
+      const illumPct = Math.round((1 - Math.cos((phaseDeg * Math.PI) / 180)) * 50)
+      // Negative while waning (past full, phase > 180deg) - positive illumination
+      // % alone doesn't distinguish a waxing crescent from a waning one.
+      moonPhasePercent = phaseDeg > 180 ? -illumPct : illumPct
       const observer = new Observer(lat, lon, 0)
       const startTime = new AstroTime(time)
       moonRiseTime = SearchRiseSet(Body.Moon, observer, +1, startTime, 1)
       moonSetTime = SearchRiseSet(Body.Moon, observer, -1, startTime, 1)
-      const transit = SearchHourAngle(Body.Moon, observer, 0, startTime, +1)
-      moonMaxAltitude = transit?.hor?.altitude ?? null
+      // Max altitude *during tonight* (current-or-upcoming night), not the
+      // unconstrained daily transit, which can fall in broad daylight. Uses
+      // the same night-window definition (nautical twilight) as Rise/Set
+      // Times, so the two screens agree.
+      const { maxAltitudeAtNightDeg, maxAltitudeAtNightTime } = computeRiseSetTransit(Body.Moon, lat, lon, time)
+      moonMaxAltitude =
+        maxAltitudeAtNightDeg != null ? { altitude: maxAltitudeAtNightDeg, time: maxAltitudeAtNightTime } : null
     } catch {
       moonPhasePercent = null
       moonRiseTime = null

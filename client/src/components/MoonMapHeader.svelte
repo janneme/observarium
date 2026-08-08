@@ -28,7 +28,12 @@
 
   function formatRiseSetTime(astroTime) {
     if (!astroTime) return '—'
-    const d = astroTime.date
+    return formatHM(astroTime.date)
+  }
+
+  function formatHM(date) {
+    if (!date) return '—'
+    const d = new Date(date)
     return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
   }
 </script>
@@ -48,7 +53,7 @@
           selectedFeature,
         )}{/if}
     {:else if moonPhasePercent !== null}
-      {moonPhasePercent}%,
+      {moonPhasePercent}%
       <span class="rise-set"
         ><span class="rs-icon"><RiseIcon size="1.2rem" /></span> {formatRiseSetTime(moonRiseTime)}</span
       >
@@ -57,7 +62,9 @@
       >
       {#if moonMaxAltitude !== null}
         <span class="rise-set"
-          ><span class="rs-icon"><MaxHeightIcon size="1.2rem" /></span> {moonMaxAltitude.toFixed(1)}°</span
+          ><span class="rs-icon"><MaxHeightIcon size="1.2rem" /></span>
+          {moonMaxAltitude.altitude.toFixed(1)}°
+          <span class="max-alt-time">({formatRiseSetTime(moonMaxAltitude.time)})</span></span
         >
       {/if}
     {/if}
@@ -131,6 +138,11 @@
   .rs-icon {
     display: inline-flex;
     color: var(--accent);
+  }
+
+  .max-alt-time {
+    font-size: 0.78em;
+    opacity: 0.8;
   }
 
   .filler {

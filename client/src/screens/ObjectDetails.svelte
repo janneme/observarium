@@ -353,7 +353,10 @@
           const ephemeris = computeCometEphemeris(cometElem, lat, lon, time)
           riseTime = ephemeris.riseTime
           setTime = ephemeris.setTime
-          transitAltitude = ephemeris.maxAltitudeDeg
+          transitAltitude =
+            ephemeris.maxAltitudeAtNightDeg != null
+              ? { altitude: ephemeris.maxAltitudeAtNightDeg, time: ephemeris.maxAltitudeAtNightTime }
+              : null
         }
       } else {
         let body
@@ -369,7 +372,10 @@
         const riseSetTransit = computeRiseSetTransit(body, lat, lon, time)
         riseTime = riseSetTransit.riseTime
         setTime = riseSetTransit.setTime
-        transitAltitude = riseSetTransit.maxAltitudeDeg
+        transitAltitude =
+          riseSetTransit.maxAltitudeAtNightDeg != null
+            ? { altitude: riseSetTransit.maxAltitudeAtNightDeg, time: riseSetTransit.maxAltitudeAtNightTime }
+            : null
 
         // Moon phase
         if (o.name === 'Moon' || body === Body.Moon) {
@@ -689,6 +695,28 @@
         {/if}
       </section>
 
+      {#if riseTime !== null || setTime !== null}
+        <section class="info-section">
+          <div class="row">
+            <span class="label">Rise/Set Times</span>
+            <span class="value">
+              <span class="moon-rise-set">
+                <span class="rise-set"><span class="rs-icon"><RiseIcon size="1em" /></span> {formatTime(riseTime)}</span
+                >
+                <span class="rise-set"><span class="rs-icon"><SetIcon size="1em" /></span> {formatTime(setTime)}</span>
+                {#if transitAltitude !== null}
+                  <span class="rise-set"
+                    ><span class="rs-icon"><MaxHeightIcon size="1em" /></span>
+                    {transitAltitude.altitude.toFixed(1)}°
+                    <span class="max-alt-time">({formatTime(transitAltitude.time)})</span></span
+                  >
+                {/if}
+              </span>
+            </span>
+          </div>
+        </section>
+      {/if}
+
       {#if moonPhaseDeg !== null}
         <section class="info-section moon-section">
           <div class="moon-row">
@@ -699,14 +727,16 @@
               {/if}
             </svg>
             <span class="value">
-              {Math.round((moonIllumination ?? 0) * 100)}% illuminated,
+              {(moonPhaseDeg > 180 ? -1 : 1) * Math.round((moonIllumination ?? 0) * 100)}% illuminated,
               <span class="moon-rise-set">
                 <span class="rise-set"><span class="rs-icon"><RiseIcon size="1em" /></span> {formatTime(riseTime)}</span
                 >
                 <span class="rise-set"><span class="rs-icon"><SetIcon size="1em" /></span> {formatTime(setTime)}</span>
                 {#if transitAltitude !== null}
                   <span class="rise-set"
-                    ><span class="rs-icon"><MaxHeightIcon size="1em" /></span> {transitAltitude.toFixed(1)}°</span
+                    ><span class="rs-icon"><MaxHeightIcon size="1em" /></span>
+                    {transitAltitude.altitude.toFixed(1)}°
+                    <span class="max-alt-time">({formatTime(transitAltitude.time)})</span></span
                   >
                 {/if}
               </span>
@@ -1031,6 +1061,11 @@
     position: relative;
     top: 0.15em;
     color: var(--accent);
+  }
+
+  .max-alt-time {
+    font-size: 0.78em;
+    opacity: 0.8;
   }
 
   .sep-row {

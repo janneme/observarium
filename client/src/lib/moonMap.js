@@ -151,6 +151,127 @@ export function illumCos(latDeg, lonDeg, sunLonDeg) {
   return Math.cos(phi) * Math.cos(lambda)
 }
 
+// Inverse of projectPoint for a unit-radius orthographic disc: given on-disc
+// normalized (nx, ny), recover (lat, lon) — used both for terminator shading
+// and to resolve a tap's screen position back to a selenographic point.
+export function screenNormToLatLon(nx, ny, subLatDeg, subLonDeg) {
+  const rho = Math.min(1, Math.hypot(nx, ny))
+  const c = Math.asin(rho)
+  if (rho < 1e-6) return { lat: subLatDeg, lon: subLonDeg }
+  const phi0 = subLatDeg * D2R
+  const lat = (Math.asin(Math.cos(c) * Math.sin(phi0) + (ny * Math.sin(c) * Math.cos(phi0)) / rho) * 180) / Math.PI
+  const lon =
+    subLonDeg +
+    (Math.atan2(nx * Math.sin(c), rho * Math.cos(phi0) * Math.cos(c) - ny * Math.sin(phi0) * Math.sin(c)) * 180) /
+      Math.PI
+  return { lat, lon }
+}
+
+function angleDiff(a, b) {
+  // Shortest signed a-b, wrapped to (-pi, pi].
+  let d = (a - b) % (2 * Math.PI)
+  if (d > Math.PI) d -= 2 * Math.PI
+  if (d <= -Math.PI) d += 2 * Math.PI
+  return d
+}
+
+// The terminator (this app's simplified model: the great circle through the
+// poles at longitude sunLon +- 90 deg, i.e. the sub-solar point is always
+// treated as being on the equator — see illumCos) projects orthographically
+// to an exact ELLIPSE, not an arbitrary curve: any great circle projects to
+// an ellipse under orthographic projection. Its semi-major axis always
+// equals the disc radius (the ellipse is tangent to the limb at exactly two
+// "cusp" points); its semi-minor axis and rotation depend on
+// subLat/subLon/sunLon. This lets the phase boundary be drawn as one circle
+// arc (the lit part of the true limb) + one ellipse arc (the near-hemisphere
+// half of the terminator) — an exact shape, not a pixel grid. Derivation:
+// parametrize the terminator great circle in 3D as Q(t), project it the same
+// way projectPoint() does; Q(t) works out to x(t) = -cos(d) sin(t),
+// y(t) = cos(subLat) cos(t) + sin(subLat) sin(d) sin(t) with
+// d = subLon - sunLon — a standard "conjugate semi-diameter" ellipse
+// parametrization, whose axes/rotation follow from the 2x2 eigendecomposition
+// of the matrix built from C=(0, cos(subLat)) (the t=0 point) and
+// S=(-cos(d), sin(subLat)sin(d)) (the t=90 deg point). Validated numerically
+// against dense ground-truth sampling (project every point of the true
+// terminator great circle) across full, quarter, thin-crescent and gibbous
+// phases with nonzero libration — residual ~0 in all cases (see
+// moon_pipeline.md).
+//
+// Returns null when sunLonDeg is null (no terminator - Easy/Global scope).
+// Otherwise returns { theta, b, alphaNorm1, aLit, betaCusp1, ellipseDir }:
+// theta/b are the ellipse's rotation and semi-minor axis (semi-major is
+// always exactly 1); alphaNorm1 is cusp1's angle on the limb circle (in
+// normalized, math-standard, y-up space); betaCusp1 is that same cusp1's
+// parameter in the ellipse's own (rotated+scaled) local frame; aLit says
+// which of the two limb semicircles (split by the cusp-to-cusp diameter) is
+// lit; ellipseDir is the ellipse arc's traversal direction from cusp1.
+//
+// IMPORTANT for callers building the actual boundary path: cusp2 (the other
+// point where the terminator meets the limb) is always exactly antipodal to
+// cusp1, i.e. at ellipse parameter `betaCusp1 + PI` — a circle arc from
+// cusp1 (alphaNorm1) necessarily *ends* at cusp2, so an ellipse arc meant to
+// continue from there must *start* at cusp2's parameter, not cusp1's. Using
+// betaCusp1 directly as that start point (an early version of this code did)
+// leaves a phantom straight line connecting two near-antipodal points
+// instead — which, near a limb tangent to a roughly-vertical or -horizontal
+// diameter, renders as a bogus dead-straight ~50/50 split overriding the
+// real (correctly-elliptical) crescent/gibbous shape entirely.
+export function terminatorEllipseGeometry(subLatDeg, subLonDeg, sunLonDeg) {
+  if (sunLonDeg == null) return null
+  const csL = Math.cos(subLatDeg * D2R)
+  const sL = Math.sin(subLatDeg * D2R)
+  const delta = (subLonDeg - sunLonDeg) * D2R
+  const cD = Math.cos(delta)
+  const sD = Math.sin(delta)
+
+  // Conjugate semi-diameters C (at t=0), S (at t=90deg) of the projected
+  // ellipse; theta/b are its rotation and semi-minor axis (semi-major is
+  // always exactly 1 — proved algebraically, see moon_pipeline.md).
+  const Cy = csL
+  const Sx = -cD
+  const Sy = sL * sD
+  const m11 = Sx * Sx
+  const m22 = Cy * Cy + Sy * Sy
+  const m12 = Sx * Sy
+  const theta = 0.5 * Math.atan2(2 * m12, m11 - m22)
+  const b = Math.abs(csL * cD)
+
+  const termPoint = (t) => ({ x: -cD * Math.sin(t), y: csL * Math.cos(t) + sL * sD * Math.sin(t) })
+  const depthC = (t) => sL * Math.cos(t) - csL * sD * Math.sin(t)
+  const localAngle = (x, y) => {
+    const lx = x * Math.cos(theta) + y * Math.sin(theta)
+    const ly = b > 1e-9 ? (-x * Math.sin(theta) + y * Math.cos(theta)) / b : 0
+    return Math.atan2(ly, lx)
+  }
+
+  // Cusp: where the terminator grazes the limb (depth == 0).
+  const tCusp = Math.abs(csL * sD) < 1e-12 && Math.abs(sL) < 1e-12 ? 0 : Math.atan2(sL, csL * sD)
+  const cusp1 = termPoint(tCusp)
+  const alphaNorm1 = Math.atan2(cusp1.y, cusp1.x) // cusp1's normalized-space angle
+
+  // Which of the two candidate 90 deg-offset midpoints (in t) is on the
+  // near/visible hemisphere (depth > 0)?
+  const cMid = depthC(tCusp + Math.PI / 2)
+  const nearMid = termPoint(cMid > 0 ? tCusp + Math.PI / 2 : tCusp - Math.PI / 2)
+  const betaCusp1 = localAngle(cusp1.x, cusp1.y)
+  const betaNearMid = localAngle(nearMid.x, nearMid.y) // always exactly betaCusp1 +- pi/2
+
+  // Which of the two semicircles of the true limb (split by the cusp-to-
+  // cusp diameter) is lit — one numeric sample suffices (see moon_pipeline.md).
+  const midNormA = alphaNorm1 + Math.PI / 2
+  const midPoint = screenNormToLatLon(Math.cos(midNormA), Math.sin(midNormA), subLatDeg, subLonDeg)
+  const aLit = illumCos(midPoint.lat, midPoint.lon, sunLonDeg) > 0
+
+  return {
+    theta,
+    b,
+    alphaNorm1,
+    aLit,
+    betaCusp1,
+    ellipseDir: angleDiff(betaNearMid, betaCusp1) > 0 ? 1 : -1,
+  }
+}
+
 // Derives the sun's selenographic longitude from the Moon's phase angle.
 // At full moon (phase=180) the sub-solar point coincides with the mean
 // sub-Earth longitude (whole near side lit); at new moon (phase=0) it's on

@@ -89,34 +89,51 @@ function searchAltitudeCrossing(altitudeFn, direction, startTime, limitDays, thr
   return null
 }
 
+// Returns { altitude, time } for whichever sample in [startTime,
+// startTime+limitDays] reaches the highest altitude.
 function maxAltitudeOverWindow(altitudeFn, startTime, limitDays) {
   const SAMPLES_PER_DAY = 144 // every 10 minutes
   const totalSamples = Math.max(1, Math.round(limitDays * SAMPLES_PER_DAY))
   let best = -90
+  let bestTime = startTime
   for (let i = 0; i <= totalSamples; i++) {
     const t = startTime.AddDays((i * limitDays) / totalSamples)
     const alt = altitudeFn(t)
-    if (alt > best) best = alt
+    if (alt > best) {
+      best = alt
+      bestTime = t
+    }
   }
-  return best
+  return { altitude: best, time: bestTime }
 }
 
 // Rise/set/transit-altitude for a target over the calendar day (local
 // midnight-to-midnight) containing `time`. `target` is a `Body` enum
 // (astronomy-engine's built-ins, and DefineStar-registered stars/DSOs) or a
 // position function (comets — see altitudeFnFor above).
+//
+// maxAltitudeDeg is the unconstrained daily transit (needed as-is for the
+// circumpolar check below: its sign says whether a body with no rise/set
+// that day is always up or never up at all). maxAltitudeAtNightDeg/Time is
+// the separate, usually more useful figure for observing purposes: the
+// highest altitude actually reached while it's night (Sun at or below
+// NIGHT_SUN_ALTITUDE_DEG) — the daily transit can fall in broad daylight and
+// so isn't a real observing opportunity. Computed by direct sampling over
+// the night window (same technique already used for comets' position
+// function above) rather than checking whether the transit falls inside the
+// window, since sampling works uniformly for both Body enums and comets.
 export function computeRiseSetTransit(target, lat, lon, time) {
   const observer = new Observer(lat, lon, 0)
   const midnight = new Date(time)
   midnight.setHours(0, 0, 0, 0)
   const startTime = new AstroTime(midnight)
+  const altitudeFn = altitudeFnFor(target, observer)
 
   let riseTime, setTime, maxAltitudeDeg
   if (typeof target === 'function') {
-    const altitudeFn = altitudeFnFor(target, observer)
     riseTime = searchAltitudeCrossing(altitudeFn, +1, startTime, 1)
     setTime = searchAltitudeCrossing(altitudeFn, -1, startTime, 1)
-    maxAltitudeDeg = maxAltitudeOverWindow(altitudeFn, startTime, 1)
+    maxAltitudeDeg = maxAltitudeOverWindow(altitudeFn, startTime, 1).altitude
   } else {
     riseTime = SearchRiseSet(target, observer, +1, startTime, 1)
     setTime = SearchRiseSet(target, observer, -1, startTime, 1)
@@ -132,25 +149,44 @@ export function computeRiseSetTransit(target, lat, lon, time) {
     circumpolar = maxAltitudeDeg > 0 ? 'up' : 'down'
   }
 
-  return { riseTime, setTime, maxAltitudeDeg, circumpolar }
+  let maxAltitudeAtNightDeg = null
+  let maxAltitudeAtNightTime = null
+  const night = computeNightWindow(lat, lon, time)
+  if (night) {
+    const nightDurationDays = night.end.ut - night.start.ut
+    const atNight = maxAltitudeOverWindow(altitudeFn, night.start, nightDurationDays)
+    maxAltitudeAtNightDeg = atNight.altitude
+    maxAltitudeAtNightTime = atNight.time
+  }
+
+  return { riseTime, setTime, maxAltitudeDeg, circumpolar, maxAltitudeAtNightDeg, maxAltitudeAtNightTime }
 }
 
-// The [start, end] window when the Sun is at or below `altitudeDeg`,
-// spanning from the evening of `time`'s calendar day to the following
-// morning. Returns null if no such window occurs at this latitude/season
-// (e.g. high-latitude summer "white nights", where the Sun never gets that
-// low).
+// The current-or-upcoming [start, end] window when the Sun is at or below
+// `altitudeDeg`, searched from `time`: if it's already within such a window
+// (e.g. checking at 4am, still within a window that started last evening),
+// returns that one; otherwise the next upcoming one. Anchoring on the
+// calendar day's midday instead (as an earlier version of this function did)
+// gets the early-morning tail of an already-started night wrong — it would
+// report the *next* night (starting that same evening) rather than the one
+// still in progress, e.g. right before dawn. Returns null if no such window
+// occurs near `time` at this latitude/season (e.g. high-latitude summer
+// "white nights", where the Sun never gets that low).
 export function computeSunWindow(lat, lon, time, altitudeDeg) {
   const observer = new Observer(lat, lon, 0)
-  const midday = new Date(time)
-  midday.setHours(12, 0, 0, 0)
-  const middayAstro = new AstroTime(midday)
+  const start = new AstroTime(time)
 
-  const start = SearchAltitude(Body.Sun, observer, -1, middayAstro, 1, altitudeDeg)
-  if (!start) return null
-  const end = SearchAltitude(Body.Sun, observer, +1, start, 1, altitudeDeg)
-  if (!end) return null
-  return { start, end }
+  const nextDescent = SearchAltitude(Body.Sun, observer, -1, start, 1, altitudeDeg)
+  const nextAscent = SearchAltitude(Body.Sun, observer, +1, start, 1, altitudeDeg)
+  if (nextAscent && (!nextDescent || nextAscent.ut < nextDescent.ut)) {
+    // Next Sun-altitude event is an ascent (dawn) before any descent (dusk)
+    // -> we're currently inside the window; find the dusk that started it.
+    const prevDescent = SearchAltitude(Body.Sun, observer, -1, start, -1, altitudeDeg)
+    return prevDescent ? { start: prevDescent, end: nextAscent } : null
+  }
+  if (!nextDescent) return null
+  const followingAscent = SearchAltitude(Body.Sun, observer, +1, nextDescent, 1, altitudeDeg)
+  return followingAscent ? { start: nextDescent, end: followingAscent } : null
 }
 
 export function computeNightWindow(lat, lon, time) {
@@ -207,7 +243,8 @@ export function computeBodyEphemeris(name, lat, lon, time) {
 
   const observer = new Observer(lat, lon, 0)
   const astroNow = new AstroTime(time)
-  const { riseTime, setTime, maxAltitudeDeg, circumpolar } = computeRiseSetTransit(body, lat, lon, time)
+  const { riseTime, setTime, maxAltitudeDeg, circumpolar, maxAltitudeAtNightDeg, maxAltitudeAtNightTime } =
+    computeRiseSetTransit(body, lat, lon, time)
   const mag = Illumination(body, astroNow).mag
   // Constellation() expects J2000 (EQJ) equatorial coordinates, so ofdate=false here.
   const eq = Equator(body, astroNow, observer, false, true)
@@ -224,6 +261,8 @@ export function computeBodyEphemeris(name, lat, lon, time) {
     setTime,
     maxAltitudeDeg,
     circumpolar,
+    maxAltitudeAtNightDeg,
+    maxAltitudeAtNightTime,
     distanceAu,
     observableAtNight,
   }
@@ -236,7 +275,8 @@ export function computeBodyEphemeris(name, lat, lon, time) {
 export function computeCometEphemeris(cometElem, lat, lon, time) {
   const positionFn = (astroTime) => cometPosition(cometElem, astroTime)
   const pos = positionFn(time instanceof AstroTime ? time : new AstroTime(time))
-  const { riseTime, setTime, maxAltitudeDeg, circumpolar } = computeRiseSetTransit(positionFn, lat, lon, time)
+  const { riseTime, setTime, maxAltitudeDeg, circumpolar, maxAltitudeAtNightDeg, maxAltitudeAtNightTime } =
+    computeRiseSetTransit(positionFn, lat, lon, time)
   // cometPosition's ra/dec is already J2000 equatorial (no of-date rotation
   // applied), matching what Constellation() expects.
   const constellation = Constellation(pos.ra / 15, pos.dec)
@@ -251,6 +291,8 @@ export function computeCometEphemeris(cometElem, lat, lon, time) {
     setTime,
     maxAltitudeDeg,
     circumpolar,
+    maxAltitudeAtNightDeg,
+    maxAltitudeAtNightTime,
     distanceAu: pos.distAU,
     observableAtNight,
   }

@@ -1,7 +1,15 @@
 <script>
   import { onMount, afterUpdate, createEventDispatcher } from 'svelte'
   import { theme } from '../stores/theme.js'
-  import { projectPoint, illumCos, craterFadeAlpha, LIMB_COS_CUTOFF, SEA_TYPES } from '../lib/moonMap.js'
+  import {
+    projectPoint,
+    illumCos,
+    craterFadeAlpha,
+    LIMB_COS_CUTOFF,
+    SEA_TYPES,
+    screenNormToLatLon,
+    terminatorEllipseGeometry,
+  } from '../lib/moonMap.js'
 
   const dispatch = createEventDispatcher()
 
@@ -124,52 +132,19 @@
 
   let prevHighlightId = undefined
 
-  // Inverse of projectPoint for a unit-radius orthographic disc: given
-  // on-disc normalized (nx, ny), recover (lat, lon) — used both for
-  // terminator shading (isPointDark) and to resolve a tap's screen position
-  // back to a selenographic point (resolveTap, for the disambiguation
-  // overlay's centering).
-  function screenNormToLatLon(nx, ny) {
-    const rho = Math.min(1, Math.hypot(nx, ny))
-    const c = Math.asin(rho)
-    if (rho < 1e-6) return { lat: subLat, lon: subLon }
-    const phi0 = (subLat * Math.PI) / 180
-    const lat = (Math.asin(Math.cos(c) * Math.sin(phi0) + (ny * Math.sin(c) * Math.cos(phi0)) / rho) * 180) / Math.PI
-    const lon =
-      subLon +
-      (Math.atan2(nx * Math.sin(c), rho * Math.cos(phi0) * Math.cos(c) - ny * Math.sin(phi0) * Math.sin(c)) * 180) /
-        Math.PI
-    return { lat, lon }
-  }
-
+  // Terminator shading (isPointDark) and tap resolution (resolveTap, for the
+  // disambiguation overlay's centering) both need the inverse of
+  // projectPoint — see moonMap.js's screenNormToLatLon.
   function isPointDark(nx, ny) {
-    const { lat, lon } = screenNormToLatLon(nx, ny)
+    const { lat, lon } = screenNormToLatLon(nx, ny, subLat, subLon)
     return illumCos(lat, lon, sunLon) <= 0
   }
 
-  // The terminator (this app's simplified model: the great circle through
-  // the poles at longitude sunLon +- 90 deg, i.e. the sub-solar point is
-  // always treated as being on the equator — see illumCos) projects
-  // orthographically to an exact ELLIPSE, not an arbitrary curve: any great
-  // circle projects to an ellipse under orthographic projection. Its semi-
-  // major axis always equals the disc radius (the ellipse is tangent to the
-  // limb at exactly two "cusp" points); its semi-minor axis and rotation
-  // depend on subLat/subLon/sunLon. This lets the phase boundary be drawn
-  // as one circle arc (the lit part of the true limb) + one ellipse arc
-  // (the near-hemisphere half of the terminator) — an exact shape, not a
-  // pixel grid. Derivation: parametrize the terminator great circle in 3D
-  // as Q(t), project it the same way projectPoint() does; Q(t) works out to
-  // x(t) = -cos(d) sin(t), y(t) = cos(subLat) cos(t) + sin(subLat) sin(d)
-  // sin(t) with d = subLon - sunLon — a standard "conjugate semi-diameter"
-  // ellipse parametrization, whose axes/rotation follow from the 2x2
-  // eigendecomposition of the matrix built from C=(0, cos(subLat))
-  // (the t=0 point) and S=(-cos(d), sin(subLat)sin(d)) (the t=90 deg
-  // point). Validated numerically against dense ground-truth sampling
-  // (project every point of the true terminator great circle) across full,
-  // quarter, thin-crescent and gibbous phases with nonzero libration —
-  // residual ~0 in all cases (see moon_pipeline.md).
+  // computeTerminatorGeometry() (moonMap.js's terminatorEllipseGeometry) is
+  // pure but not free — cache on (subLat, subLon, sunLon) since draw() calls
+  // buildPhasePath() every frame.
   //
-  // All the geometry below is computed in normalized (pre-scale/pan),
+  // All the geometry it returns is in normalized (pre-scale/pan),
   // math-standard (y-up) space; converting a normalized-space angle phi to
   // the canvas arc/ellipse APIs' own angle convention is a single
   // consistent rule applied at the end: canvasAngle = -phi (screen y is
@@ -177,73 +152,11 @@
   let terminatorGeomKey = null
   let terminatorGeom = null
 
-  function angleDiff(a, b) {
-    // Shortest signed a-b, wrapped to (-pi, pi].
-    let d = (a - b) % (2 * Math.PI)
-    if (d > Math.PI) d -= 2 * Math.PI
-    if (d <= -Math.PI) d += 2 * Math.PI
-    return d
-  }
-
   function computeTerminatorGeometry() {
     const key = `${subLat.toFixed(3)}|${subLon.toFixed(3)}|${sunLon == null ? 'x' : sunLon.toFixed(3)}`
     if (key === terminatorGeomKey) return terminatorGeom
     terminatorGeomKey = key
-    if (sunLon == null) {
-      terminatorGeom = null
-      return null
-    }
-    const csL = Math.cos((subLat * Math.PI) / 180)
-    const sL = Math.sin((subLat * Math.PI) / 180)
-    const delta = ((subLon - sunLon) * Math.PI) / 180
-    const cD = Math.cos(delta)
-    const sD = Math.sin(delta)
-
-    // Conjugate semi-diameters C (at t=0), S (at t=90deg) of the projected
-    // ellipse; theta/b are its rotation and semi-minor axis (semi-major is
-    // always exactly 1 — proved algebraically, see moon_pipeline.md).
-    const Cy = csL
-    const Sx = -cD
-    const Sy = sL * sD
-    const m11 = Sx * Sx
-    const m22 = Cy * Cy + Sy * Sy
-    const m12 = Sx * Sy
-    const theta = 0.5 * Math.atan2(2 * m12, m11 - m22)
-    const b = Math.abs(csL * cD)
-
-    const termPoint = (t) => ({ x: -cD * Math.sin(t), y: csL * Math.cos(t) + sL * sD * Math.sin(t) })
-    const depthC = (t) => sL * Math.cos(t) - csL * sD * Math.sin(t)
-    const localAngle = (x, y) => {
-      const lx = x * Math.cos(theta) + y * Math.sin(theta)
-      const ly = b > 1e-9 ? (-x * Math.sin(theta) + y * Math.cos(theta)) / b : 0
-      return Math.atan2(ly, lx)
-    }
-
-    // Cusp: where the terminator grazes the limb (depth == 0).
-    const tCusp = Math.abs(csL * sD) < 1e-12 && Math.abs(sL) < 1e-12 ? 0 : Math.atan2(sL, csL * sD)
-    const cusp1 = termPoint(tCusp)
-    const alphaNorm1 = Math.atan2(cusp1.y, cusp1.x) // cusp1's normalized-space angle
-
-    // Which of the two candidate 90 deg-offset midpoints (in t) is on the
-    // near/visible hemisphere (depth > 0)?
-    const cMid = depthC(tCusp + Math.PI / 2)
-    const nearMid = termPoint(cMid > 0 ? tCusp + Math.PI / 2 : tCusp - Math.PI / 2)
-    const betaCusp1 = localAngle(cusp1.x, cusp1.y)
-    const betaNearMid = localAngle(nearMid.x, nearMid.y) // always exactly betaCusp1 +- pi/2
-
-    // Which of the two semicircles of the true limb (split by the cusp-to-
-    // cusp diameter) is lit — one numeric sample suffices (see moon_pipeline.md).
-    const midNormA = alphaNorm1 + Math.PI / 2
-    const aLit = !isPointDark(Math.cos(midNormA), Math.sin(midNormA))
-
-    terminatorGeom = {
-      theta,
-      b,
-      alphaNorm1,
-      aLit,
-      betaCusp1,
-      ellipseDir: angleDiff(betaNearMid, betaCusp1) > 0 ? 1 : -1,
-    }
+    terminatorGeom = terminatorEllipseGeometry(subLat, subLon, sunLon)
     return terminatorGeom
   }
 
@@ -258,8 +171,21 @@
     const circleDir = g.aLit ? 1 : -1
     const circleStart = -g.alphaNorm1
     path.arc(cx, cy, r, circleStart, circleStart - circleDir * Math.PI, circleDir > 0)
-    const ellipseStart = -g.betaCusp1
-    path.ellipse(cx, cy, r, r * g.b, -g.theta, ellipseStart, ellipseStart - g.ellipseDir * Math.PI, g.ellipseDir > 0)
+    // The circle arc above always ends at cusp2 (antipodal to cusp1 on the
+    // limb, regardless of circleDir's sign) — the ellipse arc must *start*
+    // there too, at cusp2's own ellipse-parameter (betaCusp1 + PI), not
+    // cusp1's. Starting from betaCusp1 directly leaves a phantom straight
+    // line connecting two near-antipodal points instead of the real
+    // elliptical arc — see terminatorEllipseGeometry's doc comment. The
+    // sweep direction from cusp2 must also be reversed from ellipseDir
+    // (which was derived for a sweep starting at cusp1): the same half of
+    // the ellipse traversed from its other end is, naturally, traversed
+    // backwards. Verified against real illumination fractions (shoelace
+    // area of the resulting closed path) across crescent/gibbous/quarter
+    // phases in both waxing and waning directions — see moonMap.test.js.
+    const ellipseStart = -(g.betaCusp1 + Math.PI)
+    const ellipseDir = -g.ellipseDir
+    path.ellipse(cx, cy, r, r * g.b, -g.theta, ellipseStart, ellipseStart - ellipseDir * Math.PI, ellipseDir > 0)
     return path
   }
 
