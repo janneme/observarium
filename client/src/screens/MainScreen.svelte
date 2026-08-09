@@ -155,6 +155,7 @@
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
   let returnToFindingPathsListFromAbout = false
+  let returnToFinderFromAbout = false
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -450,6 +451,11 @@
   $: if (!$objectDetailsActive && returnToFindingPathsListFromAbout) {
     returnToFindingPathsListFromAbout = false
     showFindingPathsList = true
+  }
+
+  $: if (!$objectDetailsActive && returnToFinderFromAbout) {
+    returnToFinderFromAbout = false
+    finderViewActive.set(true)
   }
 
   // "q" followed shortly by m/s/c/d launches a quiz directly (Moon/Star/
@@ -1103,6 +1109,14 @@
         findingPathsFromFinder = false
         findingPathsStartHip = e.detail?.startHip ?? null
         showFindingPaths = true
+      }}
+      on:openabout={(e) => {
+        const obj = e.detail?.object || get(selectedObject)
+        if (!obj) return
+        finderViewActive.set(false)
+        selectedObject.set(obj)
+        objectDetailsActive.set(true)
+        returnToFinderFromAbout = true
       }}
     />
   {/if}

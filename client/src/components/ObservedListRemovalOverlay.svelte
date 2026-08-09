@@ -24,6 +24,10 @@
   function continueWithoutRemoving() {
     dispatch('continue')
   }
+
+  function cancel() {
+    dispatch('cancel')
+  }
 </script>
 
 <div class="backdrop" on:pointerdown|stopPropagation></div>
@@ -38,6 +42,7 @@
     {/each}
   </div>
   <div class="actions">
+    <button class="btn ghost" type="button" on:click={cancel}>Cancel</button>
     <button class="btn ghost" type="button" on:click={continueWithoutRemoving}>Continue without removing</button>
     <button class="btn" type="button" disabled={toggled.size === 0} on:click={remove}>Remove</button>
   </div>

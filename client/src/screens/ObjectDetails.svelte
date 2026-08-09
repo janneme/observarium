@@ -433,6 +433,10 @@
     showObservationForm = true
   }
 
+  function onObservedListRemovalCancel() {
+    showObservedListRemoval = false
+  }
+
   function openListMembership() {
     if (!obj) return
     showListMembership = true
@@ -795,6 +799,7 @@
     lists={observedListRemovalCandidates}
     on:remove={onObservedListRemovalRemove}
     on:continue={onObservedListRemovalContinue}
+    on:cancel={onObservedListRemovalCancel}
   />
 {/if}
 

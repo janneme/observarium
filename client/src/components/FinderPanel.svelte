@@ -4,9 +4,19 @@
   import CustomInput from './CustomInput.svelte'
   import OnScreenKeyboard from './OnScreenKeyboard.svelte'
   import ObservationObjectSymbol from './ObservationObjectSymbol.svelte'
+  import ObservationFormPanel from './ObservationFormPanel.svelte'
+  import ObservedListRemovalOverlay from './ObservedListRemovalOverlay.svelte'
+  import ObservedIcon from '../icons/ObservedIcon.svelte'
   import { selectedObject } from '../stores/selectedObject.js'
   import { finderViewActive, searchViewActive, pendingFocus } from '../stores/ui.js'
-  import { getMeta, getObjectsInArea, getSearchIndex } from '../lib/db.js'
+  import {
+    getMeta,
+    getObjectsInArea,
+    getSearchIndex,
+    getObservationByDate,
+    resolveObservationDateKey,
+  } from '../lib/db.js'
+  import { getListsForObject, removeObjectFromLists } from '../lib/lists.js'
   import { get } from 'svelte/store'
 
   const dispatch = createEventDispatcher()
@@ -38,6 +48,12 @@
   let labelBoxWidthPx = 120
   const pointers = new Map()
 
+  let isObservedToday = false
+  let showObservationForm = false
+  let objectListMemberships = []
+  let showObservedListRemoval = false
+  let observedListRemovalCandidates = []
+
   let prevObjId = undefined
   $: {
     const obj = $selectedObject
@@ -53,7 +69,61 @@
       }
       void loadObjects()
       void checkPath()
+      void refreshObservedStatus()
+      void refreshListMemberships()
     }
+  }
+
+  async function refreshObservedStatus() {
+    const obj = $selectedObject
+    if (!obj) {
+      isObservedToday = false
+      return
+    }
+    const selectedObs = await getObservationByDate(await resolveObservationDateKey(time))
+    isObservedToday = selectedObs?.objects?.some((x) => x.id === obj.id) ?? false
+  }
+
+  async function refreshListMemberships() {
+    const obj = $selectedObject
+    if (!obj) {
+      objectListMemberships = []
+      return
+    }
+    objectListMemberships = await getListsForObject(obj.id)
+  }
+
+  async function openObservedForm() {
+    if (!$selectedObject) return
+    const activeContaining = objectListMemberships.filter((l) => l.active)
+    if (activeContaining.length > 0) {
+      observedListRemovalCandidates = activeContaining.map((l) => ({
+        id: l.id,
+        name: l.name,
+        count: (l.objects || []).length,
+      }))
+      showObservedListRemoval = true
+      return
+    }
+    showObservationForm = true
+  }
+
+  async function onObservedListRemovalRemove(e) {
+    showObservedListRemoval = false
+    if ($selectedObject) {
+      await removeObjectFromLists(e.detail.listIds, $selectedObject.id)
+      await refreshListMemberships()
+    }
+    showObservationForm = true
+  }
+
+  function onObservedListRemovalContinue() {
+    showObservedListRemoval = false
+    showObservationForm = true
+  }
+
+  function onObservedListRemovalCancel() {
+    showObservedListRemoval = false
   }
 
   // Refresh path availability when path data changes externally for the same selected object.
@@ -347,6 +417,11 @@
     finderViewActive.set(false)
   }
 
+  function openAbout() {
+    if (!$selectedObject) return
+    dispatch('openabout', { object: $selectedObject })
+  }
+
   function recordPath() {
     if (!$selectedObject) return
     dispatch('recordpath', { object: $selectedObject })
@@ -506,8 +581,20 @@
     {#if $selectedObject}
       <div class="finder-object-box" style={`width:${labelBoxWidthPx}px`} on:pointerdown|stopPropagation>
         <span class="box-icon"><ObservationObjectSymbol kind={objectSymbolKind($selectedObject)} /></span>
-        <span class="box-text">{selectedObjectLabel($selectedObject)}</span>
+        <button class="box-text-btn" on:click={openAbout} title="About object">
+          <span class="box-text">{selectedObjectLabel($selectedObject)}</span>
+        </button>
       </div>
+      <button
+        class="finder-observed-btn"
+        class:observed={isObservedToday}
+        on:click={openObservedForm}
+        on:pointerdown|stopPropagation
+        title={isObservedToday ? 'Edit observation' : 'Create observation'}
+        aria-label="Mark as observed"
+      >
+        <ObservedIcon size="1.2rem" />
+      </button>
     {/if}
 
     <div
@@ -607,6 +694,29 @@
       <button class="finder-btn guide-cancel-btn" on:click={() => (guidePickerOpen = false)}>Cancel</button>
     </div>
   {/if}
+
+  {#if showObservationForm && $selectedObject}
+    <ObservationFormPanel
+      objectId={$selectedObject.id}
+      {time}
+      on:saved={async () => {
+        showObservationForm = false
+        await refreshObservedStatus()
+      }}
+      on:cancel={() => {
+        showObservationForm = false
+      }}
+    />
+  {/if}
+
+  {#if showObservedListRemoval}
+    <ObservedListRemovalOverlay
+      lists={observedListRemovalCandidates}
+      on:remove={onObservedListRemovalRemove}
+      on:continue={onObservedListRemovalContinue}
+      on:cancel={onObservedListRemovalCancel}
+    />
+  {/if}
 </div>
 
 <style>
@@ -673,6 +783,22 @@
     opacity: 0.9;
   }
 
+  .box-text-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    min-width: 0;
+  }
+
+  .box-text-btn:hover .box-text,
+  .box-text-btn:focus-visible .box-text {
+    text-decoration: underline;
+  }
+
   .box-text {
     font-size: 0.72rem;
     line-height: 1rem;
@@ -683,6 +809,39 @@
     -webkit-box-orient: vertical;
     line-clamp: 2;
     -webkit-line-clamp: 2;
+  }
+
+  .finder-observed-btn {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--fg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem;
+    border-radius: 50%;
+  }
+
+  .finder-observed-btn:hover {
+    background: rgba(255, 255, 255, 0.13);
+  }
+
+  .finder-observed-btn.observed {
+    color: #cc0000;
+  }
+
+  :global([data-theme='nightly']) .finder-observed-btn {
+    border-color: rgba(180, 0, 0, 0.25);
+    background: rgba(180, 0, 0, 0.08);
+  }
+
+  :global([data-theme='nightly']) .finder-observed-btn:hover {
+    background: rgba(180, 0, 0, 0.14);
   }
 
   .circle-wrap:active {
