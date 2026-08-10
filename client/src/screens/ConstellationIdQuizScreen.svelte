@@ -23,8 +23,10 @@
   const VISUAL_RANGE_MAX = 5.5
   const SCHEMA_VISIBILITY_MIN_FRACTION = 0.8
   const QUIZ_QUESTION_COUNT = 20
-  const EASY_MIN_BRIGHT_MAG = 2
-  const MEDIUM_MIN_BRIGHT_MAG = 3.5
+  // Easy is the only difficulty with a brightness gate now - Medium/Hard use
+  // the full baseline-eligible pool and are differentiated purely by
+  // on-screen presentation (boundary/star-highlight timing) instead.
+  const EASY_MIN_BRIGHT_MAG = 3.5
   const DISTRACTOR_SIZE_RATIO_MAX = 2.5
   const DISTRACTOR_MAG_DELTA_MAX = 1.5
   // Mirrors data_prep/config.py: star catalogue only covers dec >= -35°. Views
@@ -46,6 +48,7 @@
   let alphaDecByAbbr = new Map()
   let conInfoByAbbr = new Map()
   let conNameByAbbr = new Map()
+  let conNameByAbbrCs = new Map()
   let schemaFallbackByHip = null
 
   let scope = 'global'
@@ -67,6 +70,7 @@
   let currentQuestion = null
   let options = []
   let optionsUseAbbrev = false
+  let optionsLanguage = 'cs'
   let resolved = false
   let firstTapMade = false
   let wrongTapped = new Set()
@@ -78,7 +82,16 @@
   let qRotation = 0
   let qRenderMag = 5
   let qObjects = []
-  let qObjectsFiltered = []
+  // Ids of the quizzed constellation's schema stars actually present in
+  // `qObjects` this question (a schema star fainter than the rolled visual
+  // range won't be rendered, so isn't a candidate for either set below).
+  let renderedSchemaIds = new Set()
+  // Ids to mark with SkyCanvas's bigger-star-symbol highlight: all of
+  // `renderedSchemaIds` at Easy/Medium, exactly one random pick at Hard.
+  let highlightedIds = new Set()
+  // Per-question nonce so SkyCanvas's obscuring-cloud placement is only
+  // re-rolled when a genuinely new question loads, not on unrelated redraws.
+  let questionNonce = 0
 
   function questionState(abbr) {
     return mastery[abbr] || { chain: 0, everWrong: false }
@@ -392,7 +405,6 @@
 
   function isEligible(info, d) {
     if (d === 'easy' && info.brightestMag >= EASY_MIN_BRIGHT_MAG) return false
-    if (d === 'medium' && info.brightestMag >= MEDIUM_MIN_BRIGHT_MAG) return false
     const minSatisfying = Math.max(info.thresholdMag, VISUAL_RANGE_MIN)
     if (minSatisfying > VISUAL_RANGE_MAX) return false
     if (!meetsDataFloorRule(info)) return false
@@ -544,32 +556,72 @@
     const cosDec = Math.max(0.05, Math.cos((qDec0 * Math.PI) / 180))
     const raMargin = Math.min(180, margin / cosDec)
     qObjects = await getObjectsInArea(qRa0 - raMargin, qRa0 + raMargin, qDec0 - margin, qDec0 + margin, qRenderMag)
-    updateFilteredObjects()
+    questionNonce += 1
+    computeHighlightState(abbr, qObjects)
   }
 
-  function updateFilteredObjects() {
-    if (difficulty !== 'hard' || firstTapMade || !currentQuestion) {
-      qObjectsFiltered = qObjects
-      return
-    }
-    const info = conInfoByAbbr.get(currentQuestion)
+  // Ids to visually mark this question - all schema stars actually rendered
+  // (Easy/Medium) or exactly one random one of them (Hard) - plus the full
+  // rendered-schema-star id set for the Hard-mode obscuring cloud to avoid.
+  // Computed once per question (here, and in nextQuestion()'s cached-prefetch
+  // branch) rather than via a bare reactive statement, so Hard's random pick
+  // doesn't re-roll on unrelated redraws.
+  function computeHighlightState(abbr, objects) {
+    const info = conInfoByAbbr.get(abbr)
     const hipSet = new Set(info?.schemaHips || [])
-    qObjectsFiltered = qObjects.filter((o) => {
-      if (o?.type !== 'star' && o?.type !== 'double_star') return true
+    const rendered = new Set()
+    for (const o of objects) {
+      if (o?.type !== 'star' && o?.type !== 'double_star') continue
       const hip = Number(o?.hip)
-      return !Number.isFinite(hip) || !hipSet.has(hip)
-    })
+      if (Number.isFinite(hip) && hipSet.has(hip)) rendered.add(o.id)
+    }
+    renderedSchemaIds = rendered
+    if (difficulty === 'hard') {
+      const ids = [...rendered]
+      highlightedIds = ids.length ? new Set([ids[Math.floor(Math.random() * ids.length)]]) : new Set()
+    } else {
+      highlightedIds = rendered
+    }
   }
 
   function pickOptions(correctAbbr) {
     const distractors = pickDistractors(correctAbbr, difficulty)
     const chosen = shuffle([correctAbbr, ...distractors])
     options = chosen
-    // Easy always uses full names; Medium/Hard randomly pick names or abbrs.
-    optionsUseAbbrev = difficulty !== 'easy' && Math.random() < 0.5
+    if (difficulty === 'easy') {
+      // Easy always uses full Czech names - no abbreviations, no English.
+      optionsUseAbbrev = false
+      optionsLanguage = 'cs'
+    } else {
+      // Medium/Hard: independently randomise abbr-vs-full-name and, when
+      // showing a full name, which language to show it in - applied
+      // uniformly across the correct answer and all distractors so a
+      // question never mixes languages.
+      optionsUseAbbrev = Math.random() < 0.5
+      optionsLanguage = Math.random() < 0.5 ? 'cs' : 'en'
+    }
   }
 
-  $: optionLabels = options.map((abbr) => (optionsUseAbbrev ? abbr : conNameByAbbr.get(abbr) || abbr))
+  // Base label per the question's rolled abbrev/language choice, then - once
+  // the player has answered - extended with a parenthetical: the Czech name
+  // if the base wasn't already Czech, otherwise the abbreviation (so every
+  // option ends up showing its Czech name somewhere, plus the abbr as a
+  // bonus when Czech was already the primary label).
+  function baseOptionLabel(abbr) {
+    if (optionsUseAbbrev) return abbr
+    const nameMap = optionsLanguage === 'cs' ? conNameByAbbrCs : conNameByAbbr
+    return nameMap.get(abbr) || conNameByAbbr.get(abbr) || abbr
+  }
+
+  $: optionLabels = options.map((abbr) => {
+    const base = baseOptionLabel(abbr)
+    if (!firstTapMade) return base
+    if (optionsUseAbbrev || optionsLanguage !== 'cs') {
+      const cs = conNameByAbbrCs.get(abbr)
+      return cs ? `${base} (${cs})` : base
+    }
+    return `${base} (${abbr})`
+  })
 
   function saveState() {
     saveQuizState(QUIZ_TYPE, difficulty, scope, {
@@ -650,7 +702,8 @@
       qFov = QUIZ_FOV_DEG
       qRenderMag = cached.renderMag
       qObjects = cached.objects
-      updateFilteredObjects()
+      questionNonce += 1
+      computeHighlightState(currentQuestion, qObjects)
     } else {
       await loadQuestionSky(currentQuestion)
     }
@@ -669,7 +722,6 @@
     if (!firstTapMade) {
       firstTapMade = true
       mastery = applyAttempt(mastery, currentQuestion, correct)
-      updateFilteredObjects()
     }
     if (correct) {
       resolved = true
@@ -717,6 +769,18 @@
   // Easy: exclude quizzed until reveal, then all. Medium/Hard: none until reveal, then all.
   $: lineAbbrsFilter = firstTapMade ? 'all' : difficulty === 'easy' ? 'exclude-quizzed' : 'none'
 
+  // Boundary reveal: Easy shows it immediately (as before); Medium/Hard hide
+  // it until the first answer so it can't be read as an answer key, then
+  // show the same bold single-constellation highlight as Easy's reveal.
+  $: boundaryRevealed = difficulty === 'easy' || firstTapMade
+  $: boundaryHighlightAbbr = boundaryRevealed ? currentQuestion : null
+
+  // Hard-only obscuring cloud, avoiding this question's rendered schema stars.
+  $: obscuringCloud =
+    difficulty === 'hard' && currentQuestion
+      ? { key: questionNonce, widthFrac: 0.39, heightFrac: 0.2925, avoidIds: renderedSchemaIds, count: 2 }
+      : null
+
   onMount(() => {
     window.addEventListener('keydown', onGlobalKeyDown, true)
     ;(async () => {
@@ -724,12 +788,15 @@
       settingsLoaded = true
       const [index, constellations] = await Promise.all([getSearchIndex(), getMeta('constellations')])
       const nameMap = new Map()
+      const nameMapCs = new Map()
       if (constellations && typeof constellations === 'object') {
         for (const [abbr, con] of Object.entries(constellations)) {
           if (con?.name) nameMap.set(abbr, con.name)
+          if (con?.name_cs) nameMapCs.set(abbr, con.name_cs)
         }
       }
       conNameByAbbr = nameMap
+      conNameByAbbrCs = nameMapCs
       allStars = index.filter((x) => x.type === 'star' && Array.isArray(x.pos))
       const nextStarsByHip = new Map()
       for (const s of allStars) {
@@ -813,7 +880,11 @@
         <p class="done">Congratulations on completing the quiz!</p>
       {:else}
         <p class="question">
-          {resolved ? 'Tap the sky for the next question' : 'Which constellation is this?'}
+          {resolved
+            ? 'Tap the sky for the next question'
+            : difficulty === 'hard'
+              ? 'What is the name of the constellation containing the highlighted star?'
+              : 'Which constellation is this?'}
         </p>
         <div
           class="sky-wrap"
@@ -828,7 +899,7 @@
             dec0={qDec0}
             fov={qFov}
             rotation={qRotation}
-            objects={qObjectsFiltered}
+            objects={qObjects}
             lineFallbackByHip={schemaFallbackByHip}
             starRadiusScale={1.5}
             constellationLineColorOverride={$theme === 'nightly' ? '#0000ff' : 'rgba(140,180,255,0.9)'}
@@ -842,8 +913,10 @@
             {lineAbbrsFilter}
             quizzedConstellationAbbr={currentQuestion}
             showConstellationNames={false}
-            showConstellationBoundaries={true}
-            highlightBoundaryAbbr={currentQuestion}
+            showConstellationBoundaries={boundaryRevealed}
+            highlightBoundaryAbbr={boundaryHighlightAbbr}
+            highlightedStarIds={highlightedIds}
+            {obscuringCloud}
             showDsos={false}
             showSpecialStarSymbols={false}
             showHorizon={false}

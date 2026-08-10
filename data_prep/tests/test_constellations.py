@@ -4,7 +4,9 @@ from pathlib import Path
 
 from constellations import (
     ConstellationPipeline,
+    _apply_czech_names,
     _line_pairs,
+    _load_czech_names,
     _parse_edge_record,
 )
 
@@ -88,3 +90,27 @@ class TestBuild:
         assert out["Lyr"]["lines"] == [[4, 5]]
         assert out["And"]["bounds"] == [[[0.0, 0.0], [1.0, 10.0]]]
         assert out["Lyr"]["bounds"] == [[[0.0, 0.0], [1.0, 10.0]]]
+
+
+class TestLoadCzechNames:
+    def test_missing_file_returns_empty_dict(self, tmp_path: Path):
+        assert not _load_czech_names(tmp_path / "notes_constellations.csv")
+
+    def test_parses_abbr_and_name(self, tmp_path: Path):
+        path = tmp_path / "notes_constellations.csv"
+        path.write_text("abbr,name_cs\nAnd,Andromeda\nUMa,Velká medvědice\n", encoding="utf-8")
+        names = _load_czech_names(path)
+        assert names == {"And": "Andromeda", "UMa": "Velká medvědice"}
+
+    def test_skips_blank_rows(self, tmp_path: Path):
+        path = tmp_path / "notes_constellations.csv"
+        path.write_text("abbr,name_cs\nAnd,\n,Andromeda\n", encoding="utf-8")
+        assert not _load_czech_names(path)
+
+
+class TestApplyCzechNames:
+    def test_merges_matched_abbrs_only(self):
+        constellations = {"And": {"name": "Andromeda"}, "Lyr": {"name": "Lyra"}}
+        _apply_czech_names(constellations, {"And": "Andromeda", "Vul": "Lištička"})
+        assert constellations["And"]["name_cs"] == "Andromeda"
+        assert "name_cs" not in constellations["Lyr"]

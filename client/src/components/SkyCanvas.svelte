@@ -54,6 +54,16 @@
   export let highlightBoundaryAbbr = null
   export let lineAbbrsFilter = 'all'
   export let quizzedConstellationAbbr = null
+  // Constellation quiz: a set of object ids to mark with a bigger/distinct
+  // star symbol (e.g. all schema stars at Easy/Medium, one random one at
+  // Hard) - see drawHighlightedStars.
+  export let highlightedStarIds = new Set()
+  // Constellation quiz (Hard): one or more randomly placed obscuring patches.
+  // Shape: { key, widthFrac, heightFrac, avoidIds, count }. `key` must change
+  // only when new placements should be rolled (e.g. per-question nonce) - see
+  // drawObscuringCloud, which caches the resolved placements keyed on it so
+  // unrelated redraws of the same question don't reposition the cloud.
+  export let obscuringCloud = null
 
   let canvas
   let W = 0,
@@ -110,6 +120,8 @@
     lineAbbrsFilter
     quizzedConstellationAbbr
     activeListObjectIds
+    highlightedStarIds
+    obscuringCloud
     dirty = true
   }
 
@@ -1122,6 +1134,125 @@
     }
   }
 
+  // Font Awesome "sparkle/star" glyph (viewBox 0 0 576 512), used as the
+  // constellation-quiz highlight symbol - a bigger, distinct marker at a
+  // highlighted star's own position rather than a ring around it.
+  const HIGHLIGHT_STAR_PATH = new Path2D(
+    'M309.5-18.9c-4.1-8-12.4-13.1-21.4-13.1s-17.3 5.1-21.4 13.1L193.1 125.3 33.2 150.7c-8.9 1.4-16.3 7.7-19.1 16.3s-.5 18 5.8 24.4l114.4 114.5-25.2 159.9c-1.4 8.9 2.3 17.9 9.6 23.2s16.9 6.1 25 2L288.1 417.6 432.4 491c8 4.1 17.7 3.3 25-2s11-14.2 9.6-23.2L441.7 305.9 556.1 191.4c6.4-6.4 8.6-15.8 5.8-24.4s-10.1-14.9-19.1-16.3L383 125.3 309.5-18.9z',
+  )
+  const HIGHLIGHT_STAR_VIEWBOX_W = 576
+  const HIGHLIGHT_STAR_VIEWBOX_H = 512
+  const HIGHLIGHT_STAR_MIN_SIZE = 10.92
+  const HIGHLIGHT_STAR_SIZE_SCALE = 1.89
+
+  function drawHighlightedStars(ctx) {
+    if (!highlightedStarIds || highlightedStarIds.size === 0) return
+    ctx.fillStyle = currentTheme === 'nightly' ? '#ff0088' : '#ffaa00'
+    for (const [id, pt] of renderedPx) {
+      if (!highlightedStarIds.has(id)) continue
+      const baseR = pt.r ?? 3
+      const size = Math.max(HIGHLIGHT_STAR_MIN_SIZE, baseR * HIGHLIGHT_STAR_SIZE_SCALE)
+      const scale = size / HIGHLIGHT_STAR_VIEWBOX_W
+      ctx.save()
+      ctx.translate(pt.px, pt.py)
+      ctx.scale(scale, scale)
+      ctx.translate(-HIGHLIGHT_STAR_VIEWBOX_W / 2, -HIGHLIGHT_STAR_VIEWBOX_H / 2)
+      ctx.fill(HIGHLIGHT_STAR_PATH)
+      ctx.restore()
+    }
+  }
+
+  // Material Design's "cloud" glyph (viewBox 0 0 24 24) - a single closed
+  // path with a proper puffy-cloud silhouette, so the obscuring patch reads
+  // as an actual cloud shape rather than a plain blob.
+  const CLOUD_PATH = new Path2D(
+    'M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z',
+  )
+  const CLOUD_VIEWBOX_W = 24
+  const CLOUD_VIEWBOX_H = 24
+
+  let lastCloudKey = null
+  let cachedCloudFracs = [] // [{cxFrac, cyFrac}, ...], cached until obscuringCloud.key changes
+
+  function computeCloudPlacement(widthPx, heightPx, avoidPts) {
+    const marginX = Math.min(W / 2, widthPx / 2)
+    const marginY = Math.min(H / 2, heightPx / 2)
+    const spanX = Math.max(1, W - 2 * marginX)
+    const spanY = Math.max(1, H - 2 * marginY)
+    let best = null
+    let bestViolations = Infinity
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const cx = marginX + Math.random() * spanX
+      const cy = marginY + Math.random() * spanY
+      let violations = 0
+      for (const p of avoidPts) {
+        const nx = (p.px - cx) / (widthPx / 2)
+        const ny = (p.py - cy) / (heightPx / 2)
+        if (nx * nx + ny * ny <= 1) violations++
+      }
+      if (violations === 0) return { cx, cy }
+      if (violations < bestViolations) {
+        bestViolations = violations
+        best = { cx, cy }
+      }
+    }
+    return best || { cx: W / 2, cy: H / 2 }
+  }
+
+  function drawObscuringCloud(ctx) {
+    if (!obscuringCloud || W === 0 || H === 0) return
+    const widthPx = (obscuringCloud.widthFrac ?? 0.2) * W
+    const heightPx = (obscuringCloud.heightFrac ?? 0.15) * H
+    if (widthPx <= 0 || heightPx <= 0) return
+    const count = Math.max(1, obscuringCloud.count ?? 1)
+    if (obscuringCloud.key !== lastCloudKey) {
+      const avoidIds = obscuringCloud.avoidIds || new Set()
+      const avoidPts = []
+      for (const id of avoidIds) {
+        const pt = renderedPx.get(id)
+        if (pt) avoidPts.push(pt)
+      }
+      const placements = []
+      for (let i = 0; i < count; i++) {
+        // Later clouds also avoid earlier ones' centres, so they don't pile
+        // up on top of each other.
+        const combinedAvoid = avoidPts.concat(placements.map((p) => ({ px: p.cx, py: p.cy })))
+        placements.push(computeCloudPlacement(widthPx, heightPx, combinedAvoid))
+      }
+      cachedCloudFracs = placements.map((p) => ({ cxFrac: p.cx / W, cyFrac: p.cy / H }))
+      lastCloudKey = obscuringCloud.key
+    }
+    if (!cachedCloudFracs.length) return
+    // Interior is opaque black (same as the sky background, so it reads as
+    // "empty" - but painted, not left transparent, so it actually erases any
+    // stars underneath). Only the thin outline is visibly colored, giving
+    // away the shape's location without revealing what it's hiding. Pale
+    // gray outline in daily theme, red (NO-GREEN compliant) in nightly.
+    const cloudRgb = currentTheme === 'nightly' ? '200,0,0' : '210,210,215'
+    const scaleX = widthPx / CLOUD_VIEWBOX_W
+    const scaleY = heightPx / CLOUD_VIEWBOX_H
+    // ctx.lineWidth is drawn in the (scaled) local coordinate space set up
+    // below, so it gets multiplied by scaleX/scaleY too - divide by the
+    // average scale first so the on-screen stroke is genuinely ~1px thin
+    // regardless of how big the cloud itself is.
+    const targetScreenPx = 1
+    for (const frac of cachedCloudFracs) {
+      const cx = frac.cxFrac * W
+      const cy = frac.cyFrac * H
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.scale(scaleX, scaleY)
+      ctx.translate(-CLOUD_VIEWBOX_W / 2, -CLOUD_VIEWBOX_H / 2)
+      ctx.fillStyle = '#000'
+      ctx.fill(CLOUD_PATH)
+      ctx.strokeStyle = `rgb(${cloudRgb})`
+      ctx.lineWidth = targetScreenPx / ((scaleX + scaleY) / 2)
+      ctx.setLineDash([])
+      ctx.stroke(CLOUD_PATH)
+      ctx.restore()
+    }
+  }
+
   function drawTargetMarker(ctx) {
     if (!Array.isArray(targetMarker) || targetMarker.length < 2) return
     const pt = projectToPixel(targetMarker[0], targetMarker[1], ra0, dec0, W, H, fov, rotation)
@@ -1406,7 +1537,9 @@
       }
     }
 
+    drawObscuringCloud(ctx)
     drawActiveListMarkers(ctx)
+    drawHighlightedStars(ctx)
 
     // Pass 3: solar system bodies (on top of stars)
     if (showSolarSystem) drawSolarSystem(ctx)

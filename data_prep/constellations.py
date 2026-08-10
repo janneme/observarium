@@ -1,5 +1,6 @@
 """Constellation pipeline: Stellarium modern_iau index -> constellations.json."""
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,31 @@ def _line_pairs(vertices: list[int]) -> list[list[int]]:
     if len(vertices) < 2:
         return []
     return [[vertices[idx], vertices[idx + 1]] for idx in range(len(vertices) - 1)]
+
+
+def _load_czech_names(path: Path) -> dict[str, str]:
+    """Load the abbr -> Czech name addendum (sourced from Czech Wikipedia's
+    constellation list; see cat_enhancements.md-style sourcing notes for
+    similar hand-curated addenda in dso.py/dark_nebulae.py)."""
+    if not path.exists():
+        return {}
+    names: dict[str, str] = {}
+    with path.open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            abbr = row.get("abbr", "").strip()
+            name_cs = row.get("name_cs", "").strip()
+            if abbr and name_cs:
+                names[abbr] = name_cs
+    return names
+
+
+def _apply_czech_names(
+    constellations: dict[str, dict[str, Any]], czech_names: dict[str, str]
+) -> None:
+    """Merge `name_cs` into each matching constellation, in place."""
+    for abbr, name_cs in czech_names.items():
+        if abbr in constellations:
+            constellations[abbr]["name_cs"] = name_cs
 
 
 def _parse_edge_record(record: str) -> tuple[str, str, str, str, str, str]:
@@ -68,6 +94,8 @@ class ConstellationPipeline:
         with index_path.open(encoding="utf-8") as fh:
             index = json.load(fh)
         constellations = self._build(index)
+        czech_names = _load_czech_names(self._sources_dir / "notes_constellations.csv")
+        _apply_czech_names(constellations, czech_names)
         return self._write(constellations)
 
     def _build(self, index: dict[str, Any]) -> dict[str, dict[str, Any]]:
