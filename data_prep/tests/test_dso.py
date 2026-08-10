@@ -1,7 +1,10 @@
 """Unit tests for the DSO pipeline (dso.py)."""
 
 import csv
+import json
 from pathlib import Path
+
+import pytest
 
 from dso import (
     DsoPipeline,
@@ -9,6 +12,9 @@ from dso import (
     _caldwell_num,
     _catalogue_id,
     _dec_degrees,
+    _distance_from_parallax_pc,
+    _distance_from_redshift_pc,
+    _dso_distance_pc,
     _is_large_diffuse,
     _messier_id,
     _ra_hours,
@@ -147,6 +153,54 @@ class TestBuildDso:
         assert obj is not None
         assert obj["m"] == 42
         assert obj["type"] == "emission nebula"
+
+
+class TestDistanceHelpers:
+    def test_distance_from_parallax(self):
+        assert _distance_from_parallax_pc(1.0) == 1000.0
+
+    def test_distance_from_parallax_rejects_non_positive(self):
+        assert _distance_from_parallax_pc(0.0) is None
+        assert _distance_from_parallax_pc(-1.0) is None
+
+    def test_distance_from_redshift(self):
+        # z=0.001 -> d = 0.001 * 299792.458 / 70.0 Mpc = ~4.283 Mpc
+        dist_pc = _distance_from_redshift_pc(0.001)
+        assert dist_pc == pytest.approx(4_282_749.4, rel=1e-4)
+
+    def test_distance_from_redshift_rejects_non_positive(self):
+        assert _distance_from_redshift_pc(0.0) is None
+        assert _distance_from_redshift_pc(-0.001) is None
+
+
+class TestDsoDistanceTiers:
+    def test_galaxy_uses_redshift(self):
+        dist = _dso_distance_pc("spiral galaxy", {"Redshift": "0.001"})
+        assert dist == pytest.approx(4_282_749.4, rel=1e-4)
+
+    def test_galaxy_without_redshift_has_no_distance(self):
+        assert _dso_distance_pc("spiral galaxy", {"Redshift": ""}) is None
+
+    def test_planetary_nebula_uses_parallax(self):
+        dist = _dso_distance_pc("planetary nebula", {"Pax": "0.8665"})
+        assert dist == pytest.approx(1154.07, rel=1e-4)
+
+    def test_open_cluster_uses_parallax(self):
+        assert _dso_distance_pc("open cluster", {"Pax": "2.0"}) == 500.0
+
+    def test_emission_nebula_uses_parallax(self):
+        assert _dso_distance_pc("emission nebula", {"Pax": "2.0"}) == 500.0
+
+    def test_globular_cluster_ignores_parallax(self):
+        # Deliberately excluded - OpenNGC's compiled Pax is unreliable for
+        # globular clusters (crowded-field Gaia bias); Harris supplies these
+        # instead as a post-processing step (see distances.py).
+        assert _dso_distance_pc("globular cluster", {"Pax": "0.0813"}) is None
+
+    def test_build_dso_sets_dist_field(self):
+        obj = _build_dso(_row(Type="G", Hubble="SBb", Redshift="0.001"), note=None)
+        assert obj is not None
+        assert obj["dist"] == pytest.approx(4_282_749.4, rel=1e-4)
 
 
 class TestSelectRows:
@@ -315,3 +369,27 @@ class TestSelectRows:
         rows = pipeline._non_messier_by_mag(pipeline._read_rows([csv_path]))
         assert len(rows) == 1
         assert _catalogue_id(rows[0]) == "NGC9003"
+
+
+class TestWriteWithDarkNebulae:
+    def test_write_groups_dark_nebula_alongside_regular_dso(self, tmp_path: Path):
+        # Dark nebulae have no m/ngc/ic/cald fields - confirms _write()'s
+        # grouping/sorting doesn't assume those keys are always present.
+        pipeline = DsoPipeline(tmp_path, tmp_path)
+        galaxy = _build_dso(_row(), note=None)
+        assert galaxy is not None
+        galaxy["const"] = "Peg"
+        dark_nebula = {
+            "pos": [5.683056, -2.458333],
+            "type": "dark nebula",
+            "name": "Horsehead Nebula (B33)",
+            "size": [6.0, 4.0],
+            "const": "Ori",
+        }
+        objects = [galaxy, dark_nebula]
+        out = pipeline._write(objects)
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert data["Ori"][0]["type"] == "dark nebula"
+        assert data["Ori"][0]["name"] == "Horsehead Nebula (B33)"
+        assert "const" not in data["Ori"][0]
+        assert data["Peg"][0]["type"] == "spiral galaxy"

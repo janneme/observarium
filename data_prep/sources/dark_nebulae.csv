@@ -1,0 +1,15 @@
+id,name,ra_hours,dec_deg,size_maj,size_min,const
+B33,Horsehead Nebula (B33),5.683056,-2.458333,6,4,Ori
+B72,Snake Nebula (B72),17.394167,-23.695,37,17,Oph
+B78,Pipe Nebula - stem (B78),17.533333,-25.6,180,180,Oph
+B59,Pipe Nebula - bowl (B59),17.188333,-27.366667,50,50,Oph
+B86,Ink Spot (B86),18.049444,-27.868333,5,3,Sgr
+B87,Parrot's Head Nebula (B87),18.071667,-32.666667,30,30,Sgr
+B92,Barnard 92,18.258333,-18.216667,12,10.2,Sgr
+B93,Barnard 93,18.281667,-18.066667,9,5,Sgr
+B142,Barnard's E Nebula - B142,19.661667,10.516667,40,40,Aql
+B143,Barnard's E Nebula - B143,19.678333,10.95,26,15,Aql
+B133,Barnard 133,19.102778,-6.895833,6,6,Aql
+B168,Barnard 168,21.888333,47.266667,120,45,Cyg
+B150,Seahorse Nebula (B150),20.851667,60.183333,20,20,Cep
+B175,Barnard 175,22.233333,69.9,60,60,Cep

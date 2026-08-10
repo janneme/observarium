@@ -155,6 +155,35 @@
     return `${sep}″`
   }
 
+  // obj.dist is stored in parsecs (matching the distance-modulus/tangential-
+  // velocity formulas the data pipeline uses internally). Everything within
+  // our own galaxy (stars, clusters, nebulae, dark nebulae) displays in
+  // light-years; only external galaxies display in parsecs with a metric
+  // prefix (pc/kpc/Mpc/Gpc) - the convention at extragalactic scale, and it
+  // avoids spelling out "million"/"billion" for those distances.
+  const GALAXY_DSO_TYPES = new Set(['spiral galaxy', 'elliptical galaxy', 'galaxy'])
+
+  function formatDistanceLy(pc) {
+    if (pc == null) return null
+    const ly = pc * 3.26156
+    if (ly < 1000) return `${ly.toFixed(ly < 10 ? 2 : 0)} ly`
+    if (ly < 1e6) return `${(ly / 1000).toFixed(2)} kly`
+    if (ly < 1e9) return `${(ly / 1e6).toFixed(2)} Mly`
+    return `${(ly / 1e9).toFixed(2)} Gly`
+  }
+
+  function formatDistancePc(pc) {
+    if (pc == null) return null
+    if (pc < 1000) return `${pc.toFixed(pc < 10 ? 2 : 0)} pc`
+    if (pc < 1e6) return `${(pc / 1000).toFixed(2)} kpc`
+    if (pc < 1e9) return `${(pc / 1e6).toFixed(2)} Mpc`
+    return `${(pc / 1e9).toFixed(2)} Gpc`
+  }
+
+  function formatDistance(o, pc) {
+    return GALAXY_DSO_TYPES.has(o?.dsoType) ? formatDistancePc(pc) : formatDistanceLy(pc)
+  }
+
   const VAR_TYPE_LABELS = {
     DCEP: 'Cepheid',
     DCEPS: 'Cepheid (short-period)',
@@ -680,7 +709,9 @@
           <div class="row"><span class="label">Orientation</span><span class="value">{obj.ang}°</span></div>
         {/if}
         {#if obj.dist != null}
-          <div class="row"><span class="label">Distance</span><span class="value">{obj.dist} ly</span></div>
+          <div class="row">
+            <span class="label">Distance</span><span class="value">{formatDistance(obj, obj.dist)}</span>
+          </div>
         {/if}
         {#if formatSpect(obj, linkedDs)}
           {@const spParts = formatSpect(obj, linkedDs).split(' / ')}

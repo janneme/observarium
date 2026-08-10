@@ -1271,7 +1271,7 @@
   },
   {
     "catalogue_id": "NGC3486",
-    "url": "https://preview.redd.it/ngc-3486-an-intermediate-barred-spiral-galaxy-located-about-v0-8myfd4br5tz21.png?width=1080&crop=smart&auto=webp&s=a99f315c89e4dd49a5d25c399f9ea33f63473748",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/N3486s.jpg?utm_source=de.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
     "verified": 1
   },
   {
@@ -1966,7 +1966,7 @@
   },
   {
     "catalogue_id": "NGC6791",
-    "url": "https://app2.astrobin.com/9d34c0e7-25a0-4f7f-8f37-920aff0ffb4a",
+    "url": "https://assets.science.nasa.gov/dynamicimage/assets/science/missions/hubble/releases/2008/07/STScI-01EVVDRR3K5N0PNK5C7KRK0Z3V.tif?w=2000",
     "verified": 1
   },
   {
@@ -2397,6 +2397,76 @@
   {
     "catalogue_id": "planet_asteroid_flora",
     "url": "https://upload.wikimedia.org/wikipedia/commons/e/e0/000008-asteroid_shape_model_%288%29_Flora.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Horsehead_Nebula_(B33)",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6a/Nebulosa_testa_di_cavallo_con_SPECULOOS.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Snake_Nebula_(B72)",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/4b/Snake_Nebula.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Pipe_Nebula_-_stem_(B78)",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/54/The_Pipe_Nebula.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Pipe_Nebula_-_bowl_(B59)",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/54/The_Pipe_Nebula.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Ink_Spot_(B86)",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/9/95/Barnard_86.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Barnard_92",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f8/Barnard92NASA.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Barnard_93",
+    "url": "https://cdn.eso.org/images/screen/potw2237a.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Barnard's_E_Nebula_-_B142",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/ENebula.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Barnard's_E_Nebula_-_B143",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/ENebula.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Barnard_133",
+    "url": "https://www.cloudynights.com/uploads/monthly_10_2015/post-40734-0-30385000-1445283396.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Barnard_168",
+    "url": "https://skyandtelescope.org/wp-content/uploads/2015-09-14_55f6c0daae4cf_Barnard168HaLRGBRobertFieldsSubmitFinalresizedskyandtelescope.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Seahorse_Nebula_(B150)",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Seahorse_nebula.png",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Barnard_175",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/VdB_152%2C_Barnard_175_%28noao-vdb152%29.jpg",
+    "verified": 1
+  },
+  {
+    "catalogue_id": "Parrot's_Head_Nebula_(B87)",
+    "url": "https://www.astropix.com/wp/wp-content/uploads/2014/05/87.JPG",
     "verified": 1
   }
 ]

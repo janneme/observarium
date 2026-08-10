@@ -13,7 +13,13 @@ from config import (
     DSO_MAIN_URL,
     DSO_MAX_MAG,
     EUROPE_MIN_DEC,
+    HARRIS_GC_FILENAME,
+    HARRIS_GC_URL,
+    HUBBLE_CONSTANT_KM_S_MPC,
+    SPEED_OF_LIGHT_KM_S,
 )
+from dark_nebulae import load_dark_nebulae
+from distances import apply_distance_overrides, load_distance_overrides, parse_harris_catalog
 from downloader import Downloader
 
 _TYPE_MAP: dict[str, str] = {
@@ -163,6 +169,45 @@ def _rank_mag(row: dict[str, str]) -> float | None:
     return _float_or_none(row.get("V-Mag", "")) or _float_or_none(row.get("B-Mag", ""))
 
 
+# Types with a discrete point source (central star / dominant cluster stars)
+# whose compiled parallax is a reasonable distance estimate. Globular
+# clusters are deliberately excluded - see distances.py's module docstring.
+_PARALLAX_DISTANCE_TYPES: frozenset[str] = frozenset(
+    {"planetary nebula", "open cluster", "emission nebula", "reflection nebula"}
+)
+_GALAXY_TYPES: frozenset[str] = frozenset({"spiral galaxy", "elliptical galaxy", "galaxy"})
+
+
+def _distance_from_parallax_pc(pax_mas: float) -> float | None:
+    """Distance in parsecs from a parallax in milliarcseconds."""
+    if pax_mas <= 0:
+        return None
+    return 1000.0 / pax_mas
+
+
+def _distance_from_redshift_pc(redshift: float) -> float | None:
+    """Hubble-law distance estimate in parsecs from a redshift value.
+
+    Approximate by design (ignores peculiar velocity) - wrong for Local
+    Group members, which get a curated override instead (see distances.py).
+    """
+    if redshift <= 0:
+        return None
+    dist_mpc = (redshift * SPEED_OF_LIGHT_KM_S) / HUBBLE_CONSTANT_KM_S_MPC
+    return dist_mpc * 1_000_000.0
+
+
+def _dso_distance_pc(obj_type: str, row: dict[str, str]) -> float | None:
+    """Tiered distance in parsecs for one OpenNGC row (see cat_enhancements.md)."""
+    if obj_type in _GALAXY_TYPES:
+        redshift = _float_or_none(row.get("Redshift", ""))
+        return _distance_from_redshift_pc(redshift) if redshift is not None else None
+    if obj_type in _PARALLAX_DISTANCE_TYPES:
+        pax = _float_or_none(row.get("Pax", ""))
+        return _distance_from_parallax_pc(pax) if pax is not None else None
+    return None
+
+
 def _load_notes(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
@@ -244,6 +289,7 @@ def _build_dso(row: dict[str, str], note: str | None) -> dict[str, Any] | None:
         ("size", _size_pair(row)),
         ("ang", _float_or_none(row.get("PosAng", ""))),
         ("cstar_mag", _float_or_none(row.get("Cstar V-Mag", ""))),
+        ("dist", _dso_distance_pc(obj_type, row)),
         ("note", note),
     ):
         if value is not None:
@@ -286,6 +332,12 @@ class DsoPipeline:
         ]
         notes = _load_notes(self._sources_dir / "notes_dso.csv")
         objects = self._process(csv_paths, notes, object_id)
+        if object_id is None:
+            objects = objects + load_dark_nebulae(self._sources_dir)
+            harris_path = self._downloader.fetch(HARRIS_GC_URL, HARRIS_GC_FILENAME)
+            harris_by_ngc = parse_harris_catalog(harris_path)
+            overrides = load_distance_overrides(self._sources_dir)
+            apply_distance_overrides(objects, harris_by_ngc, overrides)
         return self._write(objects)
 
     def _process(
@@ -364,7 +416,11 @@ class DsoPipeline:
         with out.open("w", encoding="utf-8") as fh:
             json.dump(grouped, fh, ensure_ascii=False)
         n_notes = sum(1 for obj in objects if "note" in obj)
+        n_dark = sum(1 for obj in objects if obj.get("type") == "dark nebula")
+        n_dist = sum(1 for obj in objects if obj.get("dist") is not None)
         print(f"DSO included   : {len(objects):,}")
+        print(f"Dark nebulae   : {n_dark} curated" if n_dark else "Dark nebulae   : none")
+        print(f"DSO distances  : {n_dist:,} of {len(objects):,}")
         print(f"DSO notes      : {n_notes} curated" if n_notes else "DSO notes      : none")
         print(f"Output         : {out} ({out.stat().st_size / 1_048_576:.2f} MB)")
         return out

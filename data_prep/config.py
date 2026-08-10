@@ -84,6 +84,21 @@ DSO_ADDENDUM_FILENAME: str = "openngc_addendum.csv"
 #: applied at the highest available star magnitude (GAIA_DEFAULT_MAX_MAG = 14).
 DSO_MAX_MAG: float = round(0.8 * GAIA_DEFAULT_MAX_MAG, 1)
 
+#: Harris (1996, 2010 edition) Catalog of Milky Way Globular Clusters.
+#: OpenNGC's compiled parallax is unreliable for globular clusters (crowded
+#: fields bias Gaia parallax); Harris's R_Sun does the needed corrections and
+#: is the field-standard source. Plain-text, not behind the CDS/VizieR
+#: bot-protection that blocks other astronomy catalogue mirrors.
+HARRIS_GC_URL: str = "https://physics.mcmaster.ca/~harris/mwgc.dat"
+HARRIS_GC_FILENAME: str = "harris_mwgc.dat"
+
+#: Speed of light (km/s) and a round Hubble constant (km/s/Mpc), used for a
+#: simple Hubble-law distance estimate for galaxies from OpenNGC's Redshift
+#: column. Approximate by nature (ignores peculiar velocity) - overridden for
+#: Local Group members in sources/distances_dso.csv, where it's badly wrong.
+SPEED_OF_LIGHT_KM_S: float = 299792.458
+HUBBLE_CONSTANT_KM_S_MPC: float = 70.0
+
 # ---------------------------------------------------------------------------
 # Constellations (Stellarium modern IAU skyculture)
 # ---------------------------------------------------------------------------
