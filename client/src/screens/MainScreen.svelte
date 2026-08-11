@@ -134,6 +134,12 @@
   let showFovInstrumentPanel = false
   let fovCircleTelescopes = []
   let fovCircleEyepieces = []
+  // Live finder/telescope-view FOV and magnitude range, bound from
+  // FinderPanel - shown in TopBar in place of the main view's own values
+  // while the finder is open.
+  let finderDisplayFov = null
+  let finderDisplayMagMin = null
+  let finderDisplayMagMax = null
 
   $: fovCircleDeg = (() => {
     const sel = $fovCircleInstrument
@@ -889,9 +895,9 @@
     {time}
     {menuOpen}
     finderMode={$finderViewActive}
-    fov={showMoonMap ? null : minDimFov}
-    magMin={showMoonMap ? null : displayMagMin}
-    magMax={showMoonMap ? null : displayMagMax}
+    fov={showMoonMap ? null : $finderViewActive ? finderDisplayFov : minDimFov}
+    magMin={showMoonMap ? null : $finderViewActive ? finderDisplayMagMin : displayMagMin}
+    magMax={showMoonMap ? null : $finderViewActive ? finderDisplayMagMax : displayMagMax}
     on:menutoggle={() => {
       searchViewActive.set(false)
       objectDetailsActive.set(false)
@@ -1097,6 +1103,9 @@
       {lon}
       time={skyTime}
       pathStateVersion={findingPathsStateVersion}
+      bind:displayFov={finderDisplayFov}
+      bind:displayMagMin={finderDisplayMagMin}
+      bind:displayMagMax={finderDisplayMagMax}
       on:recordpath={(e) => {
         findingPathsObject = e.detail?.object || get(selectedObject)
         if (!findingPathsObject) return

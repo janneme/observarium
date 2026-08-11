@@ -7,8 +7,10 @@
   import ObservationFormPanel from './ObservationFormPanel.svelte'
   import ObservedListRemovalOverlay from './ObservedListRemovalOverlay.svelte'
   import ObservedIcon from '../icons/ObservedIcon.svelte'
+  import SettingsIcon from '../icons/SettingsIcon.svelte'
+  import FinderInstrumentPanel from './FinderInstrumentPanel.svelte'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { finderViewActive, searchViewActive, pendingFocus } from '../stores/ui.js'
+  import { searchViewActive, pendingFocus, finderInstrument } from '../stores/ui.js'
   import {
     getMeta,
     getObjectsInArea,
@@ -27,9 +29,53 @@
   export let lon = 16.37
   export let time = new Date()
   export let pathStateVersion = 0
+  // Live finder/telescope-view FOV and displayed magnitude range, for the
+  // parent to show in TopBar in place of the main sky view's own values
+  // while the finder is open - see MainScreen's TopBar bindings.
+  export let displayFov = null
+  export let displayMagMin = null
+  export let displayMagMax = null
 
-  const FINDER_FOV = 7.5
+  const STANDARD_FINDER_FOV = 7.5
   const EUROPE_MIN_DEC = -35
+  // Telescope's theoretical limiting magnitude from aperture alone (same
+  // formula as the Visual Range feature, lib/visualRangePlan.js), replacing
+  // the generic FOV-based adaptive default once a telescope is selected -
+  // see finder_view.md.
+  const TELESCOPE_LIMIT_MAG_BASE = 2.1
+  const TELESCOPE_LIMIT_MAG_SLOPE = 5
+  const INCHES_TO_MM = 25.4
+  // Same log-linear rendering-depth formula as SkyCanvas's own
+  // adaptiveMagLimit (duplicated here - it's component-local there too -
+  // so the TopBar figure matches what SkyCanvas actually renders when no
+  // telescope magLimitOverride is active).
+  const FOV_MAG5 = 120
+  const FOV_MAG14 = 2
+  function adaptiveMagLimit(fovDeg) {
+    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
+  }
+  // Actual brightest/faintest magnitude among the loaded, in-view stars -
+  // mirrors MainScreen's own computeViewportMagRange, approximating the
+  // finder's circular view as a square of side fovDeg (same simplification
+  // MainScreen makes for its rectangular viewport).
+  function computeViewportMagRange(objs, magLimit, centerRa, centerDec, fovDeg) {
+    let min = Infinity,
+      max = -Infinity
+    const cosDec = Math.cos((centerDec * Math.PI) / 180)
+    for (const obj of objs) {
+      if (obj.type !== 'star' && obj.type !== 'double_star') continue
+      const m = Array.isArray(obj.mag) ? obj.mag[0] : obj.mag
+      if (m == null || m > magLimit) continue
+      const [ra, dec] = obj.pos
+      if (Math.abs(dec - centerDec) > fovDeg / 2) continue
+      let dRa = Math.abs(ra - centerRa)
+      if (dRa > 180) dRa = 360 - dRa
+      if (dRa * cosDec > fovDeg / 2) continue
+      if (m < min) min = m
+      if (m > max) max = m
+    }
+    return { min: min === Infinity ? null : min, max: max === -Infinity ? null : max }
+  }
   const LABEL_TOP_REM = 0.35
   const LABEL_ICON_BLOCK_REM = 1.3
   const LABEL_LINE_HEIGHT_REM = 1
@@ -47,6 +93,37 @@
   let guideOptions = []
   let labelBoxWidthPx = 120
   const pointers = new Map()
+
+  let telescopes = []
+  let eyepieces = []
+  let telescopeViewActive = false
+  let showInstrumentSetup = false
+  let instrumentSetupPrimaryLabel = 'Save'
+  let switchToTelescopeOnSave = false
+
+  $: selectedTelescope = telescopes.find((t) => t.id === $finderInstrument.telescopeId) || null
+  $: selectedEyepiece = eyepieces.find((e) => e.id === $finderInstrument.eyepieceId) || null
+  $: instrumentConfigured = !!(selectedTelescope && selectedEyepiece)
+  $: hasAnyInstrumentOptions = telescopes.length > 0 && eyepieces.length > 0
+  $: telescopeViewFov = instrumentConfigured
+    ? selectedEyepiece.fovDeg / (selectedTelescope.focalLengthMm / selectedEyepiece.focalLengthMm)
+    : null
+  $: telescopeLimitMag = instrumentConfigured
+    ? TELESCOPE_LIMIT_MAG_BASE + TELESCOPE_LIMIT_MAG_SLOPE * Math.log10(selectedTelescope.diameterInches * INCHES_TO_MM)
+    : null
+  $: effectiveFov = telescopeViewActive && telescopeViewFov != null ? telescopeViewFov : STANDARD_FINDER_FOV
+  $: effectiveMagLimitOverride = telescopeViewActive && telescopeLimitMag != null ? telescopeLimitMag : null
+  // If the telescope/eyepiece pair backing an active telescope view gets
+  // deleted or otherwise becomes unavailable, fall back to the finder.
+  $: if (telescopeViewActive && !instrumentConfigured) telescopeViewActive = false
+
+  $: displayFov = effectiveFov
+  $: {
+    const magLimit = effectiveMagLimitOverride ?? adaptiveMagLimit(effectiveFov)
+    const range = computeViewportMagRange(objects, magLimit, finderRa0, finderDec0, effectiveFov)
+    displayMagMin = range.min
+    displayMagMax = range.max
+  }
 
   let isObservedToday = false
   let showObservationForm = false
@@ -138,13 +215,18 @@
   ).length
 
   async function loadObjects() {
-    const margin = FINDER_FOV * 2
+    const margin = effectiveFov * 2
+    // Standard finder depth is mag 12; telescope mode must fetch as deep as
+    // its computed limiting magnitude, or the extra depth SkyCanvas is told
+    // to render (via magLimitOverride) is moot - the star data was never
+    // actually retrieved past mag 12 in the first place.
+    const fetchMagLimit = effectiveMagLimitOverride ?? 12
     objects = await getObjectsInArea(
       finderRa0 - margin,
       finderRa0 + margin,
       finderDec0 - margin,
       finderDec0 + margin,
-      12,
+      fetchMagLimit,
     )
   }
 
@@ -174,7 +256,7 @@
   }
 
   function applyPan(dx, dy, raC, decC, sizePx) {
-    const fovRad = (FINDER_FOV * Math.PI) / 180
+    const fovRad = (effectiveFov * Math.PI) / 180
     const scale = sizePx / fovRad
     const x = dx / scale
     const y = dy / scale
@@ -187,7 +269,7 @@
     const dec_r = Math.asin(Math.max(-1, Math.min(1, cosC * Math.sin(dec0_r) + (y * sinC * Math.cos(dec0_r)) / rho)))
     const ra_r =
       (raC * Math.PI) / 180 + Math.atan2(x * sinC, rho * Math.cos(dec0_r) * cosC - y * Math.sin(dec0_r) * sinC)
-    const decMin = EUROPE_MIN_DEC + FINDER_FOV / 2
+    const decMin = EUROPE_MIN_DEC + effectiveFov / 2
     return {
       ra0: ((((ra_r * 180) / Math.PI) % 360) + 360) % 360,
       dec0: Math.max(decMin, Math.min(90, (dec_r * 180) / Math.PI)),
@@ -318,6 +400,15 @@
   // ─────────────────────────────────────────────────────────────
 
   function handleKey(e) {
+    if (showInstrumentSetup) {
+      if (e.key === 'Escape') {
+        showInstrumentSetup = false
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      return
+    }
+
     if (guidePickerOpen) {
       if (e.key === 'Escape') {
         guidePickerOpen = false
@@ -365,8 +456,15 @@
       return
     }
 
-    const decMin = EUROPE_MIN_DEC + FINDER_FOV / 2
-    const step = FINDER_FOV / 3
+    if (e.key === 's') {
+      if (hasAnyInstrumentOptions) void toggleTelescopeView()
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+
+    const decMin = EUROPE_MIN_DEC + effectiveFov / 2
+    const step = effectiveFov / 3
     if (e.key === 'ArrowRight') {
       finderRa0 = (((finderRa0 + step / Math.max(0.1, Math.cos((finderDec0 * Math.PI) / 180))) % 360) + 360) % 360
     } else if (e.key === 'ArrowLeft') {
@@ -402,6 +500,11 @@
     window.addEventListener('keydown', handleKey, true)
     window.addEventListener('resize', updateLabelGeometry)
     setTimeout(updateLabelGeometry, 0)
+    ;(async () => {
+      const [savedTels, savedEps] = await Promise.all([getMeta('telescopes'), getMeta('eyepieces')])
+      telescopes = Array.isArray(savedTels) ? savedTels : []
+      eyepieces = Array.isArray(savedEps) ? savedEps : []
+    })()
   })
 
   onDestroy(() => {
@@ -413,8 +516,45 @@
     setTimeout(updateLabelGeometry, 0)
   }
 
-  function switchToMain() {
-    finderViewActive.set(false)
+  // `effectiveFov` is a `$:` derived value, recomputed by Svelte's reactive
+  // scheduler asynchronously (not synchronously on assignment) - calling
+  // loadObjects() right after flipping telescopeViewActive would otherwise
+  // fetch using the *previous* FOV's margin, leaving empty bands at the
+  // edges once the wider (or narrower) view actually renders. `tick()`
+  // waits for pending reactive updates to flush first.
+  async function toggleTelescopeView() {
+    if (telescopeViewActive) {
+      telescopeViewActive = false
+      await tick()
+      void loadObjects()
+      return
+    }
+    if (!instrumentConfigured) {
+      instrumentSetupPrimaryLabel = 'Telescope view'
+      switchToTelescopeOnSave = true
+      showInstrumentSetup = true
+      return
+    }
+    telescopeViewActive = true
+    await tick()
+    void loadObjects()
+  }
+
+  function openInstrumentSetup() {
+    instrumentSetupPrimaryLabel = 'Save'
+    switchToTelescopeOnSave = false
+    showInstrumentSetup = true
+  }
+
+  async function handleInstrumentSaved() {
+    showInstrumentSetup = false
+    if (switchToTelescopeOnSave) telescopeViewActive = true
+    await tick()
+    void loadObjects()
+  }
+
+  function handleInstrumentCancelled() {
+    showInstrumentSetup = false
   }
 
   function openAbout() {
@@ -608,7 +748,8 @@
       <SkyCanvas
         ra0={finderRa0}
         dec0={finderDec0}
-        fov={FINDER_FOV}
+        fov={effectiveFov}
+        magLimitOverride={effectiveMagLimitOverride}
         {objects}
         {lat}
         {lon}
@@ -665,7 +806,21 @@
     </div>
   {:else}
     <div class="scroll-area">
-      <button class="finder-btn" on:click={switchToMain}>Switch to normal view</button>
+      {#if hasAnyInstrumentOptions}
+        <div class="finder-btn-row">
+          <button class="finder-btn finder-btn-main" on:click={toggleTelescopeView}>
+            {telescopeViewActive ? 'Switch to finder view' : 'Switch to telescope view'}
+          </button>
+          <button
+            class="finder-btn-icon"
+            on:click={openInstrumentSetup}
+            aria-label="Telescope setup"
+            title="Telescope setup"
+          >
+            <SettingsIcon size="1.2rem" />
+          </button>
+        </div>
+      {/if}
       <button class="finder-btn" on:click={openSearch}>Find object</button>
       {#if hasPath}
         <button class="finder-btn" on:click={openGuidePicker}
@@ -715,6 +870,14 @@
       on:remove={onObservedListRemovalRemove}
       on:continue={onObservedListRemovalContinue}
       on:cancel={onObservedListRemovalCancel}
+    />
+  {/if}
+
+  {#if showInstrumentSetup}
+    <FinderInstrumentPanel
+      primaryLabel={instrumentSetupPrimaryLabel}
+      on:save={handleInstrumentSaved}
+      on:cancel={handleInstrumentCancelled}
     />
   {/if}
 </div>
@@ -929,6 +1092,39 @@
     outline: none;
   }
 
+  .finder-btn-row {
+    display: flex;
+    gap: 0.8vh;
+    flex-shrink: 0;
+  }
+
+  .finder-btn-main {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .finder-btn-icon {
+    flex-shrink: 0;
+    width: auto;
+    padding: 1.7vh;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--fg);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1.2vh;
+    cursor: pointer;
+    transition: background 150ms;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .finder-btn-icon:hover,
+  .finder-btn-icon:focus-visible {
+    background: rgba(255, 255, 255, 0.13);
+    outline: none;
+  }
+
   :global([data-theme='nightly']) .finder-overlay {
     background: #110000;
   }
@@ -957,6 +1153,16 @@
   }
 
   :global([data-theme='nightly']) .finder-btn:hover {
+    background: rgba(180, 0, 0, 0.14);
+  }
+
+  :global([data-theme='nightly']) .finder-btn-icon {
+    color: #ff0000;
+    border-color: rgba(180, 0, 0, 0.25);
+    background: rgba(180, 0, 0, 0.08);
+  }
+
+  :global([data-theme='nightly']) .finder-btn-icon:hover {
     background: rgba(180, 0, 0, 0.14);
   }
 

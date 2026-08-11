@@ -79,14 +79,10 @@
   onMount(async () => {
     const [savedTels, savedEps] = await Promise.all([getMeta('telescopes'), getMeta('eyepieces')])
     telescopes = Array.isArray(savedTels)
-      ? [...savedTels].sort((a, b) =>
-          String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
-        )
+      ? [...savedTels].sort((a, b) => (a.diameterInches ?? 0) - (b.diameterInches ?? 0))
       : []
     eyepieces = Array.isArray(savedEps)
-      ? [...savedEps].sort((a, b) =>
-          String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
-        )
+      ? [...savedEps].sort((a, b) => (b.focalLengthMm ?? 0) - (a.focalLengthMm ?? 0))
       : []
     try {
       const raw = localStorage.getItem(LS_KEY)

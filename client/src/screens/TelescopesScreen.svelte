@@ -1,12 +1,13 @@
 <script>
   import { onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import { getMeta, setMeta, getAllObservations, markDirty, getSyncDirtyTotalCount } from '../lib/db.js'
   import CustomInput from '../components/CustomInput.svelte'
   import CustomCheckbox from '../components/CustomCheckbox.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import { keyboardActive } from '../stores/keyboard.js'
-  import { pendingChanges } from '../stores/ui.js'
+  import { pendingChanges, fovCircleInstrument, finderInstrument } from '../stores/ui.js'
   import EditIcon from '../icons/EditIcon.svelte'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
@@ -34,10 +35,15 @@
   let confirmMessage = ''
   let pendingDelete = null
 
-  function sortByName(items) {
-    return [...items].sort((a, b) =>
-      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
-    )
+  // Telescopes by aperture ascending, eyepieces by focal length descending
+  // (i.e. widest field / lowest magnification first) - applied everywhere
+  // these lists are shown or picked from.
+  function sortTelescopes(items) {
+    return [...items].sort((a, b) => (a.diameterInches ?? 0) - (b.diameterInches ?? 0))
+  }
+
+  function sortEyepieces(items) {
+    return [...items].sort((a, b) => (b.focalLengthMm ?? 0) - (a.focalLengthMm ?? 0))
   }
 
   function newUuid() {
@@ -57,8 +63,8 @@
 
   async function loadData() {
     const [savedTelescopes, savedEyepieces] = await Promise.all([getMeta('telescopes'), getMeta('eyepieces')])
-    telescopes = sortByName(Array.isArray(savedTelescopes) ? savedTelescopes : [])
-    eyepieces = sortByName(Array.isArray(savedEyepieces) ? savedEyepieces : [])
+    telescopes = sortTelescopes(Array.isArray(savedTelescopes) ? savedTelescopes : [])
+    eyepieces = sortEyepieces(Array.isArray(savedEyepieces) ? savedEyepieces : [])
   }
 
   async function persistTelescopes() {
@@ -122,7 +128,7 @@
       needsEyepiece: !!newTelescope.needsEyepiece,
       updatedAt: new Date().toISOString(),
     }
-    telescopes = sortByName([...telescopes, item])
+    telescopes = sortTelescopes([...telescopes, item])
     await persistTelescopes()
     await markTelescopeDirty(item.id, 'upsert')
     saveMsg = 'Telescope added.'
@@ -139,7 +145,7 @@
       return
     }
     const item = { id: newUuid(), name, focalLengthMm, fovDeg, updatedAt: new Date().toISOString() }
-    eyepieces = sortByName([...eyepieces, item])
+    eyepieces = sortEyepieces([...eyepieces, item])
     await persistEyepieces()
     await markEyepieceDirty(item.id, 'upsert')
     saveMsg = 'Eyepiece added.'
@@ -171,7 +177,7 @@
       warningMsg = 'Fill telescope name, focal length (mm), and diameter (inches).'
       return
     }
-    telescopes = sortByName(
+    telescopes = sortTelescopes(
       telescopes.map((t) =>
         t.id === itemId
           ? {
@@ -215,7 +221,7 @@
       warningMsg = 'Fill eyepiece name, focal length (mm), and FOV (degrees).'
       return
     }
-    eyepieces = sortByName(
+    eyepieces = sortEyepieces(
       eyepieces.map((e) =>
         e.id === itemId ? { ...e, name, focalLengthMm, fovDeg, updatedAt: new Date().toISOString() } : e,
       ),
@@ -239,10 +245,26 @@
     confirmOpen = true
   }
 
+  // Clears a persisted telescope/eyepiece selection (FOV circle, Finder
+  // telescope view) if it refers to an id that no longer exists, since a
+  // half-valid pair (only one of the two ids still real) can't render a
+  // real view either way.
+  function clearStaleInstrumentSelections(deletedId) {
+    const fovSel = get(fovCircleInstrument)
+    if (fovSel.telescopeId === deletedId || fovSel.eyepieceId === deletedId) {
+      fovCircleInstrument.set({ mode: 'finder', telescopeId: null, eyepieceId: null })
+    }
+    const finderSel = get(finderInstrument)
+    if (finderSel.telescopeId === deletedId || finderSel.eyepieceId === deletedId) {
+      finderInstrument.set({ telescopeId: null, eyepieceId: null })
+    }
+  }
+
   async function deleteTelescope(item) {
-    telescopes = sortByName(telescopes.filter((t) => t.id !== item.id))
+    telescopes = sortTelescopes(telescopes.filter((t) => t.id !== item.id))
     await persistTelescopes()
     await markTelescopeDirty(item.id, 'delete')
+    clearStaleInstrumentSelections(item.id)
     saveMsg = 'Telescope deleted.'
     if (editingTelescopeId === item.id) cancelEditTelescope()
   }
@@ -261,9 +283,10 @@
   }
 
   async function deleteEyepiece(item) {
-    eyepieces = sortByName(eyepieces.filter((e) => e.id !== item.id))
+    eyepieces = sortEyepieces(eyepieces.filter((e) => e.id !== item.id))
     await persistEyepieces()
     await markEyepieceDirty(item.id, 'delete')
+    clearStaleInstrumentSelections(item.id)
     saveMsg = 'Eyepiece deleted.'
     if (editingEyepieceId === item.id) cancelEditEyepiece()
   }

@@ -2,21 +2,25 @@
   import { createEventDispatcher, onMount } from 'svelte'
   import { get } from 'svelte/store'
   import { getMeta } from '../lib/db.js'
-  import { fovCircleInstrument } from '../stores/ui.js'
+  import { finderInstrument } from '../stores/ui.js'
   import CustomSelect from './CustomSelect.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
+
+  // 'Save' when opened via the Setup button; 'Telescope view' when opened
+  // because the user tapped "Switch to telescope view" with nothing
+  // configured yet (see finder_view.md).
+  export let primaryLabel = 'Save'
 
   const dispatch = createEventDispatcher()
 
   let telescopes = []
   let eyepieces = []
 
-  const current = get(fovCircleInstrument)
-  let mode = current.mode
+  const current = get(finderInstrument)
   let selectedTelescopeId = current.telescopeId
   let selectedEyepieceId = current.eyepieceId
 
-  $: canContinue = mode === 'finder' || (!!selectedTelescopeId && !!selectedEyepieceId)
+  $: canSave = !!selectedTelescopeId && !!selectedEyepieceId
 
   onMount(async () => {
     const [savedTels, savedEps] = await Promise.all([getMeta('telescopes'), getMeta('eyepieces')])
@@ -28,17 +32,18 @@
       : []
   })
 
-  function selectFinder() {
-    mode = 'finder'
+  function handleSave() {
+    if (!canSave) return
+    finderInstrument.set({ telescopeId: selectedTelescopeId, eyepieceId: selectedEyepieceId })
+    dispatch('save')
   }
 
-  function handleContinue() {
-    fovCircleInstrument.set({ mode, telescopeId: selectedTelescopeId, eyepieceId: selectedEyepieceId })
-    dispatch('close')
+  function handleCancel() {
+    dispatch('cancel')
   }
 
   function handleKey(e) {
-    if (e.key === 'Escape') dispatch('close')
+    if (e.key === 'Escape') dispatch('cancel')
   }
 </script>
 
@@ -46,19 +51,13 @@
 
 <div class="overlay" on:pointerdown|stopPropagation>
   <div class="header">
-    <button class="back-btn" type="button" on:click={() => dispatch('close')} aria-label="Close">
+    <button class="back-btn" type="button" on:click={handleCancel} aria-label="Close">
       <BackIcon size="1.2rem" aria-hidden="true" />
     </button>
-    <span class="header-title">Field of View</span>
+    <span class="header-title">Telescope Setup</span>
   </div>
 
   <div class="body">
-    <div class="field-row">
-      <div class="pills">
-        <button class="pill" class:selected={mode === 'finder'} on:click={selectFinder}>Standard 8x50 finder</button>
-      </div>
-    </div>
-
     <div class="field-row">
       <span class="field-label">Telescope</span>
       {#if telescopes.length === 0}
@@ -71,7 +70,6 @@
           on:change={(e) => {
             selectedTelescopeId = e.detail
             selectedEyepieceId = null
-            mode = 'telescope'
           }}
         />
       {/if}
@@ -89,13 +87,15 @@
           disabled={!selectedTelescopeId}
           on:change={(e) => {
             selectedEyepieceId = e.detail
-            mode = 'telescope'
           }}
         />
       {/if}
     </div>
 
-    <button class="begin-btn" disabled={!canContinue} on:click={handleContinue}>Continue</button>
+    <div class="actions">
+      <button class="cancel-btn" type="button" on:click={handleCancel}>Cancel</button>
+      <button class="begin-btn" disabled={!canSave} on:click={handleSave}>{primaryLabel}</button>
+    </div>
   </div>
 </div>
 
@@ -106,7 +106,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 12;
+    z-index: 40;
     background: #040404;
     color: var(--fg);
     display: flex;
@@ -171,43 +171,29 @@
     font-style: italic;
   }
 
-  .pills {
+  .actions {
+    margin-top: 0.5rem;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: 0.6rem;
+    justify-content: center;
   }
 
-  .pill {
-    background: rgba(200, 0, 0, 0.07);
-    border: 1px solid rgba(200, 0, 0, 0.25);
+  .cancel-btn {
+    background: none;
+    border: 1px solid rgba(200, 0, 0, 0.3);
     color: var(--fg);
-    border-radius: 20px;
-    padding: 0.3rem 0.65rem;
-    font-size: 0.96rem;
+    border-radius: 8px;
+    padding: 0.7rem 1.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: background 100ms;
   }
 
-  .pill:hover {
-    background: rgba(200, 0, 0, 0.15);
-  }
-
-  .pill.selected {
-    background: var(--accent, #cc0000);
-    border-color: transparent;
-    color: #000000;
-  }
-
-  :global([data-theme='nightly']) .pill.selected {
-    background: rgba(200, 0, 0, 0.12);
-    border: 2px solid var(--accent);
-    color: var(--fg);
-    font-weight: 700;
-    padding: calc(0.3rem - 1px) calc(0.65rem - 1px);
+  .cancel-btn:hover {
+    background: rgba(200, 0, 0, 0.08);
   }
 
   .begin-btn {
-    margin-top: 0.5rem;
     background: var(--accent, #cc0000);
     border: none;
     color: #000000;
@@ -216,7 +202,6 @@
     font-size: 0.95rem;
     font-weight: 600;
     cursor: pointer;
-    align-self: center;
     transition: opacity 120ms;
   }
 
@@ -227,6 +212,11 @@
 
   .begin-btn:hover:not(:disabled) {
     opacity: 0.85;
+  }
+
+  :global([data-theme='nightly']) .cancel-btn {
+    color: #ff0000;
+    border-color: rgba(200, 0, 0, 0.4);
   }
 
   :global([data-theme='nightly']) .begin-btn {

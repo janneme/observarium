@@ -241,15 +241,11 @@
   }
 
   function telescopesForSelection() {
-    return [...telescopeById.values()].sort((a, b) =>
-      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
-    )
+    return [...telescopeById.values()].sort((a, b) => (a.diameterInches ?? 0) - (b.diameterInches ?? 0))
   }
 
   function eyepiecesForSelection() {
-    return [...eyepieceById.values()].sort((a, b) =>
-      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
-    )
+    return [...eyepieceById.values()].sort((a, b) => (b.focalLengthMm ?? 0) - (a.focalLengthMm ?? 0))
   }
 
   function telescopeResultLabel(result) {

@@ -64,9 +64,7 @@
   }
 
   function eyepiecesForSelection() {
-    return [...eyepieces].sort((a, b) =>
-      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
-    )
+    return [...eyepieces].sort((a, b) => (b.focalLengthMm ?? 0) - (a.focalLengthMm ?? 0))
   }
 
   function telescopeNeedsEyepiece(t) {
@@ -120,9 +118,7 @@
 
     const [savedTelescopes, savedEyepieces] = await Promise.all([getMeta('telescopes'), getMeta('eyepieces')])
     telescopes = Array.isArray(savedTelescopes)
-      ? [...savedTelescopes].sort((a, b) =>
-          String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
-        )
+      ? [...savedTelescopes].sort((a, b) => (a.diameterInches ?? 0) - (b.diameterInches ?? 0))
       : []
     eyepieces = Array.isArray(savedEyepieces) ? savedEyepieces : []
 

@@ -26,6 +26,14 @@ export const fovCircleInstrument = persistedWritable('fovCircleInstrument', {
   telescopeId: null,
   eyepieceId: null,
 })
+// Finder view's telescope-view instrument selection - independent of
+// fovCircleInstrument above (see finder_view.md). No `mode` field: finder is
+// always the implicit default, this only ever holds a telescope+eyepiece
+// pair once the user has configured one.
+export const finderInstrument = persistedWritable('finderInstrument', {
+  telescopeId: null,
+  eyepieceId: null,
+})
 export const showConstellationLines = persistedWritable('showConstellationLines', false)
 export const showConstellationNames = persistedWritable('showConstellationNames', false)
 export const showConstellationBoundaries = persistedWritable('showConstellationBoundaries', false)
