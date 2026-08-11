@@ -85,6 +85,15 @@
     return false
   }
 
+  // Some guide/target stars (faint catalogue-only entries) have no name,
+  // Bayer designation, HIP, or HD number — fall back to a generic phrase
+  // instead of leaking the internal object id into the instructions; the
+  // on-screen chart marker/arrow is the actual way to identify them.
+  const GENERIC_STAR_DESC = 'the marked star'
+  function starDesc(obj) {
+    return _hasRealLabel(obj) ? preferredStarLabel(obj) : GENERIC_STAR_DESC
+  }
+
   function formatTime(t) {
     if (!t) return ''
     const d = t instanceof Date ? t : new Date(t)
@@ -106,14 +115,29 @@
   let _starObjects = []
   let _starLoadId = 0
 
+  // RA half-width needed to cover angular radius `fov` at declination dec0q —
+  // mirrors raSearchSpan in visualRangePlan.js. A flat cos(dec0q) floor of
+  // 0.05 (previous version) caps the span at 20×fov, which is far too narrow
+  // near the celestial pole: a point within `fov` of the true pole can sit at
+  // *any* RA, so the window must widen toward ±180° as dec approaches 90°.
+  // Confirmed cause of a real bug report: a guide candidate at dec≈89.26°
+  // whose RA differed from view centre by ~41° (well within its true angular
+  // distance of ~0.5°) was silently excluded from the render fetch.
+  function _raSearchSpan(dec, radius) {
+    const edgeDec = Math.min(89.9, Math.abs(dec) + radius)
+    const cosDec = Math.max(Math.cos((edgeDec * Math.PI) / 180), 0.01)
+    return radius / cosDec
+  }
+
   async function _loadStarsForView(centre, fov, magLim) {
     const id = ++_starLoadId
     const [ra0q, dec0q] = centre
     const decMin = Math.max(-90, dec0q - fov)
     const decMax = Math.min(90, dec0q + fov)
-    const cosD = Math.max(0.05, Math.cos((dec0q * Math.PI) / 180))
-    const raSpan = fov / cosD
-    const items = await getObjectsInArea(ra0q - raSpan, ra0q + raSpan, decMin, decMax, magLim)
+    const raSpan = _raSearchSpan(dec0q, fov)
+    const raMin = ra0q - raSpan
+    const raMax = ra0q + raSpan
+    const items = await getObjectsInArea(raMin, raMax, decMin, decMax, magLim)
     if (id !== _starLoadId) return
     _starObjects = items
       .filter((o) => o.type === 'star' || o.type === 'double_star')
@@ -124,6 +148,19 @@
         pairs: undefined,
         mag: Array.isArray(o.mag) ? o.mag[0] : o.mag,
       }))
+    // @@ VR-fetch: verify the current step's candidates actually landed
+    // inside this fetch — if one is missing, it'll be asked about but never
+    // rendered on screen (the exact symptom this log is here to catch).
+    if (currentStep) {
+      for (const c of currentStep.candidates) {
+        const got = _starObjects.some((o) => o.id === c.id)
+        if (!got) {
+          console.warn(
+            `@@ VR-fetch: candidate id=${c.id} pos=(RA=${c.pos[0].toFixed(3)} Dec=${c.pos[1].toFixed(3)}) NOT in fetch window RA=[${raMin.toFixed(3)},${raMax.toFixed(3)}] Dec=[${decMin.toFixed(3)},${decMax.toFixed(3)}] centre=(RA=${ra0q.toFixed(3)} Dec=${dec0q.toFixed(3)}) fov=${fov.toFixed(3)}`,
+          )
+        }
+      }
+    }
   }
 
   $: if (viewCentre && fovDeg > 0) _loadStarsForView(viewCentre, fovDeg, magLimitForView)
@@ -223,6 +260,12 @@
   })()
 
   function _fracDescription(frac, bLbl, cLbl) {
+    // Both anchors can independently fall back to the same generic phrase
+    // (two different unnamed stars) — disambiguate rather than repeating it.
+    if (bLbl === GENERIC_STAR_DESC && cLbl === GENERIC_STAR_DESC) {
+      bLbl = 'one marked star'
+      cLbl = 'the other'
+    }
     if (Math.abs(frac - 0.5) < 1e-6) return `the midpoint between ${bLbl} and ${cLbl}`
     if (frac < 0.5) return `about one third of the way from ${bLbl} to ${cLbl}`
     return `about two thirds of the way from ${bLbl} to ${cLbl}`
@@ -230,17 +273,17 @@
 
   $: instructionText = (() => {
     if (phase === 'move' && currentMove) {
-      const fromLbl = preferredStarLabel(currentMove.from)
+      const fromLbl = starDesc(currentMove.from)
       const k = currentMove.multiplier
       if (currentMove.via) {
-        const bLbl = preferredStarLabel(currentMove.via.b)
-        const cLbl = preferredStarLabel(currentMove.via.c)
+        const bLbl = starDesc(currentMove.via.b)
+        const cLbl = starDesc(currentMove.via.c)
         const aimDesc = _fracDescription(currentMove.via.frac, bLbl, cLbl)
         return k > 1
           ? `Center on ${fromLbl}, then hop ×${k} the distance toward ${aimDesc}`
           : `Center on ${fromLbl}, then move to ${aimDesc}`
       }
-      const toLbl = preferredStarLabel(currentMove.to)
+      const toLbl = starDesc(currentMove.to)
       return k > 1
         ? `Find ${fromLbl} → ${toLbl}, then hop ×${k} that distance onward`
         : `Use ${fromLbl} → ${toLbl} to reach the next field`

@@ -14,9 +14,18 @@ const INITIAL_GUIDE_MAG_OFFSET = 0.5
 // DFS cost of looking beyond "first success" for a safer opening jump.
 const PHASE1_CLEAN_CANDIDATES_TO_CONSIDER = 10
 const MAX_MAG_DIFF = 6.0
-const CLOSE_NEIGHBOURHOOD_REL_RADIUS = 0.02
+const CLOSE_NEIGHBOURHOOD_REL_RADIUS = 0.015
+// A candidate whose magnitude is within this much of a neighbour's, inside
+// the close-neighbourhood radius, is confusable at the eyepiece — reject it
+// the same way an outright brighter neighbour is rejected.
+const SIMILAR_MAG_TOLERANCE = STEP_MAG_TOLERANCE
 const DSO_MAX_SB = 24.0
 const PLAN_SEARCH_RADIUS_FACTOR = 2.5
+// Final candidate placements must land within this fraction of the FOV
+// radius from view centre, not just anywhere inside the full circle — keeps
+// the test star off the very edge of the view where cross-referencing
+// against the rest of the field isn't possible.
+const CANDIDATE_VIEW_FRACTION = 0.85
 
 // Guide-path DFS search
 const DFS_NODE_BUDGET = 400
@@ -266,12 +275,15 @@ function computeSignificantDsos(dsos) {
 // Candidate qualification
 // --------------------------------------------------------------------------
 
-function isIsolated(star, fineBuckets, isolRadius) {
+function isIsolated(star, fineBuckets, isolRadius, magTolerance) {
   const mag = getStarMag(star)
   const neighbors = queryInFineRadius(fineBuckets, star.pos[0], star.pos[1], isolRadius)
   for (const n of neighbors) {
     if (n.id === star.id) continue
-    if (getStarMag(n) < mag) return false
+    // Rejects any brighter neighbour outright, and any neighbour within
+    // magTolerance of this star's own brightness (same-or-fainter but close
+    // enough to be mistaken for it).
+    if (getStarMag(n) - mag <= magTolerance) return false
   }
   return true
 }
@@ -309,7 +321,7 @@ function getCandidates(M, sortedStars, fineBuckets, fovDeg, significantDsos) {
     if (mag > magHi) break
     if (star.varType) continue
     if (star.clr === CLR_BLUEST || star.clr === CLR_REDDEST) continue
-    if (!isIsolated(star, fineBuckets, isolRadius)) continue
+    if (!isIsolated(star, fineBuckets, isolRadius, SIMILAR_MAG_TOLERANCE)) continue
     if (!notInDso(star, significantDsos, dsoMargin)) continue
     results.push(star)
   }
@@ -601,9 +613,10 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
 
     const actualEndpoint = computeEndpoint(startStar.pos, moves)
     const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
+    const candidateMaxDist = fovRadius * CANDIDATE_VIEW_FRACTION
     if (
-      angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
-      angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
+      angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > candidateMaxDist ||
+      angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > candidateMaxDist
     )
       continue
 
@@ -648,7 +661,7 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
     const candidates = getCandidates(nextM, allLocalStars, allFineBuckets, fovDeg, significantDsos)
 
     const atCentre = candidates.filter(
-      (s) => angSepDeg(currentCentre[0], currentCentre[1], s.pos[0], s.pos[1]) <= fovRadius,
+      (s) => angSepDeg(currentCentre[0], currentCentre[1], s.pos[0], s.pos[1]) <= fovRadius * CANDIDATE_VIEW_FRACTION,
     )
 
     if (atCentre.length >= 2 && checkMaxMagDiff(currentCentre, nextM, allBuckets, fovRadius)) {
@@ -689,9 +702,10 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
 
       const actualEndpoint = computeEndpoint(currentCentre, moves)
       const [c1, c2] = sortedCandidates(pair.c1, pair.c2)
+      const candidateMaxDist = fovRadius * CANDIDATE_VIEW_FRACTION
       if (
-        angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > fovRadius ||
-        angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > fovRadius
+        angSepDeg(actualEndpoint[0], actualEndpoint[1], c1.pos[0], c1.pos[1]) > candidateMaxDist ||
+        angSepDeg(actualEndpoint[0], actualEndpoint[1], c2.pos[0], c2.pos[1]) > candidateMaxDist
       )
         continue
 
