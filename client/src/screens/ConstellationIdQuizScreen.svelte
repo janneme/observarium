@@ -87,8 +87,15 @@
   // range won't be rendered, so isn't a candidate for either set below).
   let renderedSchemaIds = new Set()
   // Ids to mark with SkyCanvas's bigger-star-symbol highlight: all of
-  // `renderedSchemaIds` at Easy/Medium, exactly one random pick at Hard.
+  // `renderedSchemaIds` at Medium, exactly one random pick at Hard, and at
+  // Easy the *entire* schema (see forcedHighlightStars below) regardless of
+  // whether every star actually falls within this question's visual range.
   let highlightedIds = new Set()
+  // Easy only: schema stars not present in `qObjects` (fainter than the
+  // rolled visual range) that SkyCanvas must force-render so the "highlight
+  // the whole schema" rule holds even for stars beyond the current limit.
+  let forcedHighlightStars = []
+  const EMPTY_ID_SET = new Set()
   // Per-question nonce so SkyCanvas's obscuring-cloud placement is only
   // re-rolled when a genuinely new question loads, not on unrelated redraws.
   let questionNonce = 0
@@ -579,8 +586,31 @@
     if (difficulty === 'hard') {
       const ids = [...rendered]
       highlightedIds = ids.length ? new Set([ids[Math.floor(Math.random() * ids.length)]]) : new Set()
+      forcedHighlightStars = []
+    } else if (difficulty === 'easy') {
+      // Highlight every schema star, not just the ones this question's
+      // rolled visual range happened to render — force the missing ones in
+      // via SkyCanvas's forcedStars pass, keyed by their real object id.
+      const renderedHips = new Set()
+      for (const o of objects) {
+        const hip = Number(o?.hip)
+        if (Number.isFinite(hip)) renderedHips.add(hip)
+      }
+      const allIds = new Set(rendered)
+      const forced = []
+      for (const hip of hipSet) {
+        if (renderedHips.has(hip)) continue
+        const s = starsByHip.get(hip)
+        if (!s || !Array.isArray(s.pos)) continue
+        const mag = Array.isArray(s.mag) ? s.mag[0] : Number(s.mag)
+        allIds.add(s.id)
+        forced.push({ id: s.id, pos: s.pos, mag })
+      }
+      highlightedIds = allIds
+      forcedHighlightStars = forced
     } else {
       highlightedIds = rendered
+      forcedHighlightStars = []
     }
   }
 
@@ -775,6 +805,12 @@
   $: boundaryRevealed = difficulty === 'easy' || firstTapMade
   $: boundaryHighlightAbbr = boundaryRevealed ? currentQuestion : null
 
+  // Once the answer is revealed (lines/boundary drawn), the quizzed
+  // constellation's stars go back to standard symbols — the special
+  // highlight was a pre-answer clue, not something that should linger
+  // once the boundary/lines already give the answer away.
+  $: displayedHighlightedIds = firstTapMade ? EMPTY_ID_SET : highlightedIds
+
   // Hard-only obscuring cloud, avoiding this question's rendered schema stars.
   $: obscuringCloud =
     difficulty === 'hard' && currentQuestion
@@ -821,13 +857,16 @@
       }
       alphaDecByAbbr = nextAlphaDecByAbbr
       conInfoByAbbr = buildConInfo(constellations)
-      // Build a global HIP → [ra, dec] fallback so SkyCanvas can draw any
-      // constellation line whose endpoint is fainter than the quiz's visual
-      // range and therefore absent from the loaded `objects` array.
+      // Build a global HIP → [ra, dec, mag] fallback so SkyCanvas can draw
+      // any constellation line whose endpoint is fainter than the quiz's
+      // visual range and therefore absent from the loaded `objects` array —
+      // the mag is included so SkyCanvas can also force-render the star dot
+      // itself, not just the line into it (otherwise the line dangles at an
+      // invisible point).
       const fallback = new Map()
       for (const info of conInfoByAbbr.values()) {
         for (const s of info.schemaStars) {
-          if (!fallback.has(s.hip)) fallback.set(s.hip, [s.ra, s.dec])
+          if (!fallback.has(s.hip)) fallback.set(s.hip, [s.ra, s.dec, s.mag])
         }
       }
       schemaFallbackByHip = fallback
@@ -915,7 +954,8 @@
             showConstellationNames={false}
             showConstellationBoundaries={boundaryRevealed}
             highlightBoundaryAbbr={boundaryHighlightAbbr}
-            highlightedStarIds={highlightedIds}
+            highlightedStarIds={displayedHighlightedIds}
+            forcedStars={forcedHighlightStars}
             {obscuringCloud}
             showDsos={false}
             showSpecialStarSymbols={false}

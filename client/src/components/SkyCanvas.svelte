@@ -58,6 +58,12 @@
   // star symbol (e.g. all schema stars at Easy/Medium, one random one at
   // Hard) - see drawHighlightedStars.
   export let highlightedStarIds = new Set()
+  // Constellation quiz (Easy): stars that must be drawn regardless of magLim
+  // (e.g. the full schema, including stars fainter than this question's
+  // rolled visual range) - each entry { id, pos: [ra, dec], mag }. Skipped if
+  // the id was already rendered normally. Lets `highlightedStarIds` reference
+  // them even though they'd otherwise never appear in `objects`.
+  export let forcedStars = []
   // Constellation quiz (Hard): one or more randomly placed obscuring patches.
   // Shape: { key, widthFrac, heightFrac, avoidIds, count }. `key` must change
   // only when new placements should be rolled (e.g. per-question nonce) - see
@@ -121,6 +127,7 @@
     quizzedConstellationAbbr
     activeListObjectIds
     highlightedStarIds
+    forcedStars
     obscuringCloud
     dirty = true
   }
@@ -977,7 +984,15 @@
     ctx.setLineDash([])
   }
 
+  // Schema stars whose line was drawn this frame via lineFallbackByHip (i.e.
+  // fainter than magLim and absent from `objects`) — forced onto the star
+  // pass below so a drawn line never dangles at an invisible endpoint.
+  // Value tuples are [ra, dec, mag?] — mag is optional for callers (e.g.
+  // StarQuizScreen) that don't supply it, in which case no star is forced.
+  let forcedSchemaStars = new Map()
+
   function drawConstellationLines(ctx) {
+    forcedSchemaStars = new Map()
     if (!constellations) return
     const nightly = currentTheme === 'nightly'
     const fallbackIsMap = lineFallbackByHip instanceof Map
@@ -1000,11 +1015,13 @@
       for (const [hip_a, hip_b] of con.lines) {
         const mapPosA = hipMap.get(hip_a)
         const mapPosB = hipMap.get(hip_b)
-        const fallbackPosA = mapPosA ? null : getFallbackPos(hip_a)
-        const fallbackPosB = mapPosB ? null : getFallbackPos(hip_b)
-        const posA = mapPosA || fallbackPosA
-        const posB = mapPosB || fallbackPosB
+        const fallbackA = mapPosA ? null : getFallbackPos(hip_a)
+        const fallbackB = mapPosB ? null : getFallbackPos(hip_b)
+        const posA = mapPosA || fallbackA
+        const posB = mapPosB || fallbackB
         if (!posA || !posB) continue
+        if (fallbackA && fallbackA[2] != null) forcedSchemaStars.set(hip_a, fallbackA)
+        if (fallbackB && fallbackB[2] != null) forcedSchemaStars.set(hip_b, fallbackB)
         const ptA = projectToPixel(posA[0], posA[1], ra0, dec0, W, H, fov, rotation)
         const ptB = projectToPixel(posB[0], posB[1], ra0, dec0, W, H, fov, rotation)
         if (!ptA || !ptB) continue
@@ -1142,16 +1159,21 @@
   )
   const HIGHLIGHT_STAR_VIEWBOX_W = 576
   const HIGHLIGHT_STAR_VIEWBOX_H = 512
-  const HIGHLIGHT_STAR_MIN_SIZE = 10.92
-  const HIGHLIGHT_STAR_SIZE_SCALE = 1.89
+  // Brightest visible star gets the full symbol size; faintest visible star
+  // (at magLim) gets half that, interpolated in between using the same
+  // magLim/MAG_RANGE window starRadius() uses for the star dots themselves.
+  const HIGHLIGHT_STAR_MAX_SIZE = 10.92
+  const HIGHLIGHT_STAR_MIN_SIZE_FRACTION = 0.5
 
   function drawHighlightedStars(ctx) {
     if (!highlightedStarIds || highlightedStarIds.size === 0) return
     ctx.fillStyle = currentTheme === 'nightly' ? '#ff0088' : '#ffaa00'
+    const magLim = magLimitOverride ?? adaptiveMagLimit(minDimFov)
     for (const [id, pt] of renderedPx) {
       if (!highlightedStarIds.has(id)) continue
-      const baseR = pt.r ?? 3
-      const size = Math.max(HIGHLIGHT_STAR_MIN_SIZE, baseR * HIGHLIGHT_STAR_SIZE_SCALE)
+      const t = Math.max(0, Math.min(1, (magLim - (pt.mag ?? magLim)) / MAG_RANGE))
+      const size =
+        HIGHLIGHT_STAR_MAX_SIZE * (HIGHLIGHT_STAR_MIN_SIZE_FRACTION + (1 - HIGHLIGHT_STAR_MIN_SIZE_FRACTION) * t)
       const scale = size / HIGHLIGHT_STAR_VIEWBOX_W
       ctx.save()
       ctx.translate(pt.px, pt.py)
@@ -1517,6 +1539,7 @@
     }
 
     // Pass 2: stars and double stars (rendered on top of DSOs)
+    const drawnHips = new Set()
     for (const obj of objects) {
       if (!obj.pos) continue
       if (obj.type === 'star' || obj.type === 'double_star') {
@@ -1532,9 +1555,36 @@
         const symR = drawStar(ctx, obj, pt, above)
         if (showSpecialStarSymbols && isVariable) addVariableRing(ctx, obj, pt, above)
         if (showSpecialStarSymbols && isDouble) addDoubleJut(ctx, obj, pt, above, isMulti)
-        renderedPx.set(obj.id, { px: pt.px, py: pt.py, r: symR })
+        renderedPx.set(obj.id, { px: pt.px, py: pt.py, r: symR, mag: objMag })
         tally(isDouble ? 'double_star' : 'star')
+        if (obj.hip) drawnHips.add(obj.hip)
       }
+    }
+
+    // Pass 2b: force-render schema stars whose line was just drawn via
+    // fallback (fainter than magLim, so skipped above) — otherwise a
+    // constellation line ends at an invisible point instead of a star.
+    for (const [hip, fb] of forcedSchemaStars) {
+      if (drawnHips.has(hip)) continue
+      const [ra, dec, fMag] = fb
+      const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
+      if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
+      const symR = drawStar(ctx, { mag: fMag }, pt, false)
+      renderedPx.set(`__forced_hip_${hip}`, { px: pt.px, py: pt.py, r: symR, mag: fMag })
+      tally('star')
+    }
+
+    // Pass 2c: caller-supplied forced stars (e.g. Easy-mode "highlight the
+    // whole schema" even for stars fainter than magLim) — drawn under their
+    // real id so a matching `highlightedStarIds` entry picks them up below.
+    for (const fs of forcedStars) {
+      if (!fs?.id || !Array.isArray(fs.pos) || renderedPx.has(fs.id)) continue
+      const [ra, dec] = fs.pos
+      const pt = projectToPixel(ra, dec, ra0, dec0, W, H, fov, rotation)
+      if (!pt || !isOnScreen(pt.px, pt.py, W, H, 10)) continue
+      const symR = drawStar(ctx, { mag: fs.mag }, pt, false)
+      renderedPx.set(fs.id, { px: pt.px, py: pt.py, r: symR, mag: fs.mag })
+      tally('star')
     }
 
     drawObscuringCloud(ctx)

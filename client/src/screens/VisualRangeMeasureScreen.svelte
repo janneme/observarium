@@ -148,19 +148,6 @@
         pairs: undefined,
         mag: Array.isArray(o.mag) ? o.mag[0] : o.mag,
       }))
-    // @@ VR-fetch: verify the current step's candidates actually landed
-    // inside this fetch — if one is missing, it'll be asked about but never
-    // rendered on screen (the exact symptom this log is here to catch).
-    if (currentStep) {
-      for (const c of currentStep.candidates) {
-        const got = _starObjects.some((o) => o.id === c.id)
-        if (!got) {
-          console.warn(
-            `@@ VR-fetch: candidate id=${c.id} pos=(RA=${c.pos[0].toFixed(3)} Dec=${c.pos[1].toFixed(3)}) NOT in fetch window RA=[${raMin.toFixed(3)},${raMax.toFixed(3)}] Dec=[${decMin.toFixed(3)},${decMax.toFixed(3)}] centre=(RA=${ra0q.toFixed(3)} Dec=${dec0q.toFixed(3)}) fov=${fov.toFixed(3)}`,
-          )
-        }
-      }
-    }
   }
 
   $: if (viewCentre && fovDeg > 0) _loadStarsForView(viewCentre, fovDeg, magLimitForView)
