@@ -35,6 +35,8 @@
   let startChip = initialStartChip
   let startQuery = ''
 
+  let showCompleted = true
+
   let activeFilter = null // 'target' | 'start' | null
   let closeFilterTimer = null
 
@@ -254,7 +256,7 @@
     return result
   }
 
-  function filterRows(rows, tChip, sChip) {
+  function filterRows(rows, tChip, sChip, showCompletedPaths) {
     let result = rows
     if (tChip) {
       result = result.filter((r) => {
@@ -273,11 +275,14 @@
         }))
         .filter((r) => r.paths.length > 0)
     }
+    if (!showCompletedPaths) {
+      result = result.map((r) => ({ ...r, paths: r.paths.filter((p) => p.isDraft) })).filter((r) => r.paths.length > 0)
+    }
     return result
   }
 
   $: allRows = buildRows(allPaths, objById, starsByHip)
-  $: filteredRows = filterRows(allRows, targetChip, startChip)
+  $: filteredRows = filterRows(allRows, targetChip, startChip, showCompleted)
   $: sortedRows = [...filteredRows].sort((a, b) => naturalCompare(a.targetLabel, b.targetLabel))
   $: targetSuggestions = allRows
     .filter((r) => {
@@ -368,6 +373,11 @@
         </div>
       {/if}
     </div>
+
+    <label class="filter-group completed-toggle">
+      <input type="checkbox" bind:checked={showCompleted} />
+      <span class="filter-label">completed</span>
+    </label>
   </div>
 
   {#if activeFilter}
@@ -604,6 +614,49 @@
     font-size: 0.82rem;
     color: rgba(232, 232, 232, 0.55);
     white-space: nowrap;
+  }
+
+  .completed-toggle {
+    margin-left: auto;
+    cursor: pointer;
+  }
+
+  /* appearance: none + hand-drawn check, matching ListsScreen's "highlight
+     observed" checkbox - the native unchecked box stays browser-default
+     white regardless of theme, which clashes at night. */
+  .completed-toggle input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    flex-shrink: 0;
+    border: 1.5px solid rgba(232, 232, 232, 0.4);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .completed-toggle input[type='checkbox']:checked {
+    background: var(--accent, #cc0000);
+    border-color: var(--accent, #cc0000);
+  }
+
+  .completed-toggle input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 0.27rem;
+    top: 0.06rem;
+    width: 0.22rem;
+    height: 0.48rem;
+    border: solid #000000;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  :global([data-theme='nightly']) .completed-toggle input[type='checkbox'] {
+    border-color: rgba(200, 0, 0, 0.55);
   }
 
   .input-wrap {
