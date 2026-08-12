@@ -14,6 +14,7 @@
     resolveObservationDateKey,
   } from '../lib/db.js'
   import { pendingChanges } from '../stores/ui.js'
+  import { refreshActiveListObjectIds } from '../lib/lists.js'
 
   export let objectId = ''
   export let time = new Date()
@@ -234,6 +235,7 @@
 
       await putObservation(nextRecord)
       pendingChanges.set(await getSyncDirtyTotalCount())
+      await refreshActiveListObjectIds()
       dispatch('saved')
     } catch (err) {
       errorMsg = err?.message || 'Failed to save observation.'

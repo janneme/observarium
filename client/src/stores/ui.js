@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store'
+import { writable, get } from 'svelte/store'
 
 function persistedWritable(key, defaultValue) {
   let initial = defaultValue
@@ -46,3 +46,28 @@ export const searchViewActive = writable(false)
 export const objectDetailsActive = writable(false)
 export const pendingFocus = writable(null) // {ra, dec} — consumed by MainScreen to re-centre
 export const pendingChanges = writable(0)
+
+// Per-list local-only preferences, keyed by list id — deliberately kept out
+// of the synced `getMeta('lists')` record (see lists.js) since this is a
+// per-device display preference, not list content. A list with no entry here
+// (new, or synced in from another device that hasn't set a local pref yet)
+// defaults to highlightObserved: true.
+export const listLocalPrefs = persistedWritable('listLocalPrefs', {})
+
+export function getHighlightObserved(listId) {
+  const prefs = get(listLocalPrefs)
+  return prefs[listId]?.highlightObserved ?? true
+}
+
+export function setHighlightObserved(listId, value) {
+  listLocalPrefs.update((prefs) => ({ ...prefs, [listId]: { ...prefs[listId], highlightObserved: value } }))
+}
+
+export function clearListLocalPrefs(listId) {
+  listLocalPrefs.update((prefs) => {
+    if (!(listId in prefs)) return prefs
+    const next = { ...prefs }
+    delete next[listId]
+    return next
+  })
+}

@@ -601,6 +601,18 @@ export async function getAllObservations() {
   return db.getAll('observations')
 }
 
+// Set of object ids that have been logged as observed on any date — used to
+// decide whether a list's "highlight observed objects too" setting suppresses
+// the sky-view marker for a given object (see lists.js/getActiveListObjectIds).
+export async function getAllObservedObjectIds() {
+  const observations = await getAllObservations()
+  const ids = new Set()
+  for (const obs of observations) {
+    for (const entry of obs.objects || []) ids.add(entry.id)
+  }
+  return ids
+}
+
 // --------------------------------------------------------------------------
 // Zone helpers
 // --------------------------------------------------------------------------

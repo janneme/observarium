@@ -10,7 +10,7 @@
   import SettingsIcon from '../icons/SettingsIcon.svelte'
   import FinderInstrumentPanel from './FinderInstrumentPanel.svelte'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { searchViewActive, pendingFocus, finderInstrument } from '../stores/ui.js'
+  import { searchViewActive, pendingFocus, finderInstrument, getHighlightObserved } from '../stores/ui.js'
   import {
     getMeta,
     getObjectsInArea,
@@ -173,7 +173,10 @@
   async function openObservedForm() {
     if (!$selectedObject) return
     const activeContaining = objectListMemberships.filter((l) => l.active)
-    if (activeContaining.length > 0) {
+    // Only lists with "highlight observed objects too" on trigger the
+    // removal prompt — a list that already ignores observed objects has
+    // nothing to warn about.
+    if (activeContaining.some((l) => getHighlightObserved(l.id))) {
       observedListRemovalCandidates = activeContaining.map((l) => ({
         id: l.id,
         name: l.name,

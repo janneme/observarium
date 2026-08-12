@@ -3,7 +3,7 @@
   import { AstroTime, MoonPhase, Illumination, Body, DefineStar } from 'astronomy-engine'
   import { SOLAR_BODY_NAME_MAP, computeRiseSetTransit, computeCometEphemeris } from '../lib/solarBodyEphemeris.js'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { objectDetailsActive, solarSystemPositions } from '../stores/ui.js'
+  import { objectDetailsActive, solarSystemPositions, getHighlightObserved } from '../stores/ui.js'
   import {
     getObservationByDate,
     getObjectImage,
@@ -438,7 +438,10 @@
   async function openObservedForm() {
     if (!obj) return
     const activeContaining = objectListMemberships.filter((l) => l.active)
-    if (activeContaining.length > 0) {
+    // Only lists with "highlight observed objects too" on trigger the
+    // removal prompt — a list that already ignores observed objects has
+    // nothing to warn about.
+    if (activeContaining.some((l) => getHighlightObserved(l.id))) {
       observedListRemovalCandidates = activeContaining.map((l) => ({
         id: l.id,
         name: l.name,

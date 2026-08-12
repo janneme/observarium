@@ -9,6 +9,7 @@
     getSyncDirtyTotalCount,
     deleteObservationByDate,
   } from '../lib/db.js'
+  import { refreshActiveListObjectIds } from '../lib/lists.js'
   import { flattenMoonFeatures } from '../lib/moonMap.js'
   import { pendingChanges } from '../stores/ui.js'
   import { keyboardActive } from '../stores/keyboard.js'
@@ -549,6 +550,7 @@
       if (objectEdit?.date === task.date && objectEdit?.objectId === task.objectId) objectEdit = null
     }
 
+    await refreshActiveListObjectIds()
     await bumpPending()
   }
 
@@ -666,6 +668,7 @@
     const updated = next.find((obs) => obs.date === date)
     if (!updated) return
     await putObservation(updated)
+    await refreshActiveListObjectIds()
     observations = sortedObservations(next)
     closeAddObject()
     if (createdEntry) {

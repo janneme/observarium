@@ -15,6 +15,7 @@
   } from '../lib/lists.js'
   import { computeListDifficultyOrder } from '../lib/listDifficulty.js'
   import { keyboardActive } from '../stores/keyboard.js'
+  import { listLocalPrefs, setHighlightObserved } from '../stores/ui.js'
   import CustomInput from '../components/CustomInput.svelte'
   import CustomTextarea from '../components/CustomTextarea.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
@@ -449,6 +450,15 @@
                 <button class="icon-btn" type="button" on:click={() => openAddObject(list.id)} title="Add object">
                   <PlusIcon size="0.9rem" aria-hidden="true" />
                 </button>
+                <span class="objects-title-filler"></span>
+                <label class="highlight-observed-toggle">
+                  <input
+                    type="checkbox"
+                    checked={$listLocalPrefs[list.id]?.highlightObserved ?? true}
+                    on:change={(e) => setHighlightObserved(list.id, e.currentTarget.checked)}
+                  />
+                  Highlight observed objects too
+                </label>
               </div>
 
               {#if (list.objects || []).length === 0}
@@ -736,6 +746,52 @@
     letter-spacing: 0.06em;
   }
 
+  .objects-title-filler {
+    flex: 1;
+  }
+
+  .highlight-observed-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    opacity: 0.75;
+    cursor: pointer;
+  }
+
+  /* appearance: none + hand-drawn check — the native checkbox's unchecked
+     interior stays browser-default white regardless of accent-color, which
+     reads as a jarring bright box against the nightly theme. */
+  .highlight-observed-toggle input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.2rem;
+    height: 1.2rem;
+    margin: 0;
+    flex-shrink: 0;
+    border: 1.5px solid var(--accent, #cc0000);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .highlight-observed-toggle input[type='checkbox']:checked {
+    background: var(--accent, #cc0000);
+  }
+
+  .highlight-observed-toggle input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 0.32rem;
+    top: 0.1rem;
+    width: 0.28rem;
+    height: 0.56rem;
+    border: solid #000000;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
   .objects-list {
     display: flex;
     flex-direction: column;
@@ -929,6 +985,7 @@
   :global([data-theme='nightly']) .caret,
   :global([data-theme='nightly']) .field-label,
   :global([data-theme='nightly']) .objects-title,
+  :global([data-theme='nightly']) .highlight-observed-toggle,
   :global([data-theme='nightly']) .obj-symbol,
   :global([data-theme='nightly']) .object-notes,
   :global([data-theme='nightly']) .btn.ghost,

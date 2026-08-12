@@ -4,8 +4,8 @@
 // which is also what the generic sync adapter in sync.js expects.
 
 import { writable } from 'svelte/store'
-import { getMeta, setMeta, markDirty, getSyncDirtyTotalCount } from './db.js'
-import { pendingChanges } from '../stores/ui.js'
+import { getMeta, setMeta, markDirty, getSyncDirtyTotalCount, getAllObservedObjectIds } from './db.js'
+import { pendingChanges, getHighlightObserved, clearListLocalPrefs, listLocalPrefs } from '../stores/ui.js'
 
 // Set of object ids belonging to at least one active list — kept as a store
 // so SkyCanvas can reactively gate its active-list marker layer without
@@ -17,6 +17,19 @@ export const activeListObjectIds = writable(new Set())
 export async function refreshActiveListObjectIds() {
   activeListObjectIds.set(await getActiveListObjectIds())
 }
+
+// Toggling a list's local "highlight observed objects too" preference takes
+// effect immediately (no Save step) — refresh on every change after the
+// initial subscribe-time firing, which just reports the value already
+// baked into whatever the caller's next explicit refresh will use.
+let _skipInitialPrefsRefresh = true
+listLocalPrefs.subscribe(() => {
+  if (_skipInitialPrefsRefresh) {
+    _skipInitialPrefsRefresh = false
+    return
+  }
+  refreshActiveListObjectIds()
+})
 
 export function newListId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -52,6 +65,7 @@ export async function deleteList(id) {
   const lists = await getAllLists()
   await persistLists(lists.filter((l) => l.id !== id))
   await markListDirty(id, 'delete')
+  clearListLocalPrefs(id)
   await refreshActiveListObjectIds()
 }
 
@@ -122,12 +136,26 @@ export async function getListsForObject(objectId) {
 
 // Set of object ids belonging to at least one active list — used by
 // SkyCanvas to gate the active-list marker layer with a cheap lookup.
+// An object already logged as observed (any date) is excluded unless at
+// least one active list containing it has "highlight observed objects too"
+// on — a list with the setting off never suppresses a highlight another
+// list still wants shown.
 export async function getActiveListObjectIds() {
   const lists = await getAllLists()
-  const ids = new Set()
+  const observedIds = await getAllObservedObjectIds()
+  const membership = new Map() // objectId -> containing active list ids
   for (const list of lists) {
     if (!list.active) continue
-    for (const obj of list.objects || []) ids.add(obj.id)
+    for (const obj of list.objects || []) {
+      if (!membership.has(obj.id)) membership.set(obj.id, [])
+      membership.get(obj.id).push(list.id)
+    }
+  }
+  const ids = new Set()
+  for (const [objectId, listIds] of membership) {
+    if (!observedIds.has(objectId) || listIds.some((listId) => getHighlightObserved(listId))) {
+      ids.add(objectId)
+    }
   }
   return ids
 }
