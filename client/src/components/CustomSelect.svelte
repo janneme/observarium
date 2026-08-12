@@ -18,10 +18,14 @@
     if (!open) {
       const rect = container.getBoundingClientRect()
       const upward = rect.bottom > window.innerHeight / 2
+      // min-width (not width) — the trigger itself can be much narrower than
+      // its longest option (e.g. a cramped 2-column filter form), so the
+      // open panel must be free to grow wider to avoid truncating option
+      // text; it should never end up narrower than the trigger though.
       if (upward) {
-        optsStyle = `left:${rect.left}px; width:${rect.width}px; bottom:${window.innerHeight - rect.top + 2}px; top:auto;`
+        optsStyle = `left:${rect.left}px; min-width:${rect.width}px; bottom:${window.innerHeight - rect.top + 2}px; top:auto;`
       } else {
-        optsStyle = `left:${rect.left}px; width:${rect.width}px; top:${rect.bottom + 2}px; bottom:auto;`
+        optsStyle = `left:${rect.left}px; min-width:${rect.width}px; top:${rect.bottom + 2}px; bottom:auto;`
       }
     }
     open = !open
@@ -32,6 +36,11 @@
     dispatch('change', opt.value)
   }
 
+  // Capture phase, not bubble - many full-screen overlays call
+  // stopPropagation() on their own pointerdown handler (to keep clicks from
+  // falling through to the sky view underneath), which would otherwise
+  // prevent this bubble-phase window listener from ever seeing the event.
+  // Capture fires on the way down, before any of that.
   function outside(e) {
     if (open && container && !container.contains(e.target)) open = false
   }
@@ -44,7 +53,7 @@
   }
 </script>
 
-<svelte:window on:pointerdown={outside} on:keydown={handleKey} />
+<svelte:window on:pointerdown|capture={outside} on:keydown={handleKey} />
 
 <div class="cs" class:disabled bind:this={container}>
   <button class="trigger" type="button" {disabled} on:click|stopPropagation={toggle}>
@@ -95,6 +104,8 @@
   }
 
   .trigger-label {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -123,6 +134,8 @@
     border-radius: 6px;
     display: flex;
     flex-direction: column;
+    width: max-content;
+    max-width: min(90vw, 22rem);
     max-height: 260px;
     overflow-y: auto;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
@@ -139,6 +152,12 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    /* Without this, a scrollable flex column container squeezes its children
+       to fit rather than actually scrolling once there are enough options to
+       exceed max-height (a long list, e.g. Object Type's ~14 entries, is
+       exactly when this triggers) - rows get vertically compressed and their
+       text overlaps the next row instead of the container scrolling. */
+    flex-shrink: 0;
   }
 
   .opt:hover {

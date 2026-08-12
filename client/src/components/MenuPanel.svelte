@@ -20,6 +20,7 @@
   import SolarSystemIcon from '../icons/SolarSystemIcon.svelte'
   import FovCircleIcon from '../icons/FovCircleIcon.svelte'
   import ObservationsIcon from '../icons/ObservationsIcon.svelte'
+  import ObservedIcon from '../icons/ObservedIcon.svelte'
   import FindingPathsIcon from '../icons/FindingPathsIcon.svelte'
   import RangeIcon from '../icons/RangeIcon.svelte'
   import RiseSetIcon from '../icons/RiseSetIcon.svelte'
@@ -159,6 +160,20 @@
         <button
           class="grid-item"
           on:click={() => {
+            dispatch('observedobjects')
+            close()
+          }}
+          aria-label="Observed objects"
+        >
+          <div class="icon-wrap">
+            <ObservedIcon size="42" />
+          </div>
+          <span class="item-lbl">Observed objects (O)</span>
+        </button>
+
+        <button
+          class="grid-item"
+          on:click={() => {
             dispatch('lists')
             close()
           }}
@@ -183,7 +198,9 @@
           </div>
           <span class="item-lbl">Finding Paths (p)</span>
         </button>
+      </div>
 
+      <div class="section-row">
         <button
           class="grid-item"
           on:click={() => {
@@ -197,9 +214,7 @@
           </div>
           <span class="item-lbl">Telescopes (t)</span>
         </button>
-      </div>
 
-      <div class="section-row">
         <button
           class="grid-item"
           on:click={() => {

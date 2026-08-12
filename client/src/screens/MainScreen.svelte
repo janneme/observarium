@@ -26,9 +26,12 @@
   import MoonMapScreen from './MoonMapScreen.svelte'
   import ObservationsScreen from './ObservationsScreen.svelte'
   import ListsScreen from './ListsScreen.svelte'
+  import ObservedObjectsScreen from './ObservedObjectsScreen.svelte'
   import LoginScreen from './LoginScreen.svelte'
   import { getObjectsInArea, migrateLegacyPendingToSyncDirty, getSyncDirtyTotalCount, getMeta } from '../lib/db.js'
   import { activeListObjectIds, refreshActiveListObjectIds } from '../lib/lists.js'
+  import { observationStatsById, refreshObservationStats } from '../lib/observedObjectsStats.js'
+  import { objectMatchesFilter } from '../lib/observedObjectsFilter.js'
   import { getTokenStatus } from '../lib/auth.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
@@ -51,6 +54,7 @@
     pendingChanges,
     skyPollution,
     applySkyPollution,
+    observedObjectsState,
   } from '../stores/ui.js'
   import { get } from 'svelte/store'
   import { toggleTheme } from '../stores/theme.js'
@@ -121,6 +125,7 @@
   let showObservationSyncLogin = false
   let showTelescopes = false
   let showObservations = false
+  let showObservedObjects = false
   let showLists = false
   let showFindingPaths = false
   let findingPathsObject = null
@@ -129,6 +134,7 @@
   let findingPathsStartHip = null
   let findingPathsEditHip = null
   let returnToObservationsFromObjectDetails = false
+  let returnToObservedObjectsFromObjectDetails = false
   let showFindingPathsList = false
   let findingPathsListTargetChip = null
   let showVisualRange = false
@@ -335,7 +341,7 @@
     const magLim = mainMagLimit
     const dsoMagLim = 8 + 0.5 * (magLim - 5)
     let hits = []
-    for (const obj of objects) {
+    for (const obj of visibleObjects) {
       if (!obj.pos) continue
       if (obj.type === 'star' || obj.type === 'double_star') {
         const m = Array.isArray(obj.mag) ? obj.mag[0] : (obj.mag ?? 99)
@@ -426,11 +432,12 @@
       loupeDec0 = centDec
       loupeMagLim = applySkyPollution(fovToMagLimit(fov), $skyPollution)
       // Loupe needs its own tappable candidates for solar-system bodies —
-      // `objects` only holds the star/DSO catalog, so without this a planet
-      // among the ambiguous hits could never be selected in the zoomed view.
+      // `visibleObjects` only holds the star/DSO catalog, so without this a
+      // planet among the ambiguous hits could never be selected in the
+      // zoomed view.
       loupeObjects = get(showSolarSystem)
         ? [
-            ...objects,
+            ...visibleObjects,
             ...get(solarSystemPositions).map((body) => ({
               id: `solar_${body.imageId || body.name.toLowerCase()}`,
               name: body.name,
@@ -439,7 +446,7 @@
               bodyClass: body.bodyClass,
             })),
           ]
-        : objects
+        : visibleObjects
       showLoupe = true
     }
   }
@@ -454,6 +461,11 @@
   $: if (!$objectDetailsActive && returnToObservationsFromObjectDetails) {
     returnToObservationsFromObjectDetails = false
     showObservations = true
+  }
+
+  $: if (!$objectDetailsActive && returnToObservedObjectsFromObjectDetails) {
+    returnToObservedObjectsFromObjectDetails = false
+    showObservedObjects = true
   }
 
   $: if (!$objectDetailsActive && returnToFindingPathsListFromAbout) {
@@ -582,6 +594,11 @@
         e.preventDefault()
         return
       }
+      if (showObservedObjects) {
+        showObservedObjects = false
+        e.preventDefault()
+        return
+      }
       if (showLists) {
         showLists = false
         e.preventDefault()
@@ -620,6 +637,7 @@
     if (showDeepSkyQuiz) return
     if (showMoonMap) return
     if (showLists) return
+    if (showObservedObjects) return
 
     if (e.key === 'q') {
       armQuizChord()
@@ -728,6 +746,12 @@
       e.preventDefault()
       return
     }
+    if (e.key === 'O') {
+      menuOpen = false
+      showObservedObjects = true
+      e.preventDefault()
+      return
+    }
     if (e.key === 'l') {
       menuOpen = false
       showLists = true
@@ -814,6 +838,7 @@
       .then(() => getSyncDirtyTotalCount())
       .then((count) => pendingChanges.set(count))
     refreshActiveListObjectIds()
+    refreshObservationStats()
     Promise.all([getMeta('telescopes'), getMeta('eyepieces')]).then(([tels, eps]) => {
       fovCircleTelescopes = Array.isArray(tels) ? tels : []
       fovCircleEyepieces = Array.isArray(eps) ? eps : []
@@ -855,8 +880,27 @@
     applySkyPollution(adaptiveMagLimit(minDimFov), $skyPollution),
     parseFloat(localStorage.getItem('selectedMag') || '14'),
   )
+
+  // Observed Objects' sky-view hide filter (see observed_objects.md) — main
+  // sky view only, not finder/finding-paths/visual-range/quizzes. DSOs only —
+  // stars/double stars are never hidden by this filter. Excludes objects
+  // matching the active filter from what's actually rendered/tapped, except
+  // the currently selected/searched object, which must stay visible
+  // regardless (searching a hidden object must still show it). No criteria
+  // set is deliberately allowed ("skip every observed object ever"), not
+  // treated as a no-op — objectMatchesFilter matches everything in that case.
+  $: obsHideFilterActive = $observedObjectsState.hideActive
+  $: visibleObjects = obsHideFilterActive
+    ? objects.filter(
+        (obj) =>
+          obj.type !== 'dso' ||
+          obj.id === $selectedObject?.id ||
+          !objectMatchesFilter(obj, obj.id, $observedObjectsState.filter, $observationStatsById.get(obj.id)),
+      )
+    : objects
+
   $: _vpRange = computeViewportMagRange(
-    objects,
+    visibleObjects,
     mainMagLimit,
     ra0,
     dec0,
@@ -884,7 +928,7 @@
       {ra0}
       {dec0}
       {fov}
-      {objects}
+      objects={visibleObjects}
       {lat}
       {lon}
       time={skyTime}
@@ -943,6 +987,9 @@
     }}
     on:observations={() => {
       showObservations = true
+    }}
+    on:observedobjects={() => {
+      showObservedObjects = true
     }}
     on:lists={() => {
       showLists = true
@@ -1101,6 +1148,21 @@
     <ListsScreen
       onClose={() => {
         showLists = false
+      }}
+    />
+  {/if}
+
+  {#if showObservedObjects}
+    <ObservedObjectsScreen
+      onClose={() => {
+        showObservedObjects = false
+        returnToObservedObjectsFromObjectDetails = false
+      }}
+      onOpenObject={(obj) => {
+        returnToObservedObjectsFromObjectDetails = true
+        showObservedObjects = false
+        selectedObject.set(obj)
+        objectDetailsActive.set(true)
       }}
     />
   {/if}

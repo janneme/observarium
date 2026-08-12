@@ -126,3 +126,20 @@ export function skyPollutionDelta(pollution) {
 export function applySkyPollution(theoreticalLimit, pollution) {
   return theoreticalLimit - skyPollutionDelta(pollution)
 }
+
+// Observed Objects screen — sort choice, filter form fields, and whether the
+// sky-view hide filter is currently applied. Local device setting only, same
+// persistedWritable pattern as skyPollution/listLocalPrefs above — never
+// synced to the server (see observed_objects.md).
+export const observedObjectsState = persistedWritable('observedObjectsState', {
+  sort: 'name', // 'name' | 'newest' | 'oldest' | 'easy' | 'hard' | 'count'
+  filter: {
+    telescopeId: null,
+    year: null,
+    minObs: null,
+    maxObs: null,
+    name: '',
+    objectType: null,
+  },
+  hideActive: false,
+})

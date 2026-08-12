@@ -613,6 +613,38 @@ export async function getAllObservedObjectIds() {
   return ids
 }
 
+// Per-object observation aggregation — observations are stored one record per
+// *date* (not per object), so there's no per-object index to read directly;
+// this scans every observation once. Used by the Observed Objects screen for
+// its "last observed" / "number of observations" columns, its Telescope
+// filter, and its sky-view hide filter (which also needs per-year counts —
+// see observed_objects.md). Returns Map<objectId, { lastObserved:
+// 'YYYY-MM-DD', totalCount: number, countsByYear: Map<year:number,
+// count:number>, telescopeIds: Set<string> }>. `telescopeIds` only includes
+// telescopes actually seen through (telescopeResults[].seen === true), not
+// ones merely attempted.
+export async function getObservationStatsByObject() {
+  const observations = await getAllObservations()
+  const stats = new Map()
+  for (const obs of observations) {
+    const year = Number(String(obs.date).slice(0, 4))
+    for (const entry of obs.objects || []) {
+      let s = stats.get(entry.id)
+      if (!s) {
+        s = { lastObserved: obs.date, totalCount: 0, countsByYear: new Map(), telescopeIds: new Set() }
+        stats.set(entry.id, s)
+      }
+      s.totalCount += 1
+      if (Number.isFinite(year)) s.countsByYear.set(year, (s.countsByYear.get(year) || 0) + 1)
+      if (obs.date > s.lastObserved) s.lastObserved = obs.date
+      for (const tr of entry.telescopeResults || []) {
+        if (tr.seen === true && tr.telescopeId) s.telescopeIds.add(tr.telescopeId)
+      }
+    }
+  }
+  return stats
+}
+
 // --------------------------------------------------------------------------
 // Zone helpers
 // --------------------------------------------------------------------------

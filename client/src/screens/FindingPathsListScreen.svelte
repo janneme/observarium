@@ -8,6 +8,7 @@
     getSearchIndex,
   } from '../lib/db.js'
   import { pendingChanges } from '../stores/ui.js'
+  import { naturalCompare } from '../lib/naturalSort.js'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
@@ -186,35 +187,6 @@
     if (!obj?.constellation) return null
     if (label.endsWith(' ' + obj.constellation)) return null
     return obj.constellation
-  }
-
-  function naturalSortKey(s) {
-    const parts = []
-    const re = /(\d+)|(\D+)/g
-    let m
-    while ((m = re.exec(String(s))) !== null) {
-      if (m[1] != null) parts.push(parseInt(m[1], 10))
-      else parts.push(m[2])
-    }
-    return parts
-  }
-
-  function naturalCompare(strA, strB) {
-    const ka = naturalSortKey(strA)
-    const kb = naturalSortKey(strB)
-    const len = Math.min(ka.length, kb.length)
-    for (let i = 0; i < len; i++) {
-      const ai = ka[i],
-        bi = kb[i]
-      if (typeof ai === 'number' && typeof bi === 'number') {
-        if (ai !== bi) return ai - bi
-      } else if (typeof ai === 'string' && typeof bi === 'string') {
-        if (ai !== bi) return ai < bi ? -1 : 1
-      } else {
-        return typeof ai === 'number' ? -1 : 1
-      }
-    }
-    return ka.length - kb.length
   }
 
   function buildRows(paths, byId, byHip) {

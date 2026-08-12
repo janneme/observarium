@@ -10,6 +10,7 @@
     deleteObservationByDate,
   } from '../lib/db.js'
   import { refreshActiveListObjectIds } from '../lib/lists.js'
+  import { refreshObservationStats } from '../lib/observedObjectsStats.js'
   import { flattenMoonFeatures } from '../lib/moonMap.js'
   import { pendingChanges } from '../stores/ui.js'
   import { keyboardActive } from '../stores/keyboard.js'
@@ -551,6 +552,7 @@
     }
 
     await refreshActiveListObjectIds()
+    await refreshObservationStats()
     await bumpPending()
   }
 
@@ -669,6 +671,7 @@
     if (!updated) return
     await putObservation(updated)
     await refreshActiveListObjectIds()
+    await refreshObservationStats()
     observations = sortedObservations(next)
     closeAddObject()
     if (createdEntry) {
