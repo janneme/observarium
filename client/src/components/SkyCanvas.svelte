@@ -1436,26 +1436,6 @@
           }
           continue
         }
-        if (arr.boundaryDirRa != null && arr.boundaryDirDec != null) {
-          const pt = projectToPixel(arr.boundaryDirRa, arr.boundaryDirDec, ra0, dec0, W, H, fov, rotation)
-          if (pt) {
-            const ddx = pt.px - _cx
-            const ddy = pt.py - _cy
-            const ddist = Math.hypot(ddx, ddy)
-            if (ddist >= _cR * 0.9 && ddist >= 1) {
-              const bx = _cx + (ddx / ddist) * _cR
-              const by = _cy + (ddy / ddist) * _cR
-              const dotR = Math.min(W, H) / 100
-              ctx.save()
-              ctx.fillStyle = nightly ? 'rgba(204,0,204,0.9)' : 'rgba(200,0,0,0.7)'
-              ctx.beginPath()
-              ctx.arc(bx, by, dotR, 0, 2 * Math.PI)
-              ctx.fill()
-              ctx.restore()
-            }
-          }
-          continue
-        }
         const from = projectToPixel(arr.fromRa, arr.fromDec, ra0, dec0, W, H, fov, rotation)
         const to = projectToPixel(arr.toRa, arr.toDec, ra0, dec0, W, H, fov, rotation)
         if (!from || !to) {

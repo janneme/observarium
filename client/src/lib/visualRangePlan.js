@@ -541,7 +541,20 @@ function moveRisk(moves) {
 // Main export
 // --------------------------------------------------------------------------
 
-export async function generatePlan({ getObjectsInArea, dsos, startStar, telescope, eyepiece, initialMag }) {
+export async function generatePlan({
+  getObjectsInArea,
+  dsos,
+  startStar,
+  telescope,
+  eyepiece,
+  initialMag,
+  // Caller-supplied magnitude reduction from the "Sky pollution" setting
+  // (stores/ui.js's skyPollutionDelta()) - kept as a plain parameter rather
+  // than importing the store directly, so this module (and its standalone
+  // test harness) stays free of any Svelte/browser-storage dependency. 0 =
+  // no reduction ("theoretical" applies exactly).
+  pollutionDelta = 0,
+}) {
   const fovDeg = (eyepiece.fov * eyepiece.focalLength) / telescope.focalLength
   const fovRadius = fovDeg / 2
   const planSearchRadius = PLAN_SEARCH_RADIUS_FACTOR * fovDeg
@@ -549,7 +562,7 @@ export async function generatePlan({ getObjectsInArea, dsos, startStar, telescop
   const significantDsos = computeSignificantDsos(dsos)
 
   const theoreticalMax = 2.1 + 5 * Math.log10(telescope.diameter)
-  const planCeiling = theoreticalMax
+  const planCeiling = theoreticalMax - pollutionDelta
 
   // getObjectsInArea (db.js, and this test harness's simulator) filters by a
   // flat RA range with no declination correction — widen the RA half-width

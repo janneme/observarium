@@ -11,6 +11,7 @@
   import CustomSelect from '../components/CustomSelect.svelte'
   import VisualRangeMeasureScreen from './VisualRangeMeasureScreen.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
+  import { skyPollution, skyPollutionDelta } from '../stores/ui.js'
 
   export let lat = 0
   export let lon = 0
@@ -173,6 +174,7 @@
         telescope: { focalLength: tel.focalLengthMm, diameter: diamMm },
         eyepiece: { focalLength: ep.focalLengthMm, fov: ep.fovDeg },
         initialMag: selectedInitialMag,
+        pollutionDelta: skyPollutionDelta($skyPollution),
       })
       if (result.ok) {
         planResult = result

@@ -71,3 +71,58 @@ export function clearListLocalPrefs(listId) {
     return next
   })
 }
+
+// "Sky pollution" slider, 0 (dark sky, no reduction) – 100 (big-city glow).
+// Local device setting only — never synced to the server, deliberately
+// separate from any per-list/instrument preference above. Modelled as a
+// straight magnitude *reduction* (delta), not an absolute cap: light
+// pollution washes out the naked-eye limit from a pristine ~6.5 down to ~2.5
+// (a 4.0-mag loss at full pollution), and that same delta is subtracted from
+// whatever theoretical limit each view (sky view, finder/telescope view,
+// Visual Range planner) would otherwise use. A delta - rather than an
+// absolute cap like "everything becomes mag 2.5" - is what makes the effect
+// visible immediately across the whole slider: an absolute cap only bites
+// once it drops below a view's own current limit, which for the wide-FOV
+// sky view (natural limit ~5) left most of the slider range with no visible
+// effect at all.
+const NAKED_EYE_MIN_MAG = 6.5 // pollution=0: pristine dark-sky naked-eye limit
+const NAKED_EYE_MAX_MAG = 2.5 // pollution=100: big-city naked-eye limit
+
+// Same generic FOV→limiting-magnitude formula as SkyCanvas/FinderPanel/
+// MainScreen (each keeps its own local copy - see comments there) - used
+// here only to compute the finder view's theoretical limit for the default
+// below, not for any actual rendering decision.
+const _FOV_MAG5 = 120
+const _FOV_MAG14 = 2
+function _adaptiveMagLimit(fovDeg) {
+  return Math.min(14, Math.max(5, 5 + (9 * Math.log2(_FOV_MAG5 / fovDeg)) / Math.log2(_FOV_MAG5 / _FOV_MAG14)))
+}
+
+// Default chosen so the finder view (whose own theoretical limit is ~11.1)
+// renders down to exactly mag 9 out of the box.
+const SKY_POLLUTION_DEFAULT_TARGET_MAG = 9
+export const DEFAULT_SKY_POLLUTION =
+  ((_adaptiveMagLimit(FINDER_FOV_DEG) - SKY_POLLUTION_DEFAULT_TARGET_MAG) / (NAKED_EYE_MIN_MAG - NAKED_EYE_MAX_MAG)) *
+  100
+
+export const skyPollution = persistedWritable('skyPollution', DEFAULT_SKY_POLLUTION)
+
+// Naked-eye limiting magnitude at this pollution level — used both for the
+// slider's readout and as the basis for skyPollutionDelta() below. Always a
+// plain number across the whole 0-100 range.
+export function nakedEyeLimitDisplay(pollution) {
+  const p = Math.max(0, Math.min(100, pollution))
+  return NAKED_EYE_MIN_MAG + (NAKED_EYE_MAX_MAG - NAKED_EYE_MIN_MAG) * (p / 100)
+}
+
+// Magnitude reduction to subtract from any view's own theoretical/adaptive
+// limit: 0 at pollution=0 (so "minimum → theoretical visual range applies"
+// holds exactly, no clamping at all), rising to 4.0 at pollution=100.
+export function skyPollutionDelta(pollution) {
+  return NAKED_EYE_MIN_MAG - nakedEyeLimitDisplay(pollution)
+}
+
+// Convenience: theoreticalLimit reduced by the current pollution delta.
+export function applySkyPollution(theoreticalLimit, pollution) {
+  return theoreticalLimit - skyPollutionDelta(pollution)
+}

@@ -10,7 +10,14 @@
   import SettingsIcon from '../icons/SettingsIcon.svelte'
   import FinderInstrumentPanel from './FinderInstrumentPanel.svelte'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { searchViewActive, pendingFocus, finderInstrument, getHighlightObserved } from '../stores/ui.js'
+  import {
+    searchViewActive,
+    pendingFocus,
+    finderInstrument,
+    getHighlightObserved,
+    skyPollution,
+    applySkyPollution,
+  } from '../stores/ui.js'
   import {
     getMeta,
     getObjectsInArea,
@@ -112,15 +119,16 @@
     ? TELESCOPE_LIMIT_MAG_BASE + TELESCOPE_LIMIT_MAG_SLOPE * Math.log10(selectedTelescope.diameterInches * INCHES_TO_MM)
     : null
   $: effectiveFov = telescopeViewActive && telescopeViewFov != null ? telescopeViewFov : STANDARD_FINDER_FOV
-  $: effectiveMagLimitOverride = telescopeViewActive && telescopeLimitMag != null ? telescopeLimitMag : null
+  $: baseMagLimit =
+    telescopeViewActive && telescopeLimitMag != null ? telescopeLimitMag : adaptiveMagLimit(effectiveFov)
+  $: effectiveMagLimitOverride = applySkyPollution(baseMagLimit, $skyPollution)
   // If the telescope/eyepiece pair backing an active telescope view gets
   // deleted or otherwise becomes unavailable, fall back to the finder.
   $: if (telescopeViewActive && !instrumentConfigured) telescopeViewActive = false
 
   $: displayFov = effectiveFov
   $: {
-    const magLimit = effectiveMagLimitOverride ?? adaptiveMagLimit(effectiveFov)
-    const range = computeViewportMagRange(objects, magLimit, finderRa0, finderDec0, effectiveFov)
+    const range = computeViewportMagRange(objects, effectiveMagLimitOverride, finderRa0, finderDec0, effectiveFov)
     displayMagMin = range.min
     displayMagMax = range.max
   }
@@ -219,11 +227,11 @@
 
   async function loadObjects() {
     const margin = effectiveFov * 2
-    // Standard finder depth is mag 12; telescope mode must fetch as deep as
-    // its computed limiting magnitude, or the extra depth SkyCanvas is told
-    // to render (via magLimitOverride) is moot - the star data was never
-    // actually retrieved past mag 12 in the first place.
-    const fetchMagLimit = effectiveMagLimitOverride ?? 12
+    // Must fetch at least as deep as effectiveMagLimitOverride (now always a
+    // concrete value - see baseMagLimit/applySkyPollution above), or the
+    // depth SkyCanvas is told to render is moot: the star data was never
+    // actually retrieved that deep in the first place.
+    const fetchMagLimit = effectiveMagLimitOverride
     objects = await getObjectsInArea(
       finderRa0 - margin,
       finderRa0 + margin,

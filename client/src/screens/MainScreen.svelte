@@ -49,6 +49,8 @@
     objectDetailsActive,
     pendingFocus,
     pendingChanges,
+    skyPollution,
+    applySkyPollution,
   } from '../stores/ui.js'
   import { get } from 'svelte/store'
   import { toggleTheme } from '../stores/theme.js'
@@ -330,7 +332,7 @@
       tapY = clientY - rect.top
     const W = rect.width,
       H = rect.height
-    const magLim = adaptiveMagLimit(minDimFov)
+    const magLim = mainMagLimit
     const dsoMagLim = 8 + 0.5 * (magLim - 5)
     let hits = []
     for (const obj of objects) {
@@ -422,7 +424,7 @@
       loupeFov = fov / 5
       loupeRa0 = centRa
       loupeDec0 = centDec
-      loupeMagLim = fovToMagLimit(fov)
+      loupeMagLim = applySkyPollution(fovToMagLimit(fov), $skyPollution)
       // Loupe needs its own tappable candidates for solar-system bodies —
       // `objects` only holds the star/DSO catalog, so without this a planet
       // among the ambiguous hits could never be selected in the zoomed view.
@@ -846,9 +848,16 @@
     viewportH > 0 && viewportW > 0
       ? (NORMAL_VIEW_MAX_RENDERED_FOV * viewportH) / Math.min(viewportW, viewportH)
       : NORMAL_VIEW_MAX_RENDERED_FOV
+  // Combines every independent ceiling on render depth: the generic
+  // FOV-based default (reduced by the "Sky pollution" slider) and the
+  // downloaded-data tier ('selectedMag').
+  $: mainMagLimit = Math.min(
+    applySkyPollution(adaptiveMagLimit(minDimFov), $skyPollution),
+    parseFloat(localStorage.getItem('selectedMag') || '14'),
+  )
   $: _vpRange = computeViewportMagRange(
     objects,
-    Math.min(adaptiveMagLimit(minDimFov), parseFloat(localStorage.getItem('selectedMag') || '14')),
+    mainMagLimit,
     ra0,
     dec0,
     viewportH > 0 ? (fov * viewportW) / viewportH : fov,
@@ -879,6 +888,7 @@
       {lat}
       {lon}
       time={skyTime}
+      magLimitOverride={mainMagLimit}
       showFovCircle={$showFovCircle}
       {fovCircleDeg}
       showConstellationLines={$showConstellationLines}

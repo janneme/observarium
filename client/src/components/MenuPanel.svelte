@@ -9,6 +9,8 @@
     showFovCircle,
     showSolarSystem,
     pendingChanges,
+    skyPollution,
+    nakedEyeLimitDisplay,
   } from '../stores/ui.js'
   import ConstellationLinesIcon from '../icons/ConstellationLinesIcon.svelte'
   import ConstellationNamesIcon from '../icons/ConstellationNamesIcon.svelte'
@@ -347,6 +349,29 @@
           <span class="item-lbl">About (a)</span>
         </button>
       </div>
+
+      <!-- Section 6: Sky pollution -->
+      <div class="section-row sky-pollution-row">
+        <div class="sky-pollution">
+          <div class="sky-pollution-header">
+            <span class="sky-pollution-label">Sky pollution</span>
+            <span class="sky-pollution-readout">Naked eye limit {nakedEyeLimitDisplay($skyPollution).toFixed(1)}</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="0.5"
+            value={$skyPollution}
+            on:input={(e) => skyPollution.set(parseFloat(e.currentTarget.value))}
+            aria-label="Sky pollution"
+          />
+          <div class="sky-pollution-endpoints">
+            <span>Dark sky</span>
+            <span>City</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 {/if}
@@ -467,5 +492,85 @@
   :global([data-theme='nightly']) .badge {
     background: #1a3a6e;
     color: #ff4444;
+  }
+
+  .sky-pollution-row {
+    margin: 2px;
+  }
+
+  .sky-pollution {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: #000;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .sky-pollution-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.85rem;
+  }
+
+  .sky-pollution-label {
+    font-weight: 600;
+  }
+
+  .sky-pollution-readout {
+    opacity: 0.7;
+    font-size: 0.78rem;
+  }
+
+  .sky-pollution input[type='range'] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    margin: 6px 0;
+    background: rgba(200, 0, 0, 0.25);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .sky-pollution input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    background: var(--accent, #cc0000);
+    cursor: pointer;
+  }
+
+  .sky-pollution input[type='range']::-moz-range-thumb {
+    width: 1.1rem;
+    height: 1.1rem;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent, #cc0000);
+    cursor: pointer;
+  }
+
+  .sky-pollution input[type='range']::-moz-range-track {
+    height: 4px;
+    background: rgba(200, 0, 0, 0.25);
+    border-radius: 2px;
+  }
+
+  .sky-pollution-endpoints {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    opacity: 0.6;
+  }
+
+  :global([data-theme='nightly']) .sky-pollution-label,
+  :global([data-theme='nightly']) .sky-pollution-readout,
+  :global([data-theme='nightly']) .sky-pollution-endpoints {
+    color: #ff0000;
   }
 </style>

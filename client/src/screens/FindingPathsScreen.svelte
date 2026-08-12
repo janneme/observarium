@@ -15,9 +15,8 @@
     getObjectsInArea,
     getSearchIndex,
   } from '../lib/db.js'
-  import { pendingChanges } from '../stores/ui.js'
+  import { pendingChanges, skyPollution, applySkyPollution } from '../stores/ui.js'
   import { projectToPixel } from '../lib/skymath.js'
-  import { toggleTheme } from '../stores/theme.js'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
 
@@ -37,6 +36,14 @@
   const PATH_START_MAX_MAG = 4
   const EUROPE_MIN_DEC = -35
   const SNAP_RADIUS = 15
+  // Same generic FOV→limiting-magnitude formula as SkyCanvas's own default
+  // (duplicated component-local there too — see its comment) — needed here
+  // so the "Sky pollution" reduction can be applied on top of it.
+  const FOV_MAG5 = 120
+  const FOV_MAG14 = 2
+  function adaptiveMagLimit(fovDeg) {
+    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
+  }
 
   let wrapEl
   let finderRa0 = 0
@@ -712,9 +719,6 @@
         })
       })
     }
-    if (activeStepIndex != null && objectCtx?.pos) {
-      result.push({ boundaryDirRa: objectCtx.pos[0], boundaryDirDec: objectCtx.pos[1] })
-    }
     return result
   }
 
@@ -726,6 +730,38 @@
     objectCtx
     overlays = overlayGeometry()
   }
+
+  // Direction-to-target dot, drawn as its own unclipped DOM element (see
+  // template) rather than via SkyCanvas's overlayArrows: the finder view's
+  // circular clip-path sits on the canvas itself, so a dot placed exactly on
+  // that boundary (as this one always is, by definition) would always get
+  // sliced in half by it - too subtle to read at night. Rendering it as a
+  // sibling element outside the clip lets it sit fully on the boundary line,
+  // uncropped.
+  $: boundaryDirMark = (() => {
+    if (!wrapEl || activeStepIndex == null || !objectCtx?.pos) return null
+    const rect = wrapEl.getBoundingClientRect()
+    if (!(rect.width > 0) || !(rect.height > 0)) return null
+    const pt = projectToPixel(
+      objectCtx.pos[0],
+      objectCtx.pos[1],
+      finderRa0,
+      finderDec0,
+      rect.width,
+      rect.height,
+      finderFov,
+      0,
+    )
+    if (!pt) return null
+    const cx = rect.width / 2
+    const cy = rect.height / 2
+    const cR = Math.min(rect.width, rect.height) / 2
+    const ddx = pt.px - cx
+    const ddy = pt.py - cy
+    const ddist = Math.hypot(ddx, ddy)
+    if (ddist < cR * 0.9 || ddist < 1) return null
+    return { x: cx + (ddx / ddist) * cR, y: cy + (ddy / ddist) * cR }
+  })()
 
   $: targetInView = (() => {
     if (!objectCtx?.pos || activeStepIndex == null) return false
@@ -743,8 +779,17 @@
   })()
 
   function handleKey(e) {
-    if (e.key === 'n') {
-      toggleTheme()
+    // While traversing a selected path, vim-like 'j'/'k' step through it
+    // ('j' next, 'k' previous, per the step-nav buttons below) - matches
+    // their own boundary guards (no-op past either end).
+    // 'n' (theme toggle) is deliberately NOT handled here - MainScreen's own
+    // global handler already processes it unconditionally (before any
+    // sub-screen guard), so a local handler here would double-toggle it
+    // back to no visible effect.
+    if (guideMode && activeStepIndex != null && (e.key === 'j' || e.key === 'k')) {
+      const steps = pathsByStart[expandedStartHip]?.steps || []
+      if (e.key === 'j' && activeStepIndex < steps.length - 1) selectStep(activeStepIndex + 1)
+      else if (e.key === 'k' && activeStepIndex > 0) selectStep(activeStepIndex - 1)
       e.preventDefault()
     }
   }
@@ -795,52 +840,59 @@
   </div>
 
   <div class="finder-sticky">
-    <div
-      class="finder-wrap"
-      bind:this={wrapEl}
-      on:pointerdown={handlePointerDown}
-      on:pointermove={handlePointerMove}
-      on:pointerup={handlePointerUp}
-      on:pointercancel={handlePointerCancel}
-    >
-      <SkyCanvas
-        ra0={finderRa0}
-        dec0={finderDec0}
-        fov={finderFov}
-        {objects}
-        {lat}
-        {lon}
-        {time}
-        finderMode={true}
-        showFovCircle={false}
-        showConstellationLines={false}
-        showConstellationNames={false}
-        showConstellationBoundaries={false}
-        showDsos={true}
-        showHorizon={true}
-        showSolarSystem={true}
-        overlayArrows={overlays}
-      />
+    <div class="finder-wrap-outer">
+      <div
+        class="finder-wrap"
+        bind:this={wrapEl}
+        on:pointerdown={handlePointerDown}
+        on:pointermove={handlePointerMove}
+        on:pointerup={handlePointerUp}
+        on:pointercancel={handlePointerCancel}
+      >
+        <SkyCanvas
+          ra0={finderRa0}
+          dec0={finderDec0}
+          fov={finderFov}
+          {objects}
+          {lat}
+          {lon}
+          {time}
+          magLimitOverride={applySkyPollution(adaptiveMagLimit(finderFov), $skyPollution)}
+          finderMode={true}
+          showFovCircle={false}
+          showConstellationLines={false}
+          showConstellationNames={false}
+          showConstellationBoundaries={false}
+          showDsos={true}
+          showHorizon={true}
+          showSolarSystem={true}
+          overlayArrows={overlays}
+        />
 
-      {#if pendingPoint}
-        {@const rect = wrapEl?.getBoundingClientRect()}
-        {@const mark = rect
-          ? projectToPixel(
-              pendingPoint.ra,
-              pendingPoint.dec,
-              finderRa0,
-              finderDec0,
-              rect.width,
-              rect.height,
-              finderFov,
-              0,
-            )
-          : null}
-        {#if mark}
-          <div class="pick-mark" style={`left:${mark.px}px; top:${mark.py}px`}>
-            <span class="cross"></span>
-          </div>
+        {#if pendingPoint}
+          {@const rect = wrapEl?.getBoundingClientRect()}
+          {@const mark = rect
+            ? projectToPixel(
+                pendingPoint.ra,
+                pendingPoint.dec,
+                finderRa0,
+                finderDec0,
+                rect.width,
+                rect.height,
+                finderFov,
+                0,
+              )
+            : null}
+          {#if mark}
+            <div class="pick-mark" style={`left:${mark.px}px; top:${mark.py}px`}>
+              <span class="cross"></span>
+            </div>
+          {/if}
         {/if}
+      </div>
+
+      {#if boundaryDirMark}
+        <div class="boundary-dir-mark" style={`left:${boundaryDirMark.x}px; top:${boundaryDirMark.y}px`}></div>
       {/if}
     </div>
 
@@ -1106,15 +1158,39 @@
     border-bottom: 1px solid rgba(232, 232, 232, 0.12);
   }
 
-  .finder-wrap {
+  .finder-wrap-outer {
     width: 100%;
     aspect-ratio: 1;
     position: relative;
+  }
+
+  .finder-wrap {
+    position: absolute;
+    inset: 0;
     clip-path: circle(50%);
     border-radius: 50%;
     overflow: hidden;
     touch-action: none;
     border: 2px solid rgba(232, 232, 232, 0.2);
+  }
+
+  /* Sits on finder-wrap-outer (unclipped), not inside finder-wrap itself, so
+     the dot can straddle the boundary ring without being cut in half by the
+     circular clip-path. Sized as a % of the (always-square) outer box so it
+     matches the diameter SkyCanvas used to draw it at (minDim/50) without
+     needing a JS-measured pixel size. */
+  .boundary-dir-mark {
+    position: absolute;
+    width: 2%;
+    height: 2%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    background: rgba(200, 0, 0, 0.7);
+  }
+
+  :global([data-theme='nightly']) .boundary-dir-mark {
+    background: rgba(204, 0, 204, 0.9);
   }
 
   .pick-mark {
