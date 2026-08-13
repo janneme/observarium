@@ -109,9 +109,17 @@ export function scopedObservationCount(stat, year) {
 
 // Does `obj` (a resolved catalog object — may be null/undefined if
 // unresolved, e.g. a solar-system body or moon feature) match the current
-// filter form? `stat` is this object's entry from getObservationStatsByObject
-// (or undefined, treated as zero observations).
+// filter form? `stat` is this object's entry from getObservationStatsByObject.
+// An object with no `stat` at all has never been observed, so it can never
+// match — this function is only ever meant to select among *observed*
+// objects (the Observed Objects screen's own rows are always pre-filtered to
+// observed ids, but MainScreen's sky-view hide filter runs this against
+// every rendered object, observed or not, and an empty filter form would
+// otherwise vacuously match — and thus hide — everything, including objects
+// that were never observed at all).
 export function objectMatchesFilter(obj, id, filter, stat) {
+  if (!stat) return false
+
   if (filter.telescopeId && !stat?.telescopeIds?.has(filter.telescopeId)) return false
 
   const year = filter.year != null ? Number(filter.year) : null

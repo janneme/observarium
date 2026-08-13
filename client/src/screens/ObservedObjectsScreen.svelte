@@ -285,7 +285,7 @@
           on:change={(e) => updateFilter({ maxObs: e.detail })}
         />
       </div>
-      <div class="field-row span-2">
+      <div class="field-row span-2 name-row">
         <span class="field-label">Name</span>
         <CustomInput
           value={filter.name}
@@ -325,7 +325,7 @@
             <th class="col-object">Object</th>
             <th class="col-difficulty">Difficulty</th>
             <th class="col-date">Last observed</th>
-            <th class="col-count">Number of observations</th>
+            <th class="col-count">Number<br />of obs.</th>
             <th class="col-telescopes">Telescopes</th>
           </tr>
         </thead>
@@ -455,6 +455,16 @@
     flex-shrink: 0;
   }
 
+  /* CustomInput's own min-height/padding/font-size run taller than
+     CustomSelect's trigger by default — match it so the Name field lines up
+     with the rest of the filter form. */
+  .name-row :global(.custom-input) {
+    flex: 1;
+    min-height: unset;
+    padding: 0.4rem 0.75rem;
+    font-size: 1.02rem;
+  }
+
   .filter-actions {
     display: flex;
     align-items: center;
@@ -580,5 +590,15 @@
   :global([data-theme='nightly']) .btn.ghost {
     border-color: rgba(200, 0, 0, 0.4);
     color: #ff0000;
+  }
+
+  :global([data-theme='nightly'] .name-row .custom-input.outlined) {
+    border-color: rgba(200, 0, 0, 0.4);
+    color: #ff0000;
+  }
+
+  :global([data-theme='nightly'] .name-row .custom-input.outlined:focus-within) {
+    border-color: rgba(200, 0, 0, 0.7);
+    box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.2);
   }
 </style>
