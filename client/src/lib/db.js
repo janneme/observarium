@@ -343,6 +343,7 @@ export async function replaceAllFindingPaths(data) {
 export async function saveFindingPathForObject(objectId, startHip, pathValue) {
   const all = (await getMeta('findingPaths')) || {}
   const key = String(startHip)
+  const existing = all[objectId]?.[key]
   const next = {
     ...all,
     [objectId]: {
@@ -350,8 +351,15 @@ export async function saveFindingPathForObject(objectId, startHip, pathValue) {
       // updatedAt is stamped on every save (including in-progress drafts) so
       // it's accurate once the path becomes final; whether this particular
       // save is dirty-tracked for sync is the caller's call (only final
-      // paths are ever uploaded — see markDirty callers).
-      [key]: { steps: _cloneSteps(pathValue?.steps), updatedAt: new Date().toISOString() },
+      // paths are ever uploaded — see markDirty callers). createdAt is
+      // stamped once, on first save, and carried forward unchanged on every
+      // later edit, so a "newest first" sort reflects when the path was
+      // added rather than when it was last touched.
+      [key]: {
+        steps: _cloneSteps(pathValue?.steps),
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
     },
   }
   await setMeta('findingPaths', next)

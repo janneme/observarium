@@ -513,11 +513,13 @@
     if (obj.ngc != null) return `NGC ${obj.ngc}`
     if (obj.ic != null) return `IC ${obj.ic}`
     if (obj.caldwell != null) return `C ${obj.caldwell}`
+    if (obj.wds) return `WDS ${obj.wds}`
     const id = String(obj.id || '')
     if (id.startsWith('dso_M')) return `M ${Number(id.slice(5))}`
     if (id.startsWith('dso_NGC')) return `NGC ${Number(id.slice(7))}`
     if (id.startsWith('dso_IC')) return `IC ${Number(id.slice(6))}`
     if (id.startsWith('dso_C')) return `C ${Number(id.slice(5))}`
+    if (id.startsWith('double_WDS')) return `WDS ${id.slice(10)}`
     if (id.startsWith('solar_')) {
       const name = id.slice(6).replace(/_/g, ' ').trim()
       if (name) return name[0].toUpperCase() + name.slice(1)

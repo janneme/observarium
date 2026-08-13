@@ -17,6 +17,7 @@ export function fallbackLabelFromId(id) {
   if (raw.startsWith('dso_M')) return `M ${Number(raw.slice(5))}`
   if (raw.startsWith('dso_NGC')) return `NGC ${Number(raw.slice(7))}`
   if (raw.startsWith('dso_IC')) return `IC ${Number(raw.slice(6))}`
+  if (raw.startsWith('double_WDS')) return `WDS ${raw.slice(10)}`
   if (raw.startsWith('solar_')) {
     const n = raw.slice(6).replace(/_/g, ' ').trim()
     return n ? n[0].toUpperCase() + n.slice(1) : raw
@@ -47,6 +48,7 @@ export function catalogLabel(obj) {
   if (obj.ngc != null) return `NGC ${obj.ngc}`
   if (obj.ic != null) return `IC ${obj.ic}`
   if (obj.caldwell != null) return `C ${obj.caldwell}`
+  if (obj.wds) return `WDS ${obj.wds}`
   return fallbackLabelFromId(obj.id)
 }
 

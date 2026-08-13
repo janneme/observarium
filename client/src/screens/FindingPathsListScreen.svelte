@@ -13,6 +13,7 @@
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
   import CustomInput from '../components/CustomInput.svelte'
+  import CustomSelect from '../components/CustomSelect.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import PlusIcon from '../icons/PlusIcon.svelte'
   import DraftIcon from '../icons/DraftIcon.svelte'
@@ -180,6 +181,7 @@
     if (obj?.hd != null) return `HD ${obj.hd}`
     if (obj?.sao != null) return `SAO ${obj.sao}`
     if (obj?.flam != null && obj?.constellation) return `${obj.flam} ${obj.constellation}`
+    if (obj?.wds) return `WDS ${obj.wds}`
     return String(obj?.id || 'Star')
   }
 
@@ -189,7 +191,17 @@
     return obj.constellation
   }
 
-  function buildRows(paths, byId, byHip) {
+  const SORT_OPTIONS = [
+    { value: 'target', label: 'Target' },
+    { value: 'start', label: 'Start' },
+    { value: 'newest', label: 'Newest first' },
+  ]
+  let sortMode = 'target'
+
+  // One entry per individual (target, start) finding path - the shared basis
+  // for both filtering/suggestions and the three sort modes below, since
+  // which entity gets aggregated (target, start, or neither) differs per mode.
+  function buildFlatPaths(paths, byId, byHip) {
     const result = []
     for (const [objectId, pathsByStart] of Object.entries(paths)) {
       const obj = byId.get(objectId)
@@ -197,7 +209,6 @@
       const targetLabel = catalogLabel(obj)
       if (!targetLabel) continue
       const targetConst = getConst(targetLabel, obj)
-      const rowPaths = []
       for (const [startHip, path] of Object.entries(pathsByStart)) {
         const starObj = byHip.get(startHip)
         const starLabel = starObj ? preferredStarLabel(starObj) : `HIP ${startHip}`
@@ -205,67 +216,128 @@
         const steps = path.steps || []
         const isDraft = steps.length === 0 || steps[steps.length - 1]?.final !== true
         const stepCount = steps.length
-        rowPaths.push({ startHip, starLabel, starConst, isDraft, stepCount })
+        result.push({
+          objectId,
+          startHip,
+          obj,
+          targetLabel,
+          targetConst,
+          starObj,
+          starLabel,
+          starConst,
+          isDraft,
+          stepCount,
+          createdAt: path.createdAt || null,
+        })
       }
-      if (rowPaths.length === 0) continue
-      result.push({ obj, targetLabel, targetConst, paths: rowPaths })
     }
     return result
   }
 
-  function getDistinctStarts(rows) {
+  function distinctLabels(flat, labelOf, query) {
     const seen = new Set()
     const result = []
-    for (const row of rows) {
-      for (const p of row.paths) {
-        const key = p.starLabel + (p.starConst ? ` (${p.starConst})` : '')
-        if (!seen.has(key)) {
-          seen.add(key)
-          result.push({ label: key })
-        }
-      }
+    for (const p of flat) {
+      const label = labelOf(p)
+      if (seen.has(label)) continue
+      if (query && !label.toLowerCase().includes(query.toLowerCase())) continue
+      seen.add(label)
+      result.push({ label })
+      if (result.length >= 8) break
     }
     return result
   }
 
-  function filterRows(rows, tChip, sChip, showCompletedPaths) {
-    let result = rows
+  function filterFlatPaths(flat, tChip, sChip, showCompletedPaths) {
+    let result = flat
     if (tChip) {
-      result = result.filter((r) => {
-        const rl = r.targetLabel + (r.targetConst ? ` (${r.targetConst})` : '')
-        return rl === tChip.label
-      })
+      result = result.filter((p) => p.targetLabel + (p.targetConst ? ` (${p.targetConst})` : '') === tChip.label)
     }
     if (sChip) {
-      result = result
-        .map((r) => ({
-          ...r,
-          paths: r.paths.filter((p) => {
-            const pl = p.starLabel + (p.starConst ? ` (${p.starConst})` : '')
-            return pl === sChip.label
-          }),
-        }))
-        .filter((r) => r.paths.length > 0)
+      result = result.filter((p) => p.starLabel + (p.starConst ? ` (${p.starConst})` : '') === sChip.label)
     }
     if (!showCompletedPaths) {
-      result = result.map((r) => ({ ...r, paths: r.paths.filter((p) => p.isDraft) })).filter((r) => r.paths.length > 0)
+      result = result.filter((p) => p.isDraft)
     }
     return result
   }
 
-  $: allRows = buildRows(allPaths, objById, starsByHip)
-  $: filteredRows = filterRows(allRows, targetChip, startChip, showCompleted)
-  $: sortedRows = [...filteredRows].sort((a, b) => naturalCompare(a.targetLabel, b.targetLabel))
-  $: targetSuggestions = allRows
-    .filter((r) => {
-      const lbl = r.targetLabel + (r.targetConst ? ` (${r.targetConst})` : '')
-      return lbl.toLowerCase().includes(targetQuery.toLowerCase())
-    })
-    .map((r) => ({ label: r.targetLabel + (r.targetConst ? ` (${r.targetConst})` : '') }))
-    .slice(0, 8)
-  $: startSuggestions = getDistinctStarts(allRows)
-    .filter((s) => s.label.toLowerCase().includes(startQuery.toLowerCase()))
-    .slice(0, 8)
+  // Groups filtered paths by target (primaryKind 'target') so every row is
+  // one target object with its reachable starting stars listed underneath -
+  // today's default view.
+  function groupByTarget(flat) {
+    const map = new Map()
+    for (const p of flat) {
+      if (!map.has(p.objectId)) {
+        map.set(p.objectId, {
+          key: p.objectId,
+          primaryKind: 'target',
+          obj: p.obj,
+          label: p.targetLabel,
+          const: p.targetConst,
+          items: [],
+        })
+      }
+      map.get(p.objectId).items.push(p)
+    }
+    return [...map.values()].sort((a, b) => naturalCompare(a.label, b.label))
+  }
+
+  // Mirror of groupByTarget, aggregating by start star instead - each row is
+  // one starting star with its reachable targets listed underneath.
+  function groupByStart(flat) {
+    const map = new Map()
+    for (const p of flat) {
+      if (!map.has(p.startHip)) {
+        map.set(p.startHip, {
+          key: p.startHip,
+          primaryKind: 'start',
+          obj: p.starObj,
+          label: p.starLabel,
+          const: p.starConst,
+          items: [],
+        })
+      }
+      map.get(p.startHip).items.push(p)
+    }
+    return [...map.values()].sort((a, b) => naturalCompare(a.label, b.label))
+  }
+
+  // No aggregation - every individual path becomes its own single-item row,
+  // newest createdAt first, so the same target/start pair can appear more
+  // than once if it has been re-created.
+  function ungroupedByNewest(flat) {
+    return flat
+      .slice()
+      .sort((a, b) => (b.createdAt ? Date.parse(b.createdAt) : 0) - (a.createdAt ? Date.parse(a.createdAt) : 0))
+      .map((p) => ({
+        key: `${p.objectId}::${p.startHip}`,
+        primaryKind: 'target',
+        obj: p.obj,
+        label: p.targetLabel,
+        const: p.targetConst,
+        items: [p],
+      }))
+  }
+
+  $: allFlatPaths = buildFlatPaths(allPaths, objById, starsByHip)
+  $: filteredFlatPaths = filterFlatPaths(allFlatPaths, targetChip, startChip, showCompleted)
+  $: sortedRows =
+    sortMode === 'start'
+      ? groupByStart(filteredFlatPaths)
+      : sortMode === 'newest'
+        ? ungroupedByNewest(filteredFlatPaths)
+        : groupByTarget(filteredFlatPaths)
+  $: targetSuggestions = distinctLabels(
+    allFlatPaths,
+    (p) => p.targetLabel + (p.targetConst ? ` (${p.targetConst})` : ''),
+    targetQuery,
+  )
+  $: startSuggestions = distinctLabels(
+    allFlatPaths,
+    (p) => p.starLabel + (p.starConst ? ` (${p.starConst})` : ''),
+    startQuery,
+  )
 
   async function doDelete() {
     confirmOpen = false
@@ -293,7 +365,7 @@
 
   <div class="filter-bar">
     <div class="filter-group">
-      <span class="filter-label">target:</span>
+      <span class="filter-label">from</span>
       {#if targetChip}
         <span class="chip"
           >{targetChip.label}<button
@@ -320,7 +392,7 @@
     </div>
 
     <div class="filter-group">
-      <span class="filter-label">start:</span>
+      <span class="filter-label">to</span>
       {#if startChip}
         <span class="chip"
           >{startChip.label}<button
@@ -352,6 +424,11 @@
     </label>
   </div>
 
+  <div class="sort-bar">
+    <span class="filter-label">Sort:</span>
+    <CustomSelect value={sortMode} options={SORT_OPTIONS} on:change={(e) => (sortMode = e.detail)} />
+  </div>
+
   {#if activeFilter}
     <div class="filter-panel">
       <div class="filter-panel-kb">
@@ -379,12 +456,12 @@
       <table class="paths-table">
         <thead>
           <tr>
-            <th class="col-target">Target</th>
-            <th class="col-start">Start</th>
+            <th class="col-target">{sortMode === 'start' ? 'Start' : 'Target'}</th>
+            <th class="col-start">{sortMode === 'start' ? 'Targets' : 'Start'}</th>
           </tr>
         </thead>
         <tbody>
-          {#each sortedRows as row}
+          {#each sortedRows as row (row.key)}
             <tr>
               <td class="target-cell">
                 <button
@@ -392,19 +469,19 @@
                   type="button"
                   on:click={() =>
                     dispatch('openpath', {
-                      contextObject: row.obj,
+                      contextObject: row.items[0]?.obj,
                       initialSelectStart: false,
-                      initialStartHip: row.paths[0]?.startHip ?? null,
+                      initialStartHip: row.items[0]?.startHip ?? null,
                       targetChip,
                       startChip,
                     })}
                 >
                   <ObservationObjectSymbol kind={objectSymbolKind(row.obj)} />
-                  <strong>{row.targetLabel}</strong>{#if row.targetConst}&nbsp;({row.targetConst}){/if}
+                  <strong>{row.label}</strong>{#if row.const}&nbsp;({row.const}){/if}
                 </button>
               </td>
               <td class="paths-cell">
-                {#each row.paths as p}
+                {#each row.items as item}
                   <div class="path-row">
                     <span class="path-info"
                       ><button
@@ -412,15 +489,21 @@
                         type="button"
                         on:click={() =>
                           dispatch('openpath', {
-                            contextObject: row.obj,
+                            contextObject: item.obj,
                             initialSelectStart: false,
-                            initialStartHip: p.startHip,
+                            initialStartHip: item.startHip,
                             targetChip,
                             startChip,
                           })}
-                        ><strong>{p.starLabel}</strong>{#if p.starConst}&nbsp;({p.starConst}){/if}</button
-                      >{#if p.isDraft}<sup class="draft-sup"><DraftIcon size="0.975rem" /></sup
-                        >{/if}{#if !p.isDraft}<span class="step-count">&nbsp;–&nbsp;{p.stepCount}&nbsp;steps</span
+                        >{#if row.primaryKind === 'start'}<span class="item-symbol"
+                            ><ObservationObjectSymbol kind={objectSymbolKind(item.obj)} /></span
+                          >{/if}<strong>{row.primaryKind === 'start' ? item.targetLabel : item.starLabel}</strong
+                        >{#if row.primaryKind === 'start' ? item.targetConst : item.starConst}&nbsp;({row.primaryKind ===
+                          'start'
+                            ? item.targetConst
+                            : item.starConst}){/if}</button
+                      >{#if item.isDraft}<sup class="draft-sup"><DraftIcon size="0.975rem" /></sup
+                        >{/if}{#if !item.isDraft}<span class="step-count">&nbsp;–&nbsp;{item.stepCount}&nbsp;steps</span
                         >{/if}</span
                     >
                     <button
@@ -429,10 +512,10 @@
                       title="Edit path"
                       on:click={() =>
                         dispatch('openpath', {
-                          contextObject: row.obj,
+                          contextObject: item.obj,
                           initialSelectStart: false,
                           initialStartHip: null,
-                          initialEditHip: p.startHip,
+                          initialEditHip: item.startHip,
                           targetChip,
                           startChip,
                         })}
@@ -444,8 +527,8 @@
                       type="button"
                       title="Delete path"
                       on:click={() => {
-                        pendingDeleteObjectId = row.obj.id
-                        pendingDeleteStartHip = p.startHip
+                        pendingDeleteObjectId = item.objectId
+                        pendingDeleteStartHip = item.startHip
                         confirmOpen = true
                       }}
                     >
@@ -582,6 +665,22 @@
     gap: 0.35rem;
   }
 
+  .sort-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(232, 232, 232, 0.1);
+    flex-shrink: 0;
+  }
+
+  .item-symbol {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-right: 0.25rem;
+  }
+
   .filter-label {
     font-size: 0.82rem;
     color: rgba(232, 232, 232, 0.55);
@@ -636,7 +735,7 @@
   }
 
   :global(.filter-group .custom-input) {
-    width: 8rem;
+    width: 6.4rem;
     min-height: unset;
     font-size: 0.82rem;
   }
@@ -840,6 +939,10 @@
   }
 
   :global([data-theme='nightly']) .filter-bar {
+    border-bottom-color: rgba(200, 0, 0, 0.2);
+  }
+
+  :global([data-theme='nightly']) .sort-bar {
     border-bottom-color: rgba(200, 0, 0, 0.2);
   }
 

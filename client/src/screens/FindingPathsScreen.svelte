@@ -85,7 +85,7 @@
 
   function objectLabel(obj) {
     if (!obj) return 'Object finding paths'
-    if (obj.type === 'star') return preferredStarLabel(obj)
+    if (obj.type === 'star' || obj.type === 'double_star') return preferredStarLabel(obj)
     if (obj.name) return obj.name
     if (obj.m != null) return `M ${obj.m}`
     if (obj.ngc != null) return `NGC ${obj.ngc}`
@@ -96,7 +96,7 @@
 
   function objectFullLabel(obj) {
     if (!obj) return 'Object finding paths'
-    if (obj.type === 'star') return preferredStarLabel(obj)
+    if (obj.type === 'star' || obj.type === 'double_star') return preferredStarLabel(obj)
     let cat = null
     if (obj.m != null) cat = `M ${obj.m}`
     else if (obj.ngc != null) cat = `NGC ${obj.ngc}`
@@ -169,6 +169,7 @@
     if (obj?.hd != null) return `HD ${obj.hd}`
     if (obj?.sao != null) return `SAO ${obj.sao}`
     if (obj?.flam != null && obj?.constellation) return `${obj.flam} ${obj.constellation}`
+    if (obj?.wds) return `WDS ${obj.wds}`
     return String(obj?.id || 'Star')
   }
 
@@ -262,7 +263,13 @@
       }
     }
     if (initialEditHip != null) {
-      expandedStartHip = String(initialEditHip)
+      const hip = String(initialEditHip)
+      expandedStartHip = hip
+      const path = pathsByStart[hip]
+      if (path?.steps?.length) {
+        activeStepIndex = 0
+        centerOn(stepAnchor(path, 0))
+      }
     }
     await loadFinderObjects()
   }
@@ -328,6 +335,22 @@
     }
   }
 
+  // The catalog often carries several records for the same physical star
+  // within a pixel or two of each other (e.g. an unnamed Tycho-2 entry and
+  // its Hipparcos/WDS counterpart) - prefer a hip-identified one over a
+  // nameless positional duplicate even if the duplicate is a hair closer to
+  // the exact pixel clicked, rather than flipping unpredictably between them
+  // (a nameless match also can never be used for "Set start", which needs a
+  // hip). Only falls through to nearest-wins when both candidates are the
+  // same tier (both have hip, or both don't).
+  function isBetterSnapCandidate(candidate, dist, current, currentDist) {
+    if (!current) return true
+    const candHip = candidate.hip != null
+    const currHip = current.hip != null
+    if (candHip !== currHip) return candHip
+    return dist < currentDist
+  }
+
   function pickPoint(clientX, clientY) {
     if (!wrapEl) return null
     const rect = wrapEl.getBoundingClientRect()
@@ -340,7 +363,7 @@
       const pt = projectToPixel(obj.pos[0], obj.pos[1], finderRa0, finderDec0, W, H, finderFov, 0)
       if (!pt) continue
       const dist = Math.hypot(pt.px - (clientX - rect.left), pt.py - (clientY - rect.top))
-      if (dist <= SNAP_RADIUS && dist < bestDist) {
+      if (dist <= SNAP_RADIUS && isBetterSnapCandidate(obj, dist, best, bestDist)) {
         bestDist = dist
         best = obj
       }
@@ -379,14 +402,70 @@
     clearPending()
   }
 
+  // Same physical star, compared by whichever identifier both points carry
+  // (hip is most reliable since it survives re-picking the same star from a
+  // slightly different tap; objectId next; exact ra/dec as a last resort).
+  function pointsMatch(a, b) {
+    if (!a || !b) return false
+    if (a.hip != null && b.hip != null) return a.hip === b.hip
+    if (a.objectId != null && b.objectId != null) return a.objectId === b.objectId
+    return a.ra === b.ra && a.dec === b.dec
+  }
+
   async function setEnd(idx) {
     if (!pendingPoint) return
     const startHip = expandedStartHip
     const path = getExpandedPath()
     if (!startHip || !path) return
-    const steps = path.steps
-      .slice(0, idx + 1)
-      .map((s, i) => (i === idx ? { ...s, endPoint: clonePoint(pendingPoint) } : s))
+    const currentSteps = path.steps
+    const currentStep = currentSteps[idx]
+    const nextStep = currentSteps[idx + 1]
+    // Step N+1 continues from step N's end either explicitly (its own
+    // startPoint literally equals step N's endPoint) or implicitly (it has
+    // no startPoint of its own at all, so stepAnchor() derives it live from
+    // step N's end on every render - nothing to rewrite there, the anchor
+    // just recomputes against the new endPoint on its own). Either way,
+    // neither hop may extrapolate (multiplier 1): the join is a plain
+    // "center on this star" continuation, so moving it just slides the
+    // shared point instead of invalidating everything after it.
+    const nextStepContinues =
+      nextStep && (!nextStep.startPoint || pointsMatch(currentStep?.endPoint, nextStep.startPoint))
+    const canRetarget =
+      nextStepContinues &&
+      normalizeMultiplier(currentStep?.multiplier) === 1 &&
+      normalizeMultiplier(nextStep.multiplier) === 1
+
+    const updatedStep = { ...currentStep, endPoint: clonePoint(pendingPoint) }
+
+    // CASE 1 extension: same continuation as plain CASE 1, but step N+1
+    // extrapolates via its own multiplier - only safe to retarget its start
+    // (rather than truncating) if step N+2 stays reachable from step N+1's
+    // resulting effective end.
+    const nextStepMultiplierRetarget =
+      !canRetarget && nextStepContinues && normalizeMultiplier(currentStep?.multiplier) === 1
+    const updatedNextStep = nextStepMultiplierRetarget ? { ...nextStep, startPoint: clonePoint(pendingPoint) } : null
+    const canRetargetWithMultiplier =
+      nextStepMultiplierRetarget && multiplierRetargetPreserves(currentSteps, idx, updatedNextStep)
+
+    // CASE 2: step N+1 is an independent hop, not a continuation of step
+    // N's end (or CASE 1/its multiplier extension applied but their
+    // conditions didn't hold) - fall back to checking whether it's still
+    // reachable from step N's new end before giving up and truncating.
+    const canPreserveByVisibility =
+      !canRetarget && !canRetargetWithMultiplier && nextStepStillVisible(currentSteps, idx, updatedStep)
+
+    let steps
+    if (canRetarget || canRetargetWithMultiplier) {
+      steps = currentSteps.map((s, i) => {
+        if (i === idx) return updatedStep
+        if (i === idx + 1 && s.startPoint) return { ...s, startPoint: clonePoint(pendingPoint) }
+        return s
+      })
+    } else if (canPreserveByVisibility) {
+      steps = currentSteps.map((s, i) => (i === idx ? updatedStep : s))
+    } else {
+      steps = currentSteps.slice(0, idx + 1).map((s, i) => (i === idx ? updatedStep : s))
+    }
     await savePath(startHip, { steps })
     if (activeStepIndex != null && activeStepIndex >= steps.length) activeStepIndex = steps.length - 1
     clearPending()
@@ -610,6 +689,46 @@
     )
   }
 
+  // CASE 2 (step edit smart-preserve, see setEnd/setMultiplierForStep):
+  // step N+1 doesn't continue from step N's end - it's a genuinely
+  // independent hop between its own two stored points. If both of those
+  // points are still within the same finder field of view once centered on
+  // step N's (possibly just-changed) effective end, the hop is still
+  // performable from there once you get there, so there's no need to
+  // discard it. A step-N+1 point that isn't set yet imposes no constraint.
+  function nextStepStillVisible(currentSteps, idx, updatedStep) {
+    const nextStep = currentSteps[idx + 1]
+    if (!nextStep) return false
+    const path = { steps: currentSteps }
+    const resolvedStart = currentSteps[idx]?.startPoint || stepAnchor(path, idx)
+    const newCenter = effectiveStepEnd(updatedStep, resolvedStart)
+    if (!newCenter) return false
+    const radius = FINDER_FOV / 2
+    if (nextStep.startPoint && angularSepDeg(newCenter, nextStep.startPoint) > radius) return false
+    if (nextStep.endPoint && angularSepDeg(newCenter, nextStep.endPoint) > radius) return false
+    return true
+  }
+
+  // CASE 1 extension: step N+1 continues from step N's end (like plain CASE
+  // 1) but extrapolates via its own multiplier, so retargeting its start to
+  // step N's new end also moves its *effective* end - which may in turn
+  // strand step N+2 (or, if N+1 is the last step, nothing further needs
+  // checking - N+1's own endPoint is the path's target for a final step, and
+  // whether that particular hop is still performable is the same
+  // unvalidated concern CASE 1 already leaves to the user). Mirrors
+  // nextStepStillVisible's logic but resolves the new center from the
+  // already-retargeted step N+1 rather than from step N.
+  function multiplierRetargetPreserves(currentSteps, idx, updatedNextStep) {
+    const stepAfterNext = currentSteps[idx + 2]
+    if (!stepAfterNext) return true
+    const newCenter = effectiveStepEnd(updatedNextStep, updatedNextStep.startPoint)
+    if (!newCenter) return false
+    const radius = FINDER_FOV / 2
+    if (stepAfterNext.startPoint && angularSepDeg(newCenter, stepAfterNext.startPoint) > radius) return false
+    if (stepAfterNext.endPoint && angularSepDeg(newCenter, stepAfterNext.endPoint) > radius) return false
+    return true
+  }
+
   function multiplierOptions(step, resolvedFrom) {
     const from = resolvedFrom || step?.startPoint
     const to = step?.endPoint
@@ -629,8 +748,16 @@
     const startHip = expandedStartHip
     const path = getExpandedPath()
     if (!startHip || !path || idx == null || !path.steps?.[idx]) return
-    const steps = path.steps.slice(0, idx + 1)
-    steps[idx] = { ...steps[idx], multiplier: normalizeMultiplier(value) }
+    const currentSteps = path.steps
+    const updatedStep = { ...currentSteps[idx], multiplier: normalizeMultiplier(value) }
+    // CASE 2 (see nextStepStillVisible) - a multiplier change only ever
+    // moves step N's own effective end, never its literal endPoint, so
+    // there's no CASE 1 "shared point" to retarget here, only the
+    // visibility fallback.
+    const canPreserve = nextStepStillVisible(currentSteps, idx, updatedStep)
+    const steps = canPreserve
+      ? currentSteps.map((s, i) => (i === idx ? updatedStep : s))
+      : currentSteps.slice(0, idx + 1).map((s, i) => (i === idx ? updatedStep : s))
     await savePath(startHip, { steps })
     if (activeStepIndex != null && activeStepIndex >= steps.length) activeStepIndex = steps.length - 1
   }
@@ -689,6 +816,14 @@
     if (point.objectId && labelById.has(point.objectId)) return labelById.get(point.objectId)
     return '•'
   }
+
+  // Top-left name/catalogue-number readout for the point currently under the
+  // cursor, same UI as the finder view's own selected-object box — only
+  // shown once the tap actually snapped to a recognized star (has a hip) and
+  // resolves to a real label, not the generic "•" placeLabel() falls back to
+  // for an unrecognized point.
+  $: pendingPointLabel = pendingPoint?.hip ? placeLabel(pendingPoint) : null
+  $: showPendingPointLabel = !!pendingPointLabel && pendingPointLabel !== '•' && pendingPointLabel !== '?'
 
   function stepTitleParts(step, idx, path) {
     const resolvedStart = step?.startPoint || stepAnchor(path, idx)
@@ -857,7 +992,7 @@
           {lat}
           {lon}
           {time}
-          magLimitOverride={applySkyPollution(adaptiveMagLimit(finderFov), $skyPollution)}
+          magLimitOverride={applySkyPollution(adaptiveMagLimit(FINDER_FOV), $skyPollution)}
           finderMode={true}
           showFovCircle={false}
           showConstellationLines={false}
@@ -870,15 +1005,14 @@
         />
 
         {#if pendingPoint}
-          {@const rect = wrapEl?.getBoundingClientRect()}
-          {@const mark = rect
+          {@const mark = wrapEl
             ? projectToPixel(
                 pendingPoint.ra,
                 pendingPoint.dec,
                 finderRa0,
                 finderDec0,
-                rect.width,
-                rect.height,
+                wrapEl.clientWidth,
+                wrapEl.clientHeight,
                 finderFov,
                 0,
               )
@@ -893,6 +1027,12 @@
 
       {#if boundaryDirMark}
         <div class="boundary-dir-mark" style={`left:${boundaryDirMark.x}px; top:${boundaryDirMark.y}px`}></div>
+      {/if}
+
+      {#if showPendingPointLabel}
+        <div class="pending-point-box">
+          <span class="pending-point-text">{pendingPointLabel}</span>
+        </div>
       {/if}
     </div>
 
@@ -1191,6 +1331,29 @@
 
   :global([data-theme='nightly']) .boundary-dir-mark {
     background: rgba(204, 0, 204, 0.9);
+  }
+
+  /* Same top-left readout style as FinderPanel's .finder-object-box - sits on
+     the unclipped finder-wrap-outer so it's never cropped by the circular
+     clip-path. */
+  .pending-point-box {
+    position: absolute;
+    top: 0.35rem;
+    left: 0.35rem;
+    z-index: 2;
+    max-width: 60%;
+    pointer-events: none;
+  }
+
+  .pending-point-text {
+    font-size: 0.72rem;
+    line-height: 1rem;
+    color: var(--fg);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
   }
 
   .pick-mark {

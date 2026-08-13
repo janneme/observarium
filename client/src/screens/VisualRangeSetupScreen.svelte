@@ -154,6 +154,7 @@
     if (rawBay && obj?.constellation) return `${rawBay} ${obj.constellation}`
     if (obj?.hip != null) return `HIP ${obj.hip}`
     if (obj?.hd != null) return `HD ${obj.hd}`
+    if (obj?.wds) return `WDS ${obj.wds}`
     return String(obj?.id || 'Star')
   }
 

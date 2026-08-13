@@ -51,6 +51,7 @@ function fallbackLabelFromId(id) {
   if (raw.startsWith('dso_M')) return `M ${Number(raw.slice(5))}`
   if (raw.startsWith('dso_NGC')) return `NGC ${Number(raw.slice(7))}`
   if (raw.startsWith('dso_IC')) return `IC ${Number(raw.slice(6))}`
+  if (raw.startsWith('double_WDS')) return `WDS ${raw.slice(10)}`
   return raw || 'Unknown object'
 }
 
@@ -65,6 +66,7 @@ function objectLabel(obj) {
   if (obj.name) return obj.name
   if (obj.bay && obj.constellation) return `${obj.bay} ${obj.constellation}`
   if (obj.flam && obj.constellation) return `${obj.flam} ${obj.constellation}`
+  if (obj.wds) return `WDS ${obj.wds}`
   return fallbackLabelFromId(obj.id)
 }
 

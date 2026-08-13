@@ -77,6 +77,7 @@
     if (raw.startsWith('dso_M')) return `M ${Number(raw.slice(5))}`
     if (raw.startsWith('dso_NGC')) return `NGC ${Number(raw.slice(7))}`
     if (raw.startsWith('dso_IC')) return `IC ${Number(raw.slice(6))}`
+    if (raw.startsWith('double_WDS')) return `WDS ${raw.slice(10)}`
     return raw || 'Unknown object'
   }
 

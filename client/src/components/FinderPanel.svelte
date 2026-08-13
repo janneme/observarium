@@ -687,12 +687,13 @@
     if (obj?.hd != null) return `HD ${obj.hd}`
     if (obj?.sao != null) return `SAO ${obj.sao}`
     if (obj?.flam != null && obj?.constellation) return `${obj.flam} ${obj.constellation}`
+    if (obj?.wds) return `WDS ${obj.wds}`
     return String(obj?.id || 'Star')
   }
 
   function primaryCatalogueLabel(obj) {
     if (!obj) return ''
-    if (obj.type === 'star') return preferredStarLabel(obj)
+    if (obj.type === 'star' || obj.type === 'double_star') return preferredStarLabel(obj)
     if (obj.m != null) return `M ${obj.m}`
     if (obj.ngc != null) return `NGC ${obj.ngc}`
     if (obj.ic != null) return `IC ${obj.ic}`
@@ -702,11 +703,13 @@
     if (obj.sao != null) return `SAO ${obj.sao}`
     if (obj.bay && obj.constellation) return `${obj.bay} ${obj.constellation}`
     if (obj.flam && obj.constellation) return `${obj.flam} ${obj.constellation}`
+    if (obj.wds) return `WDS ${obj.wds}`
     const id = String(obj.id || '')
     if (id.startsWith('dso_M')) return `M ${Number(id.slice(5))}`
     if (id.startsWith('dso_NGC')) return `NGC ${Number(id.slice(7))}`
     if (id.startsWith('dso_IC')) return `IC ${Number(id.slice(6))}`
     if (id.startsWith('dso_C')) return `C ${Number(id.slice(5))}`
+    if (id.startsWith('double_WDS')) return `WDS ${id.slice(10)}`
     if (id.startsWith('solar_')) {
       const name = id.slice(6).replace(/_/g, ' ').trim()
       return name ? name[0].toUpperCase() + name.slice(1) : 'Solar object'
@@ -717,7 +720,7 @@
 
   function selectedObjectLabel(obj) {
     if (!obj) return ''
-    if (obj.type === 'star') return preferredStarLabel(obj)
+    if (obj.type === 'star' || obj.type === 'double_star') return preferredStarLabel(obj)
     const catalogue = primaryCatalogueLabel(obj)
     const rawName = String(obj.name || '').trim()
     if (!rawName) return catalogue
