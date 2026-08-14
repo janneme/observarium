@@ -9,6 +9,7 @@
   } from '../lib/db.js'
   import { pendingChanges } from '../stores/ui.js'
   import { naturalCompare } from '../lib/naturalSort.js'
+  import { recordPerfEvent } from '../lib/perf.js'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
@@ -75,6 +76,7 @@
   let addSearchOpen = false
 
   onMount(async () => {
+    const t0 = performance.now()
     const [paths, index] = await Promise.all([getAllFindingPaths(), getSearchIndex()])
     const newObjById = new Map()
     const newStarsByHip = new Map()
@@ -90,6 +92,7 @@
     objById = newObjById
     starsByHip = newStarsByHip
     allPaths = paths
+    recordPerfEvent('finding_paths_list_load', performance.now() - t0, { catalogueSize: index.length })
     loading = false
   })
 

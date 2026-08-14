@@ -17,6 +17,7 @@
   } from '../lib/db.js'
   import { pendingChanges, skyPollution, applySkyPollution } from '../stores/ui.js'
   import { projectToPixel } from '../lib/skymath.js'
+  import { recordPerfEvent } from '../lib/perf.js'
   import DeleteIcon from '../icons/DeleteIcon.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
 
@@ -53,6 +54,12 @@
   let overlays = []
   let pointers = new Map()
   let finderWheelTimer = null
+  // Position/fov captured at the start of a real user pan/zoom gesture
+  // (pointerdown, or the first wheel event of a new burst) and consumed by
+  // the next loadFinderObjects() call - see recordPerfEvent below. null
+  // when the pending load isn't gesture-driven (step navigation, etc.), so
+  // those calls don't get a misleading move/fov diff attached.
+  let pendingGestureStart = null
 
   let objectCtx = null
   let pathsByStart = {}
@@ -183,6 +190,12 @@
   }
 
   async function loadFinderObjects() {
+    const t0 = performance.now()
+    // Only set for a real user pan/zoom gesture (pointerdown, first wheel
+    // event of a burst) - null for programmatic calls (step navigation,
+    // etc.), which just get the plain fov value below with no move/pos.
+    const gestureStart = pendingGestureStart
+    pendingGestureStart = null
     const margin = Math.max(finderFov * 2, FINDER_FOV * 2)
     objects = await getObjectsInArea(
       finderRa0 - margin,
@@ -191,6 +204,30 @@
       finderDec0 + margin,
       12,
     )
+    const panned = gestureStart && (gestureStart.ra0 !== finderRa0 || gestureStart.dec0 !== finderDec0)
+    const zoomed = gestureStart && gestureStart.fov !== finderFov
+    // A tap (pointerdown+up with no drag) also lands here, since it's the
+    // last pointer lifting same as a real drag - but nothing actually
+    // moved/zoomed, so it's not a move/zoom event at all. Its own cost is
+    // already captured separately by finding_paths_click_pick.
+    if (gestureStart && !panned && !zoomed) {
+      return
+    }
+    const data = { objects: objects.length }
+    if (gestureStart) {
+      if (panned) {
+        data.move = [
+          [gestureStart.ra0, gestureStart.dec0],
+          [finderRa0, finderDec0],
+        ]
+      } else {
+        data.pos = [finderRa0, finderDec0]
+      }
+      data.fov = zoomed ? [gestureStart.fov, finderFov] : finderFov
+    } else {
+      data.fov = finderFov
+    }
+    recordPerfEvent('finding_paths_move_zoom', performance.now() - t0, data)
   }
 
   async function loadLabels() {
@@ -560,6 +597,9 @@
     e.preventDefault()
     e.stopPropagation()
     wrapEl.setPointerCapture(e.pointerId)
+    if (pointers.size === 0) {
+      pendingGestureStart = { ra0: finderRa0, dec0: finderDec0, fov: finderFov }
+    }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY })
   }
 
@@ -588,16 +628,29 @@
     e.stopPropagation()
     if (!e.ctrlKey || guideMode) return
     e.preventDefault()
+    // No pending idle-timer means this is the first wheel event of a new
+    // burst, i.e. the start of the gesture.
+    if (!finderWheelTimer) {
+      pendingGestureStart = { ra0: finderRa0, dec0: finderDec0, fov: finderFov }
+    }
     const nextFov = finderFov * Math.pow(1.008, e.deltaY)
     finderFov = Math.max(1.5, Math.min(20, nextFov))
     clearTimeout(finderWheelTimer)
-    finderWheelTimer = setTimeout(loadFinderObjects, 300)
+    finderWheelTimer = setTimeout(() => {
+      finderWheelTimer = null
+      loadFinderObjects()
+    }, 300)
   }
 
   function handlePointerUp(e) {
     const prev = pointers.get(e.pointerId)
     if (activeStepIndex != null && prev && Math.hypot(e.clientX - prev.startX, e.clientY - prev.startY) < 8) {
+      const t0 = performance.now()
       pendingPoint = pickPoint(e.clientX, e.clientY)
+      recordPerfEvent('finding_paths_click_pick', performance.now() - t0, {
+        objects: objects.length,
+        matched: !!pendingPoint?.hip,
+      })
     }
     pointers.delete(e.pointerId)
     if (pointers.size === 0) {

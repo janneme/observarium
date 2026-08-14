@@ -13,6 +13,7 @@
   import { refreshObservationStats } from '../lib/observedObjectsStats.js'
   import { flattenMoonFeatures } from '../lib/moonMap.js'
   import { pendingChanges } from '../stores/ui.js'
+  import { recordPerfEvent } from '../lib/perf.js'
   import { keyboardActive } from '../stores/keyboard.js'
   import CustomInput from '../components/CustomInput.svelte'
   import CustomTextarea from '../components/CustomTextarea.svelte'
@@ -695,6 +696,7 @@
 
   async function loadData() {
     loading = true
+    const t0 = performance.now()
     const allObservations = await getAllObservations()
     const observedIds = new Set()
     for (const obs of allObservations) {
@@ -731,6 +733,7 @@
     telescopeById = new Map((Array.isArray(telescopes) ? telescopes : []).map((t) => [t.id, t]))
     eyepieceById = new Map((Array.isArray(eyepieces) ? eyepieces : []).map((e) => [e.id, e]))
     observations = sortedObservations(Array.isArray(allObservations) ? allObservations : [])
+    recordPerfEvent('observations_load', performance.now() - t0, { observations: observations.length })
     loading = false
   }
 

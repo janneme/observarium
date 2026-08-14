@@ -20,6 +20,7 @@
     describeFilter,
   } from '../lib/observedObjectsFilter.js'
   import { observedObjectsState } from '../stores/ui.js'
+  import { recordPerfEvent } from '../lib/perf.js'
   import { keyboardActive } from '../stores/keyboard.js'
   import CustomSelect from '../components/CustomSelect.svelte'
   import CustomInput from '../components/CustomInput.svelte'
@@ -82,6 +83,7 @@
   }
 
   onMount(async () => {
+    const t0 = performance.now()
     const [ids, stats, savedTelescopes, fullCatalog] = await Promise.all([
       getAllObservedObjectIds(),
       getObservationStatsByObject(),
@@ -95,6 +97,10 @@
     const nextObjById = new Map()
     for (const id of ids) nextObjById.set(id, found.get(id) || null)
     objById = nextObjById
+    recordPerfEvent('observed_objects_load', performance.now() - t0, {
+      catalogueSize: fullCatalog.length,
+      observedCount: ids.size,
+    })
     loading = false
   })
 

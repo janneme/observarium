@@ -2,7 +2,7 @@
 AWS_PROFILE   ?= personal
 MAG           ?= 9
 
-.PHONY: help deploy deploy-infra deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test test-visual-range
+.PHONY: help deploy deploy-infra deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test test-visual-range perf-report perf-report-local
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -46,6 +46,13 @@ data-upload-local: ## Bundle and upload data to local storage backend
 data-upload-s3: ## Bundle and upload data to S3 (DATA_BUCKET auto-detected from Terraform if unset)
 	@_bucket=$${DATA_BUCKET:-$$(cd infra && tofu output -raw data_bucket_name)}; \
 	cd data_prep && STORAGE=s3 DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python data_upload.py $(if $(findstring command line,$(origin MAG)),--mag $(MAG),)
+
+perf-report-local: ## Print performance percentiles from local storage backend
+	cd server && STORAGE=local PYTHONPATH=.. uv run python perf_report.py
+
+perf-report: ## Print performance percentiles from S3 (DATA_BUCKET auto-detected from Terraform if unset)
+	@_bucket=$${DATA_BUCKET:-$$(cd infra && tofu output -raw data_bucket_name)}; \
+	cd server && STORAGE=s3 DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python perf_report.py
 
 lint: ## Run ruff, pylint, eslint, prettier, and svelte-check on all packages
 	@printf '\033[1;36m==> Linting server\033[0m\n'

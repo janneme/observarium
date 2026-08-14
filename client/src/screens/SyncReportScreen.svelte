@@ -1,20 +1,42 @@
 <script>
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, onMount, tick } from 'svelte'
   import BackIcon from '../icons/BackIcon.svelte'
   import { setActiveServerUrl, CLOUD_SERVER_URL } from '../lib/api.js'
   import { runSync } from '../lib/sync.js'
+  import { flushAndUploadPerfEvents, peekBufferedPerfEventCount } from '../lib/perf.js'
 
-  export let plan = { categories: [], mode: 'merge', source: 'local' }
+  export let plan = { categories: [], mode: 'merge', source: 'local', includePerf: true }
   export let report = { localChanges: [], remoteChanges: [] }
 
   const dispatch = createEventDispatcher()
 
   let syncing = false
   let errorMsg = ''
+  let perfEventCount = 0
+  let syncBtn
+  let focusedSyncBtn = false
+
+  onMount(async () => {
+    perfEventCount = await peekBufferedPerfEventCount()
+  })
 
   $: hasLocal = plan.mode !== 'overwriteServer' && report.localChanges.length > 0
   $: hasRemote = plan.mode !== 'overwriteLocal' && report.remoteChanges.length > 0
-  $: hasAnyChanges = report.localChanges.length > 0 || report.remoteChanges.length > 0
+  $: willUploadPerf = plan.includePerf && perfEventCount > 0
+  $: hasAnyChanges = report.localChanges.length > 0 || report.remoteChanges.length > 0 || willUploadPerf
+  // A disabled button can't take focus, and hasAnyChanges may only settle
+  // once perfEventCount resolves (async), so focus it as soon as it's
+  // actually enabled - paired with SyncSetupScreen.svelte focusing its own
+  // "Analyze Changes" button on mount, so the whole flow is Enter, Enter.
+  // Guarded to fire once, so it doesn't steal focus back after the user has
+  // deliberately moved it elsewhere (e.g. to Cancel). tick() is required -
+  // this reactive block runs before Svelte flushes the resulting `disabled`
+  // attribute change to the DOM, so calling .focus() synchronously here
+  // would still hit the element while it's technically still disabled.
+  $: if (!focusedSyncBtn && syncBtn && hasAnyChanges) {
+    focusedSyncBtn = true
+    tick().then(() => syncBtn.focus())
+  }
 
   async function synchronize() {
     if (syncing) return
@@ -23,6 +45,12 @@
     setActiveServerUrl(plan.source === 'cloud' ? CLOUD_SERVER_URL : undefined)
     try {
       await runSync(plan)
+      if (willUploadPerf) {
+        // Best-effort, fully decoupled from the real sync above - not
+        // awaited, so a slow/broken perf endpoint can never delay the
+        // "synced" UI transition or be mistaken for a real sync failure.
+        flushAndUploadPerfEvents()
+      }
       dispatch('synced')
     } catch (err) {
       errorMsg = err?.message || 'Synchronization failed.'
@@ -69,12 +97,21 @@
           </ul>
         </section>
       {/if}
+
+      {#if willUploadPerf}
+        <section class="report-section">
+          <div class="report-title">Anonymous usage statistics</div>
+          <ul class="bullet-list">
+            <li>{perfEventCount} performance {perfEventCount === 1 ? 'event' : 'events'} will be uploaded</li>
+          </ul>
+        </section>
+      {/if}
     {/if}
 
     <div class="footer-actions">
       <button class="btn ghost" type="button" on:click={() => dispatch('back')} disabled={syncing}>Back</button>
       <button class="btn ghost" type="button" on:click={() => dispatch('cancel')} disabled={syncing}>Cancel</button>
-      <button class="btn" type="button" on:click={synchronize} disabled={syncing || !hasAnyChanges}>
+      <button class="btn" type="button" bind:this={syncBtn} on:click={synchronize} disabled={syncing || !hasAnyChanges}>
         {syncing ? 'Synchronizing…' : 'Synchronize'}
       </button>
     </div>
@@ -183,6 +220,15 @@
     background: none;
   }
 
+  /* Default browser focus outline is a light blue/white ring - forbidden in
+     nightly (NO-GREEN also rules out white/near-white, see CLAUDE.md), so
+     it's replaced everywhere with an explicit box-shadow instead of relying
+     on the UA default. */
+  .btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(46, 119, 255, 0.5);
+  }
+
   .error-msg {
     border: 1px solid rgba(255, 120, 120, 0.5);
     border-radius: 6px;
@@ -207,6 +253,10 @@
 
   :global([data-theme='nightly']) .btn.ghost {
     background: none;
+  }
+
+  :global([data-theme='nightly']) .btn:focus-visible {
+    box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.6);
   }
 
   :global([data-theme='nightly']) .error-msg {

@@ -131,6 +131,10 @@ export async function mergeEyepieces(upserts, deletes) {
   return authFetchJson('/eyepieces/merge', { upserts, deletes })
 }
 
+export async function saveUsageStats(payload) {
+  return authFetchJson('/usage-stats', payload)
+}
+
 export async function getLists() {
   const res = await authFetch('/lists')
   return res.json()

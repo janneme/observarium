@@ -9,6 +9,7 @@ import logging
 import os
 import time
 import traceback
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
@@ -749,6 +750,84 @@ def _route_observations(path: str, method: str, event: dict):
     return None
 
 
+USAGE_STATS_KEY = "performance/events.json"
+PERF_RETENTION_DAYS = int(os.environ.get("PERF_RETENTION_DAYS", "7"))
+
+
+def _received_at(record: dict) -> datetime:
+    raw = record.get("receivedAt")
+    if not isinstance(raw, str):
+        return datetime.min.replace(tzinfo=UTC)
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+
+
+def _parse_usage_stats_body(event: dict) -> tuple[dict, list] | None:
+    """Parse a `{client: {...}, events: [...]}` usage-stats upload body.
+
+    Returns (client, events) or None if the body is malformed.
+    """
+    body = event.get("body") or ""
+    try:
+        data = json.loads(body) if isinstance(body, str) else body
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    client_info = data.get("client")
+    events = data.get("events")
+    if not isinstance(client_info, dict) or not isinstance(events, list):
+        return None
+    return client_info, events
+
+
+def handle_save_usage_stats(event: dict) -> dict:
+    """Append a batch of anonymous perf events to the shared store.
+
+    Auth is required (same as every other endpoint, so this can't become an
+    open write target), but the authenticated username is used only to check
+    the token and is never written into the stored record - anonymization
+    happens at the storage level, see performance.md's "Auth" decision.
+
+    Storage is a list of *batches*, one per upload
+    ({client, receivedAt, events: [...]}) - client info is attached once per
+    batch, not duplicated onto every individual event.
+    """
+    try:
+        _get_username_from_event(event)
+    except PermissionError:
+        return build_response(401, {"error": "Authorization required"})
+
+    parsed = _parse_usage_stats_body(event)
+    if parsed is None:
+        return build_response(
+            400, {"error": "Body must be {client: {...}, events: [...]}"}
+        )
+    client_info, events = parsed
+    events = [e for e in events if isinstance(e, dict)]
+
+    try:
+        backend = storage_backend.get_backend()
+        current = _read_json_or_default(backend, USAGE_STATS_KEY, [])
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(days=PERF_RETENTION_DAYS)
+        batch = {"client": client_info, "receivedAt": now.isoformat(), "events": events}
+        pruned = [b for b in [*current, batch] if _received_at(b) >= cutoff]
+        backend.write_bytes(USAGE_STATS_KEY, json.dumps(pruned).encode("utf-8"))
+        return build_response(200, {"stored": len(events)})
+    except Exception:
+        traceback.print_exc()
+        return build_response(500, {"error": "Could not save usage stats"})
+
+
+def _route_usage_stats(path: str, method: str, event: dict):
+    if path == "/usage-stats" and method == "POST":
+        return handle_save_usage_stats(event)
+    return None
+
+
 def lambda_handler(event, context):  # pylint: disable=unused-argument
     """Handle Lambda invocations by delegating to smaller route functions."""
     path = event.get("rawPath", "/")
@@ -770,6 +849,7 @@ def lambda_handler(event, context):  # pylint: disable=unused-argument
         _route_telescopes,
         _route_eyepieces,
         _route_lists,
+        _route_usage_stats,
     )
 
     for fn in route_funcs:

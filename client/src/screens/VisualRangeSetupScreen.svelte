@@ -12,6 +12,7 @@
   import VisualRangeMeasureScreen from './VisualRangeMeasureScreen.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
   import { skyPollution, skyPollutionDelta } from '../stores/ui.js'
+  import { recordPerfEvent } from '../lib/perf.js'
 
   export let lat = 0
   export let lon = 0
@@ -168,6 +169,7 @@
       const diamMm = tel.diameterInches * 25.4
       // Fetch DSOs only (T1_MAG_LIMIT=9 skips T2 zones; DSOs are always included)
       const dsos = (await getObjectsInArea(0, 360, -90, 90, 9)).filter((o) => o.type === 'dso')
+      const planStart = performance.now()
       const result = await generatePlan({
         getObjectsInArea,
         dsos,
@@ -176,6 +178,13 @@
         eyepiece: { focalLength: ep.focalLengthMm, fov: ep.fovDeg },
         initialMag: selectedInitialMag,
         pollutionDelta: skyPollutionDelta($skyPollution),
+      })
+      recordPerfEvent('visual_range_plan', performance.now() - planStart, {
+        dsoCount: dsos.length,
+        ok: result.ok,
+        telescope: `${Math.round(diamMm)}/${Math.round(tel.focalLengthMm)}`,
+        eyepiece: `${ep.focalLengthMm}/${ep.fovDeg}`,
+        startStar: preferredStarLabel(selectedStar),
       })
       if (result.ok) {
         planResult = result

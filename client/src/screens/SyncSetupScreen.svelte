@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, onMount } from 'svelte'
   import CustomCheckbox from '../components/CustomCheckbox.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
   import { setActiveServerUrl, CLOUD_SERVER_URL } from '../lib/api.js'
@@ -12,6 +12,11 @@
     eyepieces: true,
     lists: true,
   }
+  // Not one of the merge/diff categories above (no local/remote concept -
+  // it's just "upload whatever's buffered"), so it's tracked separately and
+  // threaded through the plan alongside them rather than going through
+  // sync.js's category adapters.
+  export let includePerf = true
   export let mode = 'merge'
   export let source = 'local'
 
@@ -35,6 +40,14 @@
 
   let analyzing = false
   let errorMsg = ''
+  let analyzeBtn
+
+  // Focused on mount so a PC user can just press Enter to trigger it -
+  // paired with SyncReportScreen.svelte focusing its own "Synchronize"
+  // button the same way, so the whole flow is Enter, Enter.
+  onMount(() => {
+    analyzeBtn?.focus()
+  })
 
   function selectedCategoryList() {
     return CATEGORY_FIELDS.filter((f) => categories[f.key]).map((f) => f.key)
@@ -43,7 +56,7 @@
   async function analyze() {
     if (analyzing) return
     const list = selectedCategoryList()
-    if (list.length === 0) {
+    if (list.length === 0 && !includePerf) {
       errorMsg = 'Select at least one category to synchronize.'
       return
     }
@@ -52,7 +65,7 @@
     setActiveServerUrl(source === 'cloud' ? CLOUD_SERVER_URL : undefined)
     try {
       const report = await analyzeSync({ categories: list, mode })
-      dispatch('analyzed', { categories: list, mode, source, report })
+      dispatch('analyzed', { categories: list, mode, source, report, includePerf })
     } catch (err) {
       errorMsg = err?.message || 'Could not analyze changes.'
     } finally {
@@ -84,6 +97,11 @@
             on:change={(e) => (categories = { ...categories, [field.key]: e.detail })}
           />
         {/each}
+        <CustomCheckbox
+          label="Anonymous usage statistics"
+          checked={includePerf}
+          on:change={(e) => (includePerf = e.detail)}
+        />
       </div>
     </section>
 
@@ -114,7 +132,7 @@
 
     <div class="footer-actions">
       <button class="btn ghost" type="button" on:click={() => dispatch('close')}>Cancel</button>
-      <button class="btn" type="button" on:click={analyze} disabled={analyzing}>
+      <button class="btn" type="button" bind:this={analyzeBtn} on:click={analyze} disabled={analyzing}>
         {analyzing ? 'Analyzing…' : 'Analyze Changes'}
       </button>
     </div>
@@ -237,6 +255,16 @@
     background: none;
   }
 
+  /* Default browser focus outline is a light blue/white ring - forbidden in
+     nightly (NO-GREEN also rules out white/near-white, see CLAUDE.md), so
+     it's replaced everywhere with an explicit box-shadow instead of relying
+     on the UA default. */
+  .btn:focus-visible,
+  .pill:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(46, 119, 255, 0.5);
+  }
+
   .error-msg {
     border: 1px solid rgba(255, 120, 120, 0.5);
     border-radius: 6px;
@@ -267,6 +295,11 @@
 
   :global([data-theme='nightly']) .btn.ghost {
     background: none;
+  }
+
+  :global([data-theme='nightly']) .btn:focus-visible,
+  :global([data-theme='nightly']) .pill:focus-visible {
+    box-shadow: 0 0 0 2px rgba(200, 0, 0, 0.6);
   }
 
   :global([data-theme='nightly']) .error-msg {

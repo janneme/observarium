@@ -33,6 +33,7 @@
   import { observationStatsById, refreshObservationStats } from '../lib/observedObjectsStats.js'
   import { objectMatchesFilter } from '../lib/observedObjectsFilter.js'
   import { getTokenStatus } from '../lib/auth.js'
+  import { recordPerfEvent } from '../lib/perf.js'
   import { zenith } from '../lib/horizon.js'
   import { projectToPixel } from '../lib/skymath.js'
   import { selectedObject } from '../stores/selectedObject.js'
@@ -82,6 +83,20 @@
   let loadRaMargin = 0
   let loadMagLimit = 0
   let fetching = false
+  // Set synchronously (before any await) whenever loadObjects() starts, so a
+  // caller that invokes it fire-and-forget (maybeReload) can read this right
+  // after the call to know which load is now in flight - used to correlate
+  // "gesture end" with "the fetch that was still running at that moment",
+  // see onSkyviewGestureEnd().
+  let currentLoadPromise = null
+  // Center position/fov when the current gesture began - captured by
+  // whichever input handler starts a gesture (handlePointerDown,
+  // handleWheel's first event in a burst, handleKey), so
+  // onSkyviewGestureEnd() can report both ends of the move/zoom for
+  // reproducing slow loads.
+  let gestureStartRa0 = null
+  let gestureStartDec0 = null
+  let gestureStartFov = null
 
   const NORMAL_VIEW_MIN_FOV = 0.001
   // `fov` is expressed relative to the viewport's larger dimension, but what's
@@ -118,6 +133,7 @@
     eyepieces: true,
     lists: true,
   }
+  let syncIncludePerf = true
   let syncMode = 'merge'
   let syncSource = 'local'
   let syncPlan = null
@@ -203,26 +219,35 @@
   async function loadObjects() {
     if (fetching) return
     fetching = true
-    const margin = fov * 1.5
-    // Near the celestial poles, cos(dec) → 0, so a fixed RA margin covers an
-    // ever-shrinking sliver of the actual visible sky — stars just outside
-    // that narrow RA window get excluded even though they're angularly close
-    // to the view centre. Scale the RA margin by 1/cos(dec) to compensate.
-    const cosDec = Math.max(0.05, Math.cos((dec0 * Math.PI) / 180))
-    const raMargin = Math.min(180, margin / cosDec)
-    objects = await getObjectsInArea(
-      ra0 - raMargin,
-      ra0 + raMargin,
-      dec0 - margin,
-      dec0 + margin,
-      fovToMagLimit(minDimFov),
-    )
-    loadRa0 = ra0
-    loadDec0 = dec0
-    loadMargin = margin
-    loadRaMargin = raMargin
-    loadMagLimit = fovToMagLimit(minDimFov)
+    currentLoadPromise = (async () => {
+      const margin = fov * 1.5
+      // Near the celestial poles, cos(dec) → 0, so a fixed RA margin covers an
+      // ever-shrinking sliver of the actual visible sky — stars just outside
+      // that narrow RA window get excluded even though they're angularly close
+      // to the view centre. Scale the RA margin by 1/cos(dec) to compensate.
+      const cosDec = Math.max(0.05, Math.cos((dec0 * Math.PI) / 180))
+      const raMargin = Math.min(180, margin / cosDec)
+      objects = await getObjectsInArea(
+        ra0 - raMargin,
+        ra0 + raMargin,
+        dec0 - margin,
+        dec0 + margin,
+        fovToMagLimit(minDimFov),
+      )
+      loadRa0 = ra0
+      loadDec0 = dec0
+      loadMargin = margin
+      loadRaMargin = raMargin
+      loadMagLimit = fovToMagLimit(minDimFov)
+    })()
+    await currentLoadPromise
     fetching = false
+    // Catch-up: maybeReload() below may have silently dropped a reload
+    // request while this load was in flight (it no-ops when `fetching` is
+    // already true, with no retry) - re-check the *current* ra0/dec0/fov
+    // now that this load has settled, in case the view moved further during
+    // the fetch. No-ops (and no reload loop) if nothing moved enough.
+    maybeReload()
   }
 
   async function init(latitude, longitude) {
@@ -252,6 +277,42 @@
     ) {
       loadObjects()
     }
+  }
+
+  // Perf tracking for skyview_move_zoom - see performance.md. loadObjects()
+  // fires continuously during a drag (prefetching, not just on release), so
+  // timing it directly would conflate "load finished while the user was
+  // still dragging" (invisible to them) with "load finished after they let
+  // go" (the actual perceived lag). Call this instead at the moment a
+  // gesture is considered to have ended (pointerup, a wheel-zoom idle pause,
+  // or immediately after a keyboard pan/zoom step); if a load happens to be
+  // in flight right then, its resolution is what the user is waiting on.
+  function onSkyviewGestureEnd() {
+    if (!fetching || !currentLoadPromise) return
+    const gestureEndTs = performance.now()
+    const promise = currentLoadPromise
+    // Collapse to a single value/point when that dimension didn't actually
+    // change during the gesture (a pure zoom has no move, a pure pan has no
+    // fov change) - keeps the common case (only one of the two happening)
+    // out of a needlessly nested array.
+    const panned = gestureStartRa0 !== ra0 || gestureStartDec0 !== dec0
+    const zoomed = gestureStartFov !== fov
+    const posData = panned
+      ? {
+          move: [
+            [gestureStartRa0, gestureStartDec0],
+            [ra0, dec0],
+          ],
+        }
+      : { pos: [ra0, dec0] }
+    const fovData = zoomed ? [gestureStartFov, fov] : fov
+    promise.then(() => {
+      recordPerfEvent('skyview_move_zoom', performance.now() - gestureEndTs, {
+        fov: fovData,
+        objects: objects.length,
+        ...posData,
+      })
+    })
   }
 
   function angSepDeg([ra1, dec1], [ra2, dec2]) {
@@ -294,6 +355,11 @@
   function handlePointerDown(e) {
     e.preventDefault()
     screenEl.setPointerCapture(e.pointerId)
+    if (pointers.size === 0) {
+      gestureStartRa0 = ra0
+      gestureStartDec0 = dec0
+      gestureStartFov = fov
+    }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY })
   }
 
@@ -309,11 +375,22 @@
     } else if (pointers.size === 2) {
       const ids = [...pointers.keys()]
       const other = pointers.get(ids.find((id) => id !== e.pointerId))
+      if (!other) {
+        pointers.set(e.pointerId, { ...prev, x: e.clientX, y: e.clientY })
+        return
+      }
       const prevDist = Math.hypot(prev.x - other.x, prev.y - other.y)
       const currDist = Math.hypot(e.clientX - other.x, e.clientY - other.y)
       if (prevDist > 1) {
-        fov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(fovMax, fov / (currDist / prevDist)))
-        maybeReload()
+        // A degenerate touch event (or the wheel-zoom equivalent below) can
+        // carry a non-finite delta - never let a single bad input event
+        // permanently corrupt fov into NaN, since every subsequent
+        // Math.max/min on NaN stays NaN with no recovery.
+        const nextFov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(fovMax, fov / (currDist / prevDist)))
+        if (Number.isFinite(nextFov)) {
+          fov = nextFov
+          maybeReload()
+        }
       }
     }
     pointers.set(e.pointerId, { ...prev, x: e.clientX, y: e.clientY })
@@ -325,6 +402,7 @@
       handleTap(e.clientX, e.clientY)
     }
     pointers.delete(e.pointerId)
+    if (pointers.size === 0) onSkyviewGestureEnd()
   }
 
   function handlePointerCancel(e) {
@@ -803,6 +881,9 @@
 
     if (menuOpen) return
 
+    gestureStartRa0 = ra0
+    gestureStartDec0 = dec0
+    gestureStartFov = fov
     if (e.key === '+' || e.key === '=') {
       fov = Math.max(0.1, fov * (1 - FOV_STEP))
     } else if (e.key === '-') {
@@ -822,14 +903,43 @@
     }
     e.preventDefault()
     maybeReload()
+    // A keypress is already an atomic, discrete gesture (unlike a drag or a
+    // wheel-zoom burst) - the gesture has already "ended" by the time this
+    // line runs.
+    onSkyviewGestureEnd()
   }
+
+  let wheelGestureEndTimer = null
 
   function handleWheel(e) {
     // ctrlKey=true is how Chrome/Safari report trackpad pinch on desktop
     if (e.ctrlKey) {
       e.preventDefault()
-      fov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(fovMax, fov * Math.pow(1.008, e.deltaY)))
-      maybeReload()
+      // No pending idle-timer means this is the first wheel event of a new
+      // burst, i.e. the start of the gesture.
+      if (!wheelGestureEndTimer) {
+        gestureStartRa0 = ra0
+        gestureStartDec0 = dec0
+        gestureStartFov = fov
+      }
+      // A degenerate wheel event (observed: deltaY briefly NaN during a
+      // rapid trackpad pinch-gesture transition, likely an OS/browser
+      // quirk) must never be allowed to corrupt fov into NaN - see the
+      // matching comment in the pinch-zoom branch above.
+      const nextFov = Math.max(NORMAL_VIEW_MIN_FOV, Math.min(fovMax, fov * Math.pow(1.008, e.deltaY)))
+      if (Number.isFinite(nextFov)) {
+        fov = nextFov
+        maybeReload()
+      }
+      // Trackpad pinch/scroll fires many wheel events in a burst with no
+      // discrete "end" event - treat a short pause with no further wheel
+      // event as the gesture ending, purely for this measurement (does not
+      // change when maybeReload() itself fires above).
+      clearTimeout(wheelGestureEndTimer)
+      wheelGestureEndTimer = setTimeout(() => {
+        wheelGestureEndTimer = null
+        onSkyviewGestureEnd()
+      }, 300)
     }
   }
 
@@ -866,6 +976,7 @@
     window.removeEventListener('wheel', handleWheel)
     clearInterval(clockInterval)
     if (quizChordTimer) clearTimeout(quizChordTimer)
+    if (wheelGestureEndTimer) clearTimeout(wheelGestureEndTimer)
   })
 
   $: minDimFov = viewportH > 0 ? (fov * Math.min(viewportW, viewportH)) / viewportH : fov
@@ -1096,13 +1207,19 @@
   {#if showSyncSetup}
     <SyncSetupScreen
       bind:categories={syncCategories}
+      bind:includePerf={syncIncludePerf}
       bind:mode={syncMode}
       bind:source={syncSource}
       on:close={() => {
         showSyncSetup = false
       }}
       on:analyzed={(e) => {
-        syncPlan = { categories: e.detail.categories, mode: e.detail.mode, source: e.detail.source }
+        syncPlan = {
+          categories: e.detail.categories,
+          mode: e.detail.mode,
+          source: e.detail.source,
+          includePerf: e.detail.includePerf,
+        }
         syncReport = e.detail.report
         showSyncSetup = false
         showSyncReport = true

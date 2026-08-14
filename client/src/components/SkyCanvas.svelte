@@ -1364,9 +1364,9 @@
     // converging to 1 mag below at large-aperture FOV.
     const dsoMagLim = 8 + 0.5 * (magLim - 5)
 
-    const dbStars = objects.filter((o) => o.type === 'star' || o.type === 'double_star')
-    const noMagStars = dbStars.filter((o) => o.mag == null).length
-    const magPassStars = dbStars.filter((o) => (o.mag ?? 99) <= magLim).length
+    // const dbStars = objects.filter((o) => o.type === 'star' || o.type === 'double_star')
+    // const noMagStars = dbStars.filter((o) => o.mag == null).length
+    // const magPassStars = dbStars.filter((o) => (o.mag ?? 99) <= magLim).length
 
     const survey = {}
     function tally(label) {
@@ -1578,10 +1578,10 @@
     if (!finderMode) drawSelectedMarker(ctx)
     if (showFovCircle) drawFovCircle(ctx)
 
-    console.log(
-      `[SkyCanvas] fov=${fov}° starMagLim=${magLim.toFixed(1)} dsoMagLim=${dsoMagLim.toFixed(1)} | db:${dbStars.length} noMag:${noMagStars} magPass:${magPassStars} onScreen:`,
-      survey,
-    )
+    // console.log(
+    //   `[SkyCanvas] fov=${fov}° starMagLim=${magLim.toFixed(1)} dsoMagLim=${dsoMagLim.toFixed(1)} | db:${dbStars.length} noMag:${noMagStars} magPass:${magPassStars} onScreen:`,
+    //   survey,
+    // )
     dirty = false
   }
 

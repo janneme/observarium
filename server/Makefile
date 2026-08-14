@@ -16,7 +16,7 @@ sync: ## Install/update dependencies with uv
 
 lint: ## Run ruff and pylint
 	PYTHONPATH=.. uv run ruff check .
-	PYTHONPATH=.. uv run pylint handler.py local_server.py
+	PYTHONPATH=.. uv run pylint handler.py local_server.py perf_report.py
 
 test: ## Run tests (placeholder)
 	uv run pytest -q
