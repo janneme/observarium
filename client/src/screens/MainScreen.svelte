@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   import SkyCanvas from '../components/SkyCanvas.svelte'
   import TopBar from '../components/TopBar.svelte'
   import MenuPanel from '../components/MenuPanel.svelte'
@@ -497,6 +497,7 @@
         selectedObject.set(hits[0].obj)
       }
     } else {
+      const loupeT0 = performance.now()
       const centRa = hits.reduce((s, h) => s + h.obj.pos[0], 0) / hits.length
       const centDec = hits.reduce((s, h) => s + h.obj.pos[1], 0) / hits.length
       let minSep = Infinity
@@ -526,6 +527,18 @@
           ]
         : visibleObjects
       showLoupe = true
+      // No async data fetch here (loupeObjects is built from what's already
+      // loaded) - the actual cost is the LoupePanel/SkyCanvas mount+draw at
+      // the new zoomed fov, so wait for the DOM update plus one paint frame
+      // rather than just timing the synchronous prep above.
+      tick().then(() => {
+        requestAnimationFrame(() => {
+          recordPerfEvent('sky_loupe_open', performance.now() - loupeT0, {
+            fov: loupeFov,
+            objects: loupeObjects.length,
+          })
+        })
+      })
     }
   }
 
