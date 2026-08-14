@@ -61,6 +61,19 @@
   function adaptiveMagLimit(fovDeg) {
     return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
   }
+  // RA degrees needed to cover an angular radius at a given declination - a
+  // degree of RA covers much less real sky near the poles (RA lines
+  // converge there), so a flat ±margin RA box only spans a narrow wedge
+  // instead of the actual visible circle, leaving most of the finder view
+  // empty (e.g. near Polaris). Uses the declination at the *edge* of the
+  // search radius (closer to the pole than the center), which is more
+  // conservative than using the center dec's cosine - matches
+  // visualRangePlan.js's raSearchSpan.
+  function raSearchSpan(dec, radius) {
+    const edgeDec = Math.min(89.9, Math.abs(dec) + radius)
+    const cosDec = Math.max(Math.cos((edgeDec * Math.PI) / 180), 0.01)
+    return radius / cosDec
+  }
   // Actual brightest/faintest magnitude among the loaded, in-view stars -
   // mirrors MainScreen's own computeViewportMagRange, approximating the
   // finder's circular view as a square of side fovDeg (same simplification
@@ -227,14 +240,18 @@
 
   async function loadObjects() {
     const margin = effectiveFov * 2
+    // A flat RA margin only spans a narrow wedge of sky near the pole (RA
+    // lines converge there) - widen it in RA to actually cover the visible
+    // circle. See raSearchSpan.
+    const raMargin = raSearchSpan(finderDec0, margin)
     // Must fetch at least as deep as effectiveMagLimitOverride (now always a
     // concrete value - see baseMagLimit/applySkyPollution above), or the
     // depth SkyCanvas is told to render is moot: the star data was never
     // actually retrieved that deep in the first place.
     const fetchMagLimit = effectiveMagLimitOverride
     objects = await getObjectsInArea(
-      finderRa0 - margin,
-      finderRa0 + margin,
+      finderRa0 - raMargin,
+      finderRa0 + raMargin,
       finderDec0 - margin,
       finderDec0 + margin,
       fetchMagLimit,

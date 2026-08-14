@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte'
+  import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte'
   import { selectedObject } from '../stores/selectedObject.js'
   import { get } from 'svelte/store'
   import SkyCanvas from '../components/SkyCanvas.svelte'
@@ -46,7 +46,21 @@
     return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
   }
 
+  // RA degrees needed to cover an angular radius at a given declination - a
+  // degree of RA covers much less real sky near the poles (RA lines
+  // converge there), so a flat ±margin RA box only spans a narrow wedge
+  // instead of the actual visible circle, leaving most of the finder view
+  // empty. Uses the declination at the *edge* of the search radius (closer
+  // to the pole than the center), which is more conservative than using the
+  // center dec's cosine - matches visualRangePlan.js's raSearchSpan.
+  function raSearchSpan(dec, radius) {
+    const edgeDec = Math.min(89.9, Math.abs(dec) + radius)
+    const cosDec = Math.max(Math.cos((edgeDec * Math.PI) / 180), 0.01)
+    return radius / cosDec
+  }
+
   let wrapEl
+  let overlayEl
   let finderRa0 = 0
   let finderDec0 = 0
   let finderFov = FINDER_FOV
@@ -60,6 +74,13 @@
   // when the pending load isn't gesture-driven (step navigation, etc.), so
   // those calls don't get a misleading move/fov diff attached.
   let pendingGestureStart = null
+  // What the last successful getObjectsInArea() call actually covered, so a
+  // subsequent loadFinderObjects() can skip re-fetching entirely when the
+  // new view's box is already fully contained in it - see loadFinderObjects.
+  let loadedRa0 = null
+  let loadedDec0 = null
+  let loadedMargin = 0
+  let loadedRaMargin = 0
 
   let objectCtx = null
   let pathsByStart = {}
@@ -193,41 +214,71 @@
     const t0 = performance.now()
     // Only set for a real user pan/zoom gesture (pointerdown, first wheel
     // event of a burst) - null for programmatic calls (step navigation,
-    // etc.), which just get the plain fov value below with no move/pos.
+    // etc.), which get logged as finding_paths_step_load instead, below.
     const gestureStart = pendingGestureStart
     pendingGestureStart = null
-    const margin = Math.max(finderFov * 2, FINDER_FOV * 2)
+
+    // margin scales with the live zoom (no artificial floor) - now that
+    // zoom-out is capped at FINDER_FOV (finderFov can never exceed it), a
+    // floor of FINDER_FOV*2 was actually a *constant* 30°-wide query no
+    // matter how far zoomed in, which is what made this so expensive in
+    // dense fields. mag limit, in contrast, stays pinned to FINDER_FOV
+    // (not the live finderFov) - rendering depth is deliberately
+    // zoom-independent (see magLimitOverride below), so the fetch must
+    // keep covering that same fixed depth regardless of zoom, or stars
+    // the view still wants to render would go missing as soon as the user
+    // zoomed in.
+    const margin = finderFov
+    const mag = adaptiveMagLimit(FINDER_FOV)
+    // A flat RA margin only spans a narrow wedge of sky near the pole (RA
+    // lines converge there) - widen it in RA to actually cover the visible
+    // circle. See raSearchSpan.
+    const raMargin = raSearchSpan(finderDec0, margin)
+
+    // Skip the fetch entirely when the new view's box is already fully
+    // contained in what's currently loaded - every gesture end used to
+    // trigger a full refetch unconditionally, even a one-pixel nudge.
+    const rawDRa = Math.abs(finderRa0 - loadedRa0)
+    const dRa = Math.min(rawDRa, 360 - rawDRa)
+    const alreadyCovered =
+      loadedMargin > 0 && dRa + raMargin <= loadedRaMargin && Math.abs(finderDec0 - loadedDec0) + margin <= loadedMargin
+    if (alreadyCovered) return
+
     objects = await getObjectsInArea(
-      finderRa0 - margin,
-      finderRa0 + margin,
+      finderRa0 - raMargin,
+      finderRa0 + raMargin,
       finderDec0 - margin,
       finderDec0 + margin,
-      12,
+      mag,
     )
-    const panned = gestureStart && (gestureStart.ra0 !== finderRa0 || gestureStart.dec0 !== finderDec0)
-    const zoomed = gestureStart && gestureStart.fov !== finderFov
+    loadedRa0 = finderRa0
+    loadedDec0 = finderDec0
+    loadedMargin = margin
+    loadedRaMargin = raMargin
+
+    const durationMs = performance.now() - t0
+    if (!gestureStart) {
+      recordPerfEvent('finding_paths_step_load', durationMs, { objects: objects.length })
+      return
+    }
+    const panned = gestureStart.ra0 !== finderRa0 || gestureStart.dec0 !== finderDec0
+    const zoomed = gestureStart.fov !== finderFov
     // A tap (pointerdown+up with no drag) also lands here, since it's the
     // last pointer lifting same as a real drag - but nothing actually
     // moved/zoomed, so it's not a move/zoom event at all. Its own cost is
     // already captured separately by finding_paths_click_pick.
-    if (gestureStart && !panned && !zoomed) {
-      return
-    }
+    if (!panned && !zoomed) return
     const data = { objects: objects.length }
-    if (gestureStart) {
-      if (panned) {
-        data.move = [
-          [gestureStart.ra0, gestureStart.dec0],
-          [finderRa0, finderDec0],
-        ]
-      } else {
-        data.pos = [finderRa0, finderDec0]
-      }
-      data.fov = zoomed ? [gestureStart.fov, finderFov] : finderFov
+    if (panned) {
+      data.move = [
+        [gestureStart.ra0, gestureStart.dec0],
+        [finderRa0, finderDec0],
+      ]
     } else {
-      data.fov = finderFov
+      data.pos = [finderRa0, finderDec0]
     }
-    recordPerfEvent('finding_paths_move_zoom', performance.now() - t0, data)
+    data.fov = zoomed ? [gestureStart.fov, finderFov] : finderFov
+    recordPerfEvent('finding_paths_move_zoom', durationMs, data)
   }
 
   async function loadLabels() {
@@ -505,7 +556,14 @@
     }
     await savePath(startHip, { steps })
     if (activeStepIndex != null && activeStepIndex >= steps.length) activeStepIndex = steps.length - 1
-    clearPending()
+    // Setting the end of what's now the last step implicitly means "I want
+    // to continue the path from here" - add the next step automatically
+    // instead of making the user press a separate "Add" button every time.
+    if (idx === steps.length - 1) {
+      await addStep()
+    } else {
+      clearPending()
+    }
   }
 
   async function setFinal(idx) {
@@ -722,6 +780,15 @@
     loadFinderObjects()
   }
 
+  // The step list can grow past what fits on screen - scroll the newly
+  // active step into view instead of leaving the user to find and scroll
+  // to it manually every time a step is added.
+  async function scrollActiveStepIntoView() {
+    await tick()
+    const el = overlayEl?.querySelector(`.step-row[data-step-idx="${activeStepIndex}"]`)
+    el?.scrollIntoView({ block: 'nearest' })
+  }
+
   async function addStep() {
     const startHip = expandedStartHip
     const path = getExpandedPath()
@@ -738,6 +805,7 @@
     const anchor = stepAnchor({ steps }, steps.length - 1)
     if (anchor) centerOn(anchor)
     await loadFinderObjects()
+    await scrollActiveStepIntoView()
   }
 
   function angularSepDeg(a, b) {
@@ -975,12 +1043,6 @@
     return angularSepDeg(anchor, target) <= FINDER_FOV / 2
   })()
 
-  $: pathIsComplete = (() => {
-    const steps = (expandedStartHip ? pathsByStart[expandedStartHip] : null)?.steps || []
-    if (!steps.length) return false
-    return steps[steps.length - 1]?.final === true
-  })()
-
   function handleKey(e) {
     // While traversing a selected path, vim-like 'j'/'k' step through it
     // ('j' next, 'k' previous, per the step-nav buttons below) - matches
@@ -1012,7 +1074,7 @@
   })
 </script>
 
-<div class="overlay" on:pointerdown|stopPropagation on:wheel={handleFinderWheel}>
+<div class="overlay" bind:this={overlayEl} on:pointerdown|stopPropagation on:wheel={handleFinderWheel}>
   <div class="header">
     <button class="back-btn" on:click={() => dispatch('close')} aria-label="Back">
       <BackIcon size="1.2rem" aria-hidden="true" />
@@ -1147,7 +1209,7 @@
 
           {#each recordingPath.steps || [] as step, idx}
             {@const p = stepTitleParts(step, idx, recordingPath)}
-            <div class="step-row" class:active={activeStepIndex === idx}>
+            <div class="step-row" class:active={activeStepIndex === idx} data-step-idx={idx}>
               <button class="step-main" on:click={() => selectStep(idx)}>
                 {p.prefix}{p.from}<span class="step-arrow">⇒</span>{p.to}{#if p.mx}<span class="step-mx">{p.mx}</span
                   >{/if}
@@ -1185,10 +1247,6 @@
               {/if}
             </div>
           {/each}
-
-          {#if !pathIsComplete && !guideMode}
-            <button class="add-step" on:click={addStep}>Add</button>
-          {/if}
         </div>
       {/if}
     {:else if !guideMode}
@@ -1221,7 +1279,7 @@
 
               {#each entry.path.steps || [] as step, idx}
                 {@const p = stepTitleParts(step, idx, entry.path)}
-                <div class="step-row" class:active={activeStepIndex === idx}>
+                <div class="step-row" class:active={activeStepIndex === idx} data-step-idx={idx}>
                   <button class="step-main" on:click={() => selectStep(idx)}>
                     {p.prefix}{p.from}<span class="step-arrow">⇒</span>{p.to}{#if p.mx}<span class="step-mx"
                         >{p.mx}</span
@@ -1260,10 +1318,6 @@
                   {/if}
                 </div>
               {/each}
-
-              {#if !pathIsComplete && !guideMode}
-                <button class="add-step" on:click={addStep}>Add</button>
-              {/if}
             </div>
           {/if}
         </section>
@@ -1625,18 +1679,6 @@
     border-color: #ff0000;
   }
 
-  .add-step {
-    width: 100%;
-    border: 1px solid rgba(120, 180, 255, 0.9);
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--fg);
-    border-radius: 6px;
-    padding: 0.45rem;
-    font-size: 0.96rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
   :global([data-theme='nightly']) .overlay {
     background: #110000;
   }
@@ -1653,7 +1695,6 @@
 
   :global([data-theme='nightly']) .btn,
   :global([data-theme='nightly']) .mini,
-  :global([data-theme='nightly']) .add-step,
   :global([data-theme='nightly']) .path-card,
   :global([data-theme='nightly']) .step-row {
     border-color: rgba(180, 0, 0, 0.35);
@@ -1671,13 +1712,8 @@
   }
 
   :global([data-theme='nightly']) .btn,
-  :global([data-theme='nightly']) .mini,
-  :global([data-theme='nightly']) .add-step {
+  :global([data-theme='nightly']) .mini {
     background: rgba(180, 0, 0, 0.08);
-  }
-
-  :global([data-theme='nightly']) .add-step {
-    border-color: rgba(204, 68, 0, 0.85);
   }
 
   :global([data-theme='nightly']) .set-start:not(:disabled) {
