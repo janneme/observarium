@@ -47,8 +47,23 @@
   // zoomed in enough that a full-sky view isn't cluttered with rings.
   const ACTIVE_LIST_MARKER_MAX_FOV_DEG = 75
   export let showSpecialStarSymbols = true
+  // Separate from showSpecialStarSymbols (which also gates the variable-star
+  // ring) - lets a caller suppress just the double-star jut/decoration, e.g.
+  // the finder/telescope view and Finding Paths, where a double star should
+  // read as a plain star.
+  export let showDoubleStarSymbols = true
   export let targetMarker = null
   export let targetMarkerColor = 'rgba(120,0,255,0.9)'
+  // Degrees to rotate the crosshair by (0 = axis-aligned "+", 45 = diagonal
+  // "x") - lets a caller avoid the marker visually overstriking/blending
+  // into an object symbol that already looks target-like at that spot (e.g.
+  // the planetary nebula glyph's own circle+cross), see FindingPathsScreen.
+  export let targetMarkerRotationDeg = 0
+  // Object id to look up this frame's actual rendered symbol radius from
+  // (renderedPx), so the marker's gap can clear large DSO symbols instead
+  // of using a small fixed gap regardless of symbol size. Optional - falls
+  // back to a small fixed gap when not given or not found.
+  export let targetMarkerObjectId = null
   export let lineFallbackByHip = null
   export let constellationLineColorOverride = null
   export let highlightBoundaryAbbr = null
@@ -118,8 +133,11 @@
     finderMode
     overlayArrows
     showSpecialStarSymbols
+    showDoubleStarSymbols
     targetMarker
     targetMarkerColor
+    targetMarkerRotationDeg
+    targetMarkerObjectId
     lineFallbackByHip
     constellationLineColorOverride
     highlightBoundaryAbbr
@@ -1280,23 +1298,36 @@
     const pt = projectToPixel(targetMarker[0], targetMarker[1], ra0, dec0, W, H, fov, rotation)
     if (!pt || !isOnScreen(pt.px, pt.py, W, H, 40)) return
 
-    const lineHalf = 15
-    const gap = 4.5
+    // Large DSOs (e.g. M31, M81) render their symbol well past the marker's
+    // default fixed gap, so the tick marks end up drawn through the symbol
+    // itself instead of around it - look up this frame's actual rendered
+    // radius (set during the DSO/star pass above, keyed by id) and size the
+    // gap to clear it, falling back to the old fixed gap for anything not
+    // found (off mag limit this frame, or no id given at all).
+    const renderedTarget = targetMarkerObjectId ? renderedPx.get(targetMarkerObjectId) : null
+    const clearance = 3
+    const tickLength = 12
+    const gap = (renderedTarget?.r ?? 4.5) + clearance
+    const lineHalf = gap + tickLength
     const markerColor = currentTheme === 'nightly' ? targetMarkerColor : 'rgba(140,255,140,0.92)'
+    ctx.save()
+    ctx.translate(pt.px, pt.py)
+    if (targetMarkerRotationDeg) ctx.rotate((targetMarkerRotationDeg * Math.PI) / 180)
     ctx.strokeStyle = markerColor
     ctx.lineWidth = 2
     ctx.setLineDash([])
 
     ctx.beginPath()
-    ctx.moveTo(pt.px - lineHalf, pt.py)
-    ctx.lineTo(pt.px - gap, pt.py)
-    ctx.moveTo(pt.px + gap, pt.py)
-    ctx.lineTo(pt.px + lineHalf, pt.py)
-    ctx.moveTo(pt.px, pt.py - lineHalf)
-    ctx.lineTo(pt.px, pt.py - gap)
-    ctx.moveTo(pt.px, pt.py + gap)
-    ctx.lineTo(pt.px, pt.py + lineHalf)
+    ctx.moveTo(-lineHalf, 0)
+    ctx.lineTo(-gap, 0)
+    ctx.moveTo(gap, 0)
+    ctx.lineTo(lineHalf, 0)
+    ctx.moveTo(0, -lineHalf)
+    ctx.lineTo(0, -gap)
+    ctx.moveTo(0, gap)
+    ctx.lineTo(0, lineHalf)
     ctx.stroke()
+    ctx.restore()
   }
 
   function clipSegmentToCircle(ax, ay, bx, by, cx, cy, r) {
@@ -1534,7 +1565,7 @@
         const isVariable = Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1
         const symR = drawStar(ctx, obj, pt, above)
         if (showSpecialStarSymbols && isVariable) addVariableRing(ctx, obj, pt, above)
-        if (showSpecialStarSymbols && isDouble) addDoubleJut(ctx, obj, pt, above, isMulti)
+        if (showSpecialStarSymbols && showDoubleStarSymbols && isDouble) addDoubleJut(ctx, obj, pt, above, isMulti)
         renderedPx.set(obj.id, { px: pt.px, py: pt.py, r: symR, mag: objMag })
         tally(isDouble ? 'double_star' : 'star')
         if (obj.hip) drawnHips.add(obj.hip)

@@ -85,6 +85,7 @@
         showConstellationBoundaries={false}
         showDsos={true}
         showHorizon={false}
+        showDoubleStarSymbols={false}
       />
     </div>
   </div>

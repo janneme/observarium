@@ -527,9 +527,19 @@
   }
 
   function startSearchFilter(obj) {
-    if (!obj || obj.type !== 'star' || obj.hip == null) return false
+    // hip is required regardless of type - it's the id a path start is
+    // actually stored/keyed by (see createPathForStartHip), not just a
+    // generic "has some id" check.
+    if (!obj || obj.hip == null) return false
+    if (obj.type !== 'star' && obj.type !== 'double_star') return false
     const baseMag = Array.isArray(obj.mag) ? obj.mag[0] : Number(obj.mag)
-    return Number.isFinite(baseMag) && baseMag <= PATH_START_MAX_MAG
+    const isVariable = Array.isArray(obj.mag) && obj.mag[1] - obj.mag[0] >= 1
+    if (isVariable) {
+      // No name-based exemption for variables - it must actually reach
+      // mag 4 at its brightest, not just be a recognizable named star.
+      return Number.isFinite(baseMag) && baseMag <= PATH_START_MAX_MAG
+    }
+    return (Number.isFinite(baseMag) && baseMag <= PATH_START_MAX_MAG) || !!obj.name
   }
 
   async function createPathForStartHip(startHip) {
@@ -618,7 +628,10 @@
       const currDist = Math.hypot(e.clientX - other.x, e.clientY - other.y)
       if (prevDist > 1) {
         const nextFov = finderFov / (currDist / prevDist)
-        finderFov = Math.max(1.5, Math.min(20, nextFov))
+        // Zoom-in only - zooming out past the base finder FOV would defeat
+        // the point of zooming (precise point placement), not just be
+        // pointless.
+        finderFov = Math.max(1.5, Math.min(FINDER_FOV, nextFov))
       }
     }
     pointers.set(e.pointerId, { ...prev, x: e.clientX, y: e.clientY })
@@ -634,7 +647,9 @@
       pendingGestureStart = { ra0: finderRa0, dec0: finderDec0, fov: finderFov }
     }
     const nextFov = finderFov * Math.pow(1.008, e.deltaY)
-    finderFov = Math.max(1.5, Math.min(20, nextFov))
+    // Zoom-in only - zooming out past the base finder FOV would defeat the
+    // point of zooming (precise point placement), not just be pointless.
+    finderFov = Math.max(1.5, Math.min(FINDER_FOV, nextFov))
     clearTimeout(finderWheelTimer)
     finderWheelTimer = setTimeout(() => {
       finderWheelTimer = null
@@ -1054,7 +1069,11 @@
           showDsos={true}
           showHorizon={true}
           showSolarSystem={true}
+          showDoubleStarSymbols={false}
           overlayArrows={overlays}
+          targetMarker={objectCtx?.pos ?? null}
+          targetMarkerObjectId={objectCtx?.id ?? null}
+          targetMarkerRotationDeg={45}
         />
 
         {#if pendingPoint}

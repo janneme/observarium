@@ -616,6 +616,11 @@
 
   function handleKey(e) {
     if (e.key === 'Escape') {
+      if (showLoupe) {
+        showLoupe = false
+        e.preventDefault()
+        return
+      }
       if (showObservationSyncLogin) {
         showObservationSyncLogin = false
         e.preventDefault()

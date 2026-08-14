@@ -776,6 +776,7 @@
         showDsos={true}
         showHorizon={true}
         showSolarSystem={true}
+        showDoubleStarSymbols={false}
       />
     </div>
   </div>
