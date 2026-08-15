@@ -1,0 +1,64 @@
+[
+  {
+    "id": "40235f4f-a438-4d95-a9f9-b6811f20af7b",
+    "name": "ES 24",
+    "focalLengthMm": 24,
+    "fovDeg": 68
+  },
+  {
+    "id": "b1d1adfa-b326-43d7-9d02-7c6c7148f6e2",
+    "name": "GSO 32",
+    "focalLengthMm": 32,
+    "fovDeg": 50
+  },
+  {
+    "id": "b6747c6f-d94b-4a7d-bc41-5f7173901b49",
+    "name": "Plossl 25",
+    "focalLengthMm": 25,
+    "fovDeg": 50
+  },
+  {
+    "id": "bdfbfdbf-385a-4c80-a73b-666797b38fff",
+    "name": "TS Planetary 2.5",
+    "focalLengthMm": 2.5,
+    "fovDeg": 60
+  },
+  {
+    "id": "6188de86-3cb3-4cd4-938f-c18300353fc7",
+    "name": "TS Planetary 3.2",
+    "focalLengthMm": 3.2,
+    "fovDeg": 60
+  },
+  {
+    "id": "d51338e2-47c6-47a8-9efe-5b30cb3b3013",
+    "name": "TS UWA 16",
+    "focalLengthMm": 16,
+    "fovDeg": 82
+  },
+  {
+    "id": "0470a758-76b4-4a0f-98f0-b4a68c3c788f",
+    "name": "TS UWA 7",
+    "focalLengthMm": 7,
+    "fovDeg": 82
+  },
+  {
+    "id": "8d6ea40c-f189-488a-870e-62f2e8717433",
+    "name": "Vixen SLV 4",
+    "focalLengthMm": 4,
+    "fovDeg": 50
+  },
+  {
+    "id": "984a0243-7fe6-4922-b522-28a95f283c9b",
+    "name": "Hyperion 8-24/24",
+    "focalLengthMm": 24,
+    "fovDeg": 50,
+    "updatedAt": "2026-07-20T22:59:47.077Z"
+  },
+  {
+    "id": "84d1381f-cf23-4d17-8b62-552e84e2414e",
+    "name": "Hyperion 8-24/8",
+    "focalLengthMm": 8,
+    "fovDeg": 70,
+    "updatedAt": "2026-08-08T09:25:41.505Z"
+  }
+]

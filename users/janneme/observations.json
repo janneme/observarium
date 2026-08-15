@@ -1,0 +1,925 @@
+[
+  {
+    "date": "2026-07-15",
+    "objects": [],
+    "notes": "Visual range (Newton 6\", Plossl 25): mag 11.0 at 00:30 near Alioth (UMa)\nVisual range (Newton 6\", Plossl 25): mag 11.1 at 00:54 near Pherkad (UMi)"
+  },
+  {
+    "date": "2026-07-16",
+    "location": {
+      "lat": 54.00132,
+      "lon": 14.68016
+    },
+    "objects": [
+      {
+        "id": "dso_M082",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "dso_M015",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "dso_M002",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "dso_M081",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": ""
+      }
+    ],
+    "notes": ""
+  },
+  {
+    "date": "2026-07-21",
+    "objects": [],
+    "startedAt": "2026-07-20T22:41:00.577Z",
+    "notes": "Visual range (Newton 4\", Hyperion 8-24/24): mag 9.0 at 00:41 near Mizar (UMa)",
+    "updatedAt": "2026-07-20T22:55:50.285Z",
+    "location": {
+      "name": "Praha"
+    }
+  },
+  {
+    "date": "2026-07-25",
+    "objects": [
+      {
+        "id": "dso_M013",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-07-24T23:51:00.000Z"
+      },
+      {
+        "id": "dso_M092",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-07-24T23:52:00.000Z"
+      },
+      {
+        "id": "dso_NGC6543",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+            ],
+            "eyepieceId": "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+          }
+        ],
+        "notes": "Difficult to distinguish from a star (the nebula is small)",
+        "loggedAt": "2026-07-27T16:01:24.997Z"
+      }
+    ],
+    "startedAt": "2026-07-24T22:46:00.615Z",
+    "notes": "Visual range (Newton 6\", Plossl 25): mag 11.8 at 00:46 near Cih (Cas)",
+    "updatedAt": "2026-07-27T16:01:50.126Z",
+    "location": {
+      "lat": 49.86928,
+      "lon": 13.92433,
+      "name": "Praskolesy"
+    }
+  },
+  {
+    "date": "2026-07-26",
+    "location": {
+      "lat": 49.41934,
+      "lon": 18.31553,
+      "name": "Horn\u00ed Be\u010dva"
+    },
+    "objects": [
+      {
+        "id": "star_HIP95947",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-07-25T22:19:00.000Z"
+      }
+    ],
+    "startedAt": "2026-07-25T22:19:00.000Z",
+    "notes": "Visual range (Newton 6\", Plossl 25): mag 11.1 at 00:29 near Cih (Cas)",
+    "updatedAt": "2026-07-27T16:05:36.719Z"
+  },
+  {
+    "date": "2026-07-29",
+    "objects": [
+      {
+        "id": "star_HIP9640",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "0470a758-76b4-4a0f-98f0-b4a68c3c788f",
+              "6188de86-3cb3-4cd4-938f-c18300353fc7"
+            ],
+            "eyepieceId": "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+          }
+        ],
+        "notes": "very nice, brighter star orange, weaker star blue; better view in TS UWA 7",
+        "loggedAt": "2026-07-28T22:58:00.000Z"
+      },
+      {
+        "id": "star_HIP11767",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+            ],
+            "eyepieceId": "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+          }
+        ],
+        "notes": "double star observed",
+        "loggedAt": "2026-07-28T23:24:00.000Z"
+      },
+      {
+        "id": "solar_saturn",
+        "telescopeResults": [],
+        "notes": "ring angle about 20 degrees",
+        "loggedAt": "2026-07-28T23:45:00.000Z"
+      }
+    ],
+    "startedAt": "2026-07-28T22:48:00.811Z",
+    "notes": "Visual range (Newton 6\", Plossl 25): mag 10.8 at 00:48 near Cih (Cas)\nBad conditions - full moon",
+    "updatedAt": "2026-07-29T09:51:31.899Z",
+    "location": {
+      "lat": 49.42068,
+      "lon": 18.32023,
+      "name": "Horn\u00ed Be\u010dva"
+    }
+  },
+  {
+    "date": "2026-08-05",
+    "location": {
+      "lat": 50.06852,
+      "lon": 14.4605,
+      "name": "Praha"
+    },
+    "objects": [
+      {
+        "id": "crater::Autolycus",
+        "telescopeResults": [
+          {
+            "telescopeId": "6cacaee8-fff7-4f22-b783-35406fdfd7e3",
+            "seen": true,
+            "eyepieceIds": [
+              "984a0243-7fe6-4922-b522-28a95f283c9b"
+            ],
+            "eyepieceId": "984a0243-7fe6-4922-b522-28a95f283c9b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-04T22:45:00.000Z"
+      },
+      {
+        "id": "mons::Mons Piton",
+        "telescopeResults": [
+          {
+            "telescopeId": "6cacaee8-fff7-4f22-b783-35406fdfd7e3",
+            "seen": true,
+            "eyepieceIds": [
+              "984a0243-7fe6-4922-b522-28a95f283c9b"
+            ],
+            "eyepieceId": "984a0243-7fe6-4922-b522-28a95f283c9b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-04T22:47:00.000Z"
+      },
+      {
+        "id": "crater::Cassini A",
+        "telescopeResults": [
+          {
+            "telescopeId": "6cacaee8-fff7-4f22-b783-35406fdfd7e3",
+            "seen": true,
+            "eyepieceIds": [
+              "984a0243-7fe6-4922-b522-28a95f283c9b"
+            ],
+            "eyepieceId": "984a0243-7fe6-4922-b522-28a95f283c9b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-04T22:50:00.000Z"
+      }
+    ],
+    "startedAt": "2026-08-04T22:45:00.000Z",
+    "notes": "",
+    "updatedAt": "2026-08-04T22:50:33.590Z"
+  },
+  {
+    "date": "2026-08-08",
+    "objects": [
+      {
+        "id": "dso_NGC7009",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+            ],
+            "eyepieceId": "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+          }
+        ],
+        "notes": "small - almost like a star",
+        "loggedAt": "2026-08-08T23:02:00.000Z"
+      },
+      {
+        "id": "dso_M072",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+            ],
+            "eyepieceId": "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-08T23:35:00.000Z"
+      },
+      {
+        "id": "dso_M002",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-09T15:56:02.661Z"
+      }
+    ],
+    "startedAt": "2026-08-08T21:13:00.530Z",
+    "notes": "Visual range (Newton 6\", Plossl 25): mag 11.7 at 23:13 near Altair (Aql)",
+    "updatedAt": "2026-08-09T15:56:28.219Z",
+    "location": {
+      "lat": 50.77341,
+      "lon": 15.35769,
+      "name": "Ko\u0159enov"
+    }
+  },
+  {
+    "date": "2026-08-11",
+    "objects": [
+      {
+        "id": "dso_M014",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+            ],
+            "eyepieceId": "0470a758-76b4-4a0f-98f0-b4a68c3c788f"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-11T22:05:00.000Z"
+      },
+      {
+        "id": "dso_M012",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-11T22:27:00.000Z"
+      },
+      {
+        "id": "dso_M034",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-11T23:04:00.000Z"
+      }
+    ],
+    "startedAt": "2026-08-11T21:23:00.153Z",
+    "notes": "Visual range (Newton 6\", Plossl 25): mag 11.7 at 23:23 near Rasalhague (Oph)\nVisual range (Newton 12\", ES 24): mag 13.3 at 23:40 near Rasalhague (Oph)",
+    "updatedAt": "2026-08-11T23:04:20.216Z",
+    "location": {
+      "lat": 49.75823,
+      "lon": 14.95282
+    }
+  },
+  {
+    "date": "2026-08-12",
+    "location": {
+      "lat": 49.75827,
+      "lon": 14.95264
+    },
+    "objects": [
+      {
+        "id": "dso_M080",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "very faint",
+        "loggedAt": "2026-08-12T20:39:00.000Z"
+      },
+      {
+        "id": "dso_M004",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "very faint, even in 12",
+        "loggedAt": "2026-08-12T20:33:00.000Z"
+      },
+      {
+        "id": "dso_M009",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T20:58:00.000Z"
+      },
+      {
+        "id": "dso_NGC6356",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T21:05:00.000Z"
+      },
+      {
+        "id": "dso_M107",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T21:16:00.000Z"
+      },
+      {
+        "id": "dso_NGC6342",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T21:25:00.000Z"
+      },
+      {
+        "id": "dso_NGC6642",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T21:41:00.000Z"
+      },
+      {
+        "id": "dso_M022",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T21:33:00.000Z"
+      },
+      {
+        "id": "dso_NGC6638",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T22:00:00.000Z"
+      },
+      {
+        "id": "dso_M028",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T22:01:00.000Z"
+      },
+      {
+        "id": "dso_NGC6712",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T22:21:00.000Z"
+      },
+      {
+        "id": "dso_M011",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "very nice",
+        "loggedAt": "2026-08-12T22:27:00.000Z"
+      },
+      {
+        "id": "dso_NGC6704",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T22:32:00.000Z"
+      },
+      {
+        "id": "dso_M026",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T22:41:00.000Z"
+      },
+      {
+        "id": "dso_M057",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T22:55:00.000Z"
+      },
+      {
+        "id": "dso_M056",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T23:03:00.000Z"
+      },
+      {
+        "id": "dso_M071",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T23:27:00.000Z"
+      },
+      {
+        "id": "dso_M027",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T23:41:00.000Z"
+      },
+      {
+        "id": "dso_M013",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T23:45:00.000Z"
+      },
+      {
+        "id": "dso_M092",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-12T23:50:00.000Z"
+      },
+      {
+        "id": "dso_NGC1023",
+        "telescopeResults": [
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-13T00:04:00.000Z"
+      },
+      {
+        "id": "dso_M037",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-13T00:16:00.000Z"
+      },
+      {
+        "id": "dso_M036",
+        "telescopeResults": [
+          {
+            "telescopeId": "4e82c18f-a565-4226-8430-1ff3a1b7268a",
+            "seen": true,
+            "eyepieceIds": [
+              "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+            ],
+            "eyepieceId": "b6747c6f-d94b-4a7d-bc41-5f7173901b49"
+          },
+          {
+            "telescopeId": "643b5635-ef12-42a9-aca4-8a61aca66167",
+            "seen": true,
+            "eyepieceIds": [
+              "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+            ],
+            "eyepieceId": "40235f4f-a438-4d95-a9f9-b6811f20af7b"
+          }
+        ],
+        "notes": "",
+        "loggedAt": "2026-08-13T00:21:00.000Z"
+      }
+    ],
+    "startedAt": "2026-08-12T20:33:00.000Z",
+    "notes": "",
+    "updatedAt": "2026-08-13T00:21:42.711Z"
+  }
+]

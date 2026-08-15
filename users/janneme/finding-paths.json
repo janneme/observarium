@@ -1,0 +1,1846 @@
+{
+  "dso_M101": {
+    "65378": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 203.5305,
+            "dec": 55.3484,
+            "objectId": "star_HIP66198",
+            "hip": 66198
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 203.5305,
+            "dec": 55.3484,
+            "objectId": "star_HIP66198",
+            "hip": 66198
+          },
+          "endPoint": {
+            "ra": 206.6486,
+            "dec": 54.4327,
+            "objectId": "star_HIP67231",
+            "hip": 67231
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 206.6486,
+            "dec": 54.4327,
+            "objectId": "star_HIP67231",
+            "hip": 67231
+          },
+          "endPoint": {
+            "ra": 207.7488,
+            "dec": 53.2905,
+            "objectId": "star_HIP67590",
+            "hip": 67590
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 207.7488,
+            "dec": 53.2905,
+            "objectId": "star_HIP67590",
+            "hip": 67590
+          },
+          "endPoint": {
+            "ra": 208.4626,
+            "dec": 53.7287,
+            "objectId": "star_HIP67848",
+            "hip": 67848
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 210.80225000000002,
+            "dec": 54.34894444444445,
+            "objectId": "dso_M101"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "1970-01-01T00:00:00.000Z"
+    }
+  },
+  "dso_M081": {
+    "54061": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 165.2736,
+            "dec": 63.4211,
+            "objectId": "star_HIP53860",
+            "hip": 53860
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": {
+            "ra": 162.2078,
+            "dec": 65.1325,
+            "objectId": "star_HIP52877",
+            "hip": 52877
+          },
+          "endPoint": {
+            "ra": 160.4856,
+            "dec": 65.7163,
+            "objectId": "star_HIP52353",
+            "hip": 52353
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 160.4856,
+            "dec": 65.7163,
+            "objectId": "star_HIP52353",
+            "hip": 52353
+          },
+          "endPoint": {
+            "ra": 156.0327,
+            "dec": 65.5664,
+            "objectId": "star_HIP50933",
+            "hip": 50933
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 157.6108,
+            "dec": 64.2577,
+            "objectId": "star_HIP51448",
+            "hip": 51448
+          },
+          "endPoint": {
+            "ra": 156.0327,
+            "dec": 65.5664,
+            "objectId": "star_HIP50933",
+            "hip": 50933
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 148.88820833333332,
+            "dec": 69.06530555555555,
+            "objectId": "dso_M081"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "1970-01-01T00:00:00.000Z"
+    }
+  },
+  "dso_M031": {
+    "5447": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 15.1309,
+            "dec": 37.7915,
+            "objectId": "star_HIP4710",
+            "hip": 4710
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 15.1309,
+            "dec": 37.7915,
+            "objectId": "star_HIP4710",
+            "hip": 4710
+          },
+          "endPoint": {
+            "ra": 13.2474,
+            "dec": 39.0434,
+            "objectId": "star_HIP4144",
+            "hip": 4144
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 10.684791666666666,
+            "dec": 41.26905555555555,
+            "objectId": "dso_M031"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "1970-01-01T00:00:00.000Z"
+    }
+  },
+  "dso_M015": {
+    "107315": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 325.1395,
+            "dec": 10.6122,
+            "objectId": "star_HIP107028",
+            "hip": 107028
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 322.49325,
+            "dec": 12.166833333333333,
+            "objectId": "dso_M015"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "1970-01-01T00:00:00.000Z"
+    }
+  },
+  "dso_M002": {
+    "107315": {
+      "steps": [
+        {
+          "startPoint": {
+            "ra": 325.9428,
+            "dec": 11.1014,
+            "objectId": "star_HIP107280",
+            "hip": 107280
+          },
+          "endPoint": {
+            "ra": 326.0465,
+            "dec": 9.875,
+            "objectId": "star_HIP107315",
+            "hip": 107315
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": {
+            "ra": 325.9157,
+            "dec": 7.5287,
+            "objectId": "star_HIP107271",
+            "hip": 107271
+          },
+          "endPoint": {
+            "ra": 324.6331,
+            "dec": 5.7717,
+            "objectId": "star_HIP106856",
+            "hip": 106856
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 324.4297,
+            "dec": 6.629,
+            "objectId": "star_HIP106781",
+            "hip": 106781
+          },
+          "endPoint": {
+            "ra": 324.6331,
+            "dec": 5.7717,
+            "objectId": "star_HIP106856",
+            "hip": 106856
+          },
+          "multiplier": 5
+        },
+        {
+          "startPoint": {
+            "ra": 326.8082,
+            "dec": 2.6861,
+            "objectId": "star_HIP107575",
+            "hip": 107575
+          },
+          "endPoint": {
+            "ra": 325.281,
+            "dec": 1.3085,
+            "objectId": "star_HIP107072",
+            "hip": 107072
+          },
+          "multiplier": 2.5
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 323.3625416666667,
+            "dec": -0.8233055555555555,
+            "objectId": "dso_M002"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "1970-01-01T00:00:00.000Z"
+    },
+    "106278": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 323.5629,
+            "dec": -3.4106,
+            "objectId": "star_HIP106495",
+            "hip": 106495
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 323.3625416666667,
+            "dec": -0.8233055555555555,
+            "objectId": "dso_M002"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-08T21:59:56.137Z"
+    }
+  },
+  "dso_M013": {
+    "84380": {
+      "steps": [
+        {
+          "startPoint": {
+            "ra": 258.7618,
+            "dec": 36.8092,
+            "objectId": "star_HIP84380",
+            "hip": 84380
+          },
+          "endPoint": {
+            "ra": 257.0319,
+            "dec": 35.9468,
+            "objectId": "star_t2_257.0319_35.9468",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 257.132,
+            "dec": 35.034,
+            "objectId": "star_HIP83872",
+            "hip": 83872
+          },
+          "endPoint": {
+            "ra": 255.8759,
+            "dec": 35.4141,
+            "objectId": "star_HIP83462",
+            "hip": 83462
+          },
+          "multiplier": 4
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 250.42345833333337,
+            "dec": 36.46130555555556,
+            "objectId": "dso_M013"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-07-24T23:10:36.440Z"
+    }
+  },
+  "dso_M092": {
+    "84380": {
+      "steps": [
+        {
+          "startPoint": {
+            "ra": 259.4177,
+            "dec": 37.2915,
+            "objectId": "star_HIP84606",
+            "hip": 84606
+          },
+          "endPoint": {
+            "ra": 259.597,
+            "dec": 38.8114,
+            "objectId": "star_HIP84656",
+            "hip": 84656
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 261.0094,
+            "dec": 38.5828,
+            "objectId": "star_HIP85149",
+            "hip": 85149
+          },
+          "endPoint": {
+            "ra": 260.4317,
+            "dec": 39.9747,
+            "objectId": "star_HIP84949",
+            "hip": 84949
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 259.28029166666664,
+            "dec": 43.13652777777778,
+            "objectId": "dso_M092"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-07-24T23:15:31.367Z"
+    }
+  },
+  "dso_NGC6543": {
+    "85670": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 262.862,
+            "dec": 54.3558,
+            "objectId": "star_HIP85759",
+            "hip": 85759
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 262.862,
+            "dec": 54.3558,
+            "objectId": "star_HIP85759",
+            "hip": 85759
+          },
+          "endPoint": {
+            "ra": 263.0438,
+            "dec": 55.1842,
+            "objectId": "star_HIP85819",
+            "hip": 85819
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 263.0438,
+            "dec": 55.1842,
+            "objectId": "star_HIP85819",
+            "hip": 85819
+          },
+          "endPoint": {
+            "ra": 263.3817,
+            "dec": 57.5587,
+            "objectId": "star_HIP85923",
+            "hip": 85923
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 263.3817,
+            "dec": 57.5587,
+            "objectId": "star_HIP85923",
+            "hip": 85923
+          },
+          "endPoint": {
+            "ra": 261.5202,
+            "dec": 58.6519,
+            "objectId": "star_HIP85317",
+            "hip": 85317
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 261.5202,
+            "dec": 58.6519,
+            "objectId": "star_HIP85317",
+            "hip": 85317
+          },
+          "endPoint": {
+            "ra": 261.4223,
+            "dec": 60.0484,
+            "objectId": "star_HIP85290",
+            "hip": 85290
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 261.4223,
+            "dec": 60.0484,
+            "objectId": "star_HIP85290",
+            "hip": 85290
+          },
+          "endPoint": null,
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 263.7482,
+            "dec": 61.8746,
+            "objectId": "star_HIP86036",
+            "hip": 86036
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 263.7482,
+            "dec": 61.8746,
+            "objectId": "star_HIP86036",
+            "hip": 86036
+          },
+          "endPoint": {
+            "ra": 265.0753,
+            "dec": 63.6754,
+            "objectId": "star_HIP86482",
+            "hip": 86482
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 265.0753,
+            "dec": 63.6754,
+            "objectId": "star_HIP86482",
+            "hip": 86482
+          },
+          "endPoint": {
+            "ra": 267.1686,
+            "dec": 64.7667,
+            "objectId": "star_HIP87179",
+            "hip": 87179
+          },
+          "multiplier": 2.5
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 269.639125,
+            "dec": 66.63319444444444,
+            "objectId": "dso_NGC6543"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-07-24T23:34:15.297Z"
+    }
+  },
+  "dso_NGC7009": {
+    "106278": {
+      "steps": [
+        {
+          "startPoint": {
+            "ra": 323.5318,
+            "dec": -4.3682,
+            "objectId": "star_HIP106488",
+            "hip": 106488
+          },
+          "endPoint": {
+            "ra": 322.8897,
+            "dec": -5.5712,
+            "objectId": "star_HIP106278",
+            "hip": 106278
+          },
+          "multiplier": 4
+        },
+        {
+          "startPoint": {
+            "ra": 320.7344,
+            "dec": -9.3193,
+            "objectId": "star_HIP105574",
+            "hip": 105574
+          },
+          "endPoint": {
+            "ra": 319.2427,
+            "dec": -10.135,
+            "objectId": "star_HIP105060",
+            "hip": 105060
+          },
+          "multiplier": 2.5
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 316.04495833333334,
+            "dec": -11.363249999999999,
+            "objectId": "dso_NGC7009"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-08T23:01:22.327Z"
+    }
+  },
+  "dso_M072": {
+    "106278": {
+      "steps": [
+        {
+          "startPoint": {
+            "ra": 323.5318,
+            "dec": -4.3682,
+            "objectId": "star_HIP106488",
+            "hip": 106488
+          },
+          "endPoint": {
+            "ra": 322.88966666666664,
+            "dec": -5.571166666666667,
+            "objectId": "double_WDS21316-0534",
+            "hip": null
+          },
+          "multiplier": 4
+        },
+        {
+          "startPoint": {
+            "ra": 320.7344,
+            "dec": -9.3193,
+            "objectId": "star_HIP105574",
+            "hip": 105574
+          },
+          "endPoint": {
+            "ra": 319.2427,
+            "dec": -10.135,
+            "objectId": "star_HIP105060",
+            "hip": 105060
+          },
+          "multiplier": 2.5
+        },
+        {
+          "startPoint": {
+            "ra": 317.3985,
+            "dec": -11.3717,
+            "objectId": "star_HIP104459",
+            "hip": 104459
+          },
+          "endPoint": {
+            "ra": 315.4993,
+            "dec": -11.6963,
+            "objectId": "star_HIP103801",
+            "hip": 103801
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 315.4993,
+            "dec": -11.6963,
+            "objectId": "star_HIP103801",
+            "hip": 103801
+          },
+          "endPoint": null,
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 314.508,
+            "dec": -11.9549,
+            "objectId": "star_HIP103487",
+            "hip": 103487
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 313.36629166666665,
+            "dec": -12.537055555555556,
+            "objectId": "dso_M072"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-08T23:32:57.801Z"
+    }
+  },
+  "dso_M014": {
+    "86742": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 266.1478,
+            "dec": 2.5791,
+            "objectId": "star_HIP86835",
+            "hip": 86835
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 266.1478,
+            "dec": 2.5791,
+            "objectId": "star_HIP86835",
+            "hip": 86835
+          },
+          "endPoint": {
+            "ra": 266.6037,
+            "dec": 1.0443,
+            "objectId": "star_HIP86969",
+            "hip": 86969
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 266.6037,
+            "dec": 1.0443,
+            "objectId": "star_HIP86969",
+            "hip": 86969
+          },
+          "endPoint": {
+            "ra": 264.9904,
+            "dec": -0.6392,
+            "objectId": "star_HIP86463",
+            "hip": 86463
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 264.9904,
+            "dec": -0.6392,
+            "objectId": "star_HIP86463",
+            "hip": 86463
+          },
+          "endPoint": {
+            "ra": 265.0492,
+            "dec": -2.1421,
+            "objectId": "star_t2_265.0492_-2.1421",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 264.40066666666667,
+            "dec": -3.2459166666666666,
+            "objectId": "dso_M014"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-11T22:05:38.697Z"
+    }
+  },
+  "dso_M012": {
+    "79593": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 246.1644,
+            "dec": -2.4881,
+            "objectId": "star_HIP80398",
+            "hip": 80398
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": {
+            "ra": 249.6397,
+            "dec": -1.2315,
+            "objectId": "star_HIP81484",
+            "hip": 81484
+          },
+          "endPoint": {
+            "ra": 250.9245,
+            "dec": -0.784,
+            "objectId": "star_HIP81897",
+            "hip": 81897
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 250.9245,
+            "dec": -0.784,
+            "objectId": "star_HIP81897",
+            "hip": 81897
+          },
+          "endPoint": {
+            "ra": 251.81050000000002,
+            "dec": -1.9478333333333333,
+            "objectId": "dso_M012"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-11T22:25:38.133Z"
+    }
+  },
+  "dso_NGC1023": {
+    "14576": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 44.6903,
+            "dec": 39.6627,
+            "objectId": "star_HIP13879",
+            "hip": 13879
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 44.6903,
+            "dec": 39.6627,
+            "objectId": "star_HIP13879",
+            "hip": 13879
+          },
+          "endPoint": {
+            "ra": 42.6461,
+            "dec": 38.3187,
+            "objectId": "star_HIP13254",
+            "hip": 13254
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 42.647,
+            "dec": 36.9483,
+            "objectId": "star_HIP13257",
+            "hip": 13257
+          },
+          "endPoint": {
+            "ra": 41.7671,
+            "dec": 37.7119,
+            "objectId": "star_t2_41.7671_37.7119",
+            "hip": null
+          },
+          "multiplier": 2.5
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 40.10004166666666,
+            "dec": 39.06327777777778,
+            "objectId": "dso_NGC1023"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-11T22:54:21.812Z"
+    }
+  },
+  "dso_M034": {
+    "14576": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 44.9162,
+            "dec": 41.0329,
+            "objectId": "star_HIP13949",
+            "hip": 13949
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": {
+            "ra": 40.6228,
+            "dec": 40.2613,
+            "objectId": "star_HIP12648",
+            "hip": 12648
+          },
+          "endPoint": {
+            "ra": 40.9331,
+            "dec": 41.4979,
+            "objectId": "star_HIP12737",
+            "hip": 12737
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 40.53083333333334,
+            "dec": 42.74613888888889,
+            "objectId": "dso_M034"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-11T23:03:43.799Z"
+    }
+  },
+  "dso_M004": {
+    "80763": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 245.89749999999998,
+            "dec": -26.52552777777778,
+            "objectId": "dso_M004"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T20:33:39.145Z"
+    }
+  },
+  "dso_M080": {
+    "80763": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 245.1591,
+            "dec": -24.1693,
+            "objectId": "star_HIP80079",
+            "hip": 80079
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 245.1591,
+            "dec": -24.1693,
+            "objectId": "star_HIP80079",
+            "hip": 80079
+          },
+          "endPoint": {
+            "ra": 244.26045833333336,
+            "dec": -22.975111111111108,
+            "objectId": "dso_M080"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T20:38:05.752Z"
+    }
+  },
+  "dso_M009": {
+    "84012": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 259.5803,
+            "dec": -16.3119,
+            "objectId": "star_HIP84649",
+            "hip": 84649
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 259.5803,
+            "dec": -16.3119,
+            "objectId": "star_HIP84649",
+            "hip": 84649
+          },
+          "endPoint": {
+            "ra": 259.97229166666665,
+            "dec": -17.75647222222222,
+            "objectId": "double_WDS17199-1745",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 259.79908333333333,
+            "dec": -18.51625,
+            "objectId": "dso_M009"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T20:54:28.782Z"
+    }
+  },
+  "dso_M107": {
+    "81377": {
+      "steps": [
+        {
+          "startPoint": {
+            "ra": 249.6989,
+            "dec": -8.6186,
+            "objectId": "star_HIP81499",
+            "hip": 81499
+          },
+          "endPoint": {
+            "ra": 249.2897,
+            "dec": -10.5671,
+            "objectId": "star_HIP81377",
+            "hip": 81377
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 248.133,
+            "dec": -13.053638888888889,
+            "objectId": "dso_M107"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T21:11:33.251Z"
+    }
+  },
+  "dso_NGC6342": {
+    "84012": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 259.5803,
+            "dec": -16.3119,
+            "objectId": "star_HIP84649",
+            "hip": 84649
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 259.5803,
+            "dec": -16.3119,
+            "objectId": "star_HIP84649",
+            "hip": 84649
+          },
+          "endPoint": {
+            "ra": 259.9723,
+            "dec": -17.7565,
+            "objectId": "star_HIP84792",
+            "hip": 84792
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 259.9723,
+            "dec": -17.7565,
+            "objectId": "star_HIP84792",
+            "hip": 84792
+          },
+          "endPoint": {
+            "ra": 260.143,
+            "dec": -19.3337,
+            "objectId": "star_HIP84856",
+            "hip": 84856
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 260.143,
+            "dec": -19.3337,
+            "objectId": "star_HIP84856",
+            "hip": 84856
+          },
+          "endPoint": {
+            "ra": 260.29225,
+            "dec": -19.587416666666666,
+            "objectId": "dso_NGC6342"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T21:22:47.920Z"
+    }
+  },
+  "dso_M022": {
+    "92855": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 281.2067,
+            "dec": -25.0109,
+            "objectId": "star_HIP91974",
+            "hip": 91974
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.2067,
+            "dec": -25.0109,
+            "objectId": "star_HIP91974",
+            "hip": 91974
+          },
+          "endPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "endPoint": {
+            "ra": 279.10083333333336,
+            "dec": -23.903416666666665,
+            "objectId": "dso_M022"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T21:31:48.679Z"
+    }
+  },
+  "dso_NGC6642": {
+    "92855": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 281.2067,
+            "dec": -25.0109,
+            "objectId": "star_HIP91974",
+            "hip": 91974
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.2067,
+            "dec": -25.0109,
+            "objectId": "star_HIP91974",
+            "hip": 91974
+          },
+          "endPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "endPoint": {
+            "ra": 277.97591666666665,
+            "dec": -23.476138888888887,
+            "objectId": "dso_NGC6642"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T21:41:19.700Z"
+    }
+  },
+  "dso_NGC6638": {
+    "92855": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 281.1639,
+            "dec": -24.9859,
+            "objectId": "star_t2_281.1639_-24.9859",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "endPoint": {
+            "ra": 276.9927,
+            "dec": -25.4217,
+            "objectId": "star_HIP90496",
+            "hip": 90496
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 276.9927,
+            "dec": -25.4217,
+            "objectId": "star_HIP90496",
+            "hip": 90496
+          },
+          "endPoint": {
+            "ra": 277.734375,
+            "dec": -25.49641666666667,
+            "objectId": "dso_NGC6638"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T21:53:22.626Z"
+    }
+  },
+  "dso_M028": {
+    "92855": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 281.2067,
+            "dec": -25.0109,
+            "objectId": "star_HIP91974",
+            "hip": 91974
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.2067,
+            "dec": -25.0109,
+            "objectId": "star_HIP91974",
+            "hip": 91974
+          },
+          "endPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 278.4729,
+            "dec": -24.0323,
+            "objectId": "star_HIP91004",
+            "hip": 91004
+          },
+          "endPoint": {
+            "ra": 277.0636,
+            "dec": -25.4419,
+            "objectId": "star_t2_277.0636_-25.4419",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 276.1370416666666,
+            "dec": -24.869833333333332,
+            "objectId": "dso_M028"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T22:03:39.788Z"
+    }
+  },
+  "dso_NGC6712": {
+    "93805": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 284.2653,
+            "dec": -5.8463,
+            "objectId": "star_HIP93026",
+            "hip": 93026
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.7936,
+            "dec": -4.7479,
+            "objectId": "star_HIP92175",
+            "hip": 92175
+          },
+          "endPoint": {
+            "ra": 282.214,
+            "dec": -5.9643,
+            "objectId": "star_t2_282.2140_-5.9643",
+            "hip": null
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 283.270375,
+            "dec": -8.705472222222221,
+            "objectId": "dso_NGC6712"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T22:19:53.258Z"
+    }
+  },
+  "dso_M011": {
+    "93805": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 284.2652,
+            "dec": -5.8175,
+            "objectId": "star_t2_284.2652_-5.8175",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 281.8706,
+            "dec": -5.7051,
+            "objectId": "star_HIP92202",
+            "hip": 92202
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.8706,
+            "dec": -5.7051,
+            "objectId": "star_HIP92202",
+            "hip": 92202
+          },
+          "endPoint": {
+            "ra": 282.77495833333336,
+            "dec": -6.270027777777778,
+            "objectId": "dso_M011"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T22:25:38.538Z"
+    }
+  },
+  "dso_NGC6704": {
+    "93805": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 284.2653,
+            "dec": -5.8463,
+            "objectId": "star_HIP93026",
+            "hip": 93026
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 284.2653,
+            "dec": -5.8463,
+            "objectId": "star_HIP93026",
+            "hip": 93026
+          },
+          "endPoint": {
+            "ra": 281.8706,
+            "dec": -5.7051,
+            "objectId": "star_HIP92202",
+            "hip": 92202
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.8706,
+            "dec": -5.7051,
+            "objectId": "star_HIP92202",
+            "hip": 92202
+          },
+          "endPoint": {
+            "ra": 282.6907083333333,
+            "dec": -5.205416666666667,
+            "objectId": "dso_NGC6704"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T22:32:11.005Z"
+    }
+  },
+  "dso_M057": {
+    "91262": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 281.1931,
+            "dec": 37.6051,
+            "objectId": "star_HIP91971",
+            "hip": 91971
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.1931,
+            "dec": 37.6051,
+            "objectId": "star_HIP91971",
+            "hip": 91971
+          },
+          "endPoint": {
+            "ra": 283.4246,
+            "dec": 36.9897,
+            "objectId": "star_t2_283.4246_36.9897",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 283.973,
+            "dec": 35.8106,
+            "objectId": "star_HIP92920",
+            "hip": 92920
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": {
+            "ra": 284.7359,
+            "dec": 32.6896,
+            "objectId": "star_HIP93194",
+            "hip": 93194
+          },
+          "endPoint": {
+            "ra": 283.6539,
+            "dec": 33.0949,
+            "objectId": "star_HD175577",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 283.395875,
+            "dec": 33.02858333333333,
+            "objectId": "dso_M057"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T22:55:44.719Z"
+    }
+  },
+  "dso_M056": {
+    "91262": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 281.2009,
+            "dec": 37.5946,
+            "objectId": "star_HIP91973",
+            "hip": 91973
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 281.2009,
+            "dec": 37.5946,
+            "objectId": "star_HIP91973",
+            "hip": 91973
+          },
+          "endPoint": {
+            "ra": 283.4315,
+            "dec": 36.9717,
+            "objectId": "star_HIP92728",
+            "hip": 92728
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 283.4315,
+            "dec": 36.9717,
+            "objectId": "star_HIP92728",
+            "hip": 92728
+          },
+          "endPoint": {
+            "ra": 283.6262,
+            "dec": 36.8986,
+            "objectId": "star_HIP92791",
+            "hip": 92791
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 283.6262,
+            "dec": 36.8986,
+            "objectId": "star_HIP92791",
+            "hip": 92791
+          },
+          "endPoint": {
+            "ra": 283.973,
+            "dec": 35.8106,
+            "objectId": "star_HIP92920",
+            "hip": 92920
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": {
+            "ra": 284.7359,
+            "dec": 32.6896,
+            "objectId": "star_HIP93194",
+            "hip": 93194
+          },
+          "endPoint": {
+            "ra": 286.8566,
+            "dec": 32.5017,
+            "objectId": "star_HIP93917",
+            "hip": 93917
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 286.8566,
+            "dec": 32.5017,
+            "objectId": "star_HIP93917",
+            "hip": 93917
+          },
+          "endPoint": {
+            "ra": 287.9417,
+            "dec": 31.2835,
+            "objectId": "star_HIP94311",
+            "hip": 94311
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 289.1479583333333,
+            "dec": 30.1845,
+            "objectId": "dso_M056"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T23:02:41.069Z"
+    }
+  },
+  "dso_M071": {
+    "95947": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 290.712,
+            "dec": 26.2624,
+            "objectId": "star_HIP95260",
+            "hip": 95260
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 290.712,
+            "dec": 26.2624,
+            "objectId": "star_HIP95260",
+            "hip": 95260
+          },
+          "endPoint": {
+            "ra": 292.1764,
+            "dec": 24.6649,
+            "objectId": "star_HIP95771",
+            "hip": 95771
+          },
+          "multiplier": 2.5
+        },
+        {
+          "startPoint": {
+            "ra": 295.099,
+            "dec": 23.4801,
+            "objectId": "star_HIP96786",
+            "hip": 96786
+          },
+          "endPoint": {
+            "ra": 295.8543,
+            "dec": 22.495,
+            "objectId": "star_HIP97050",
+            "hip": 97050
+          },
+          "multiplier": 3
+        },
+        {
+          "startPoint": {
+            "ra": 296.8469,
+            "dec": 18.5343,
+            "objectId": "star_HIP97365",
+            "hip": 97365
+          },
+          "endPoint": {
+            "ra": 298.0907,
+            "dec": 18.6719,
+            "objectId": "star_HIP97796",
+            "hip": 97796
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 298.0907,
+            "dec": 18.6719,
+            "objectId": "star_HIP97796",
+            "hip": 97796
+          },
+          "endPoint": {
+            "ra": 298.442125,
+            "dec": 18.778388888888887,
+            "objectId": "dso_M071"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T23:21:20.075Z"
+    }
+  },
+  "dso_M027": {
+    "95947": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 290.8178,
+            "dec": 26.2979,
+            "objectId": "star_HD338283",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 292.1764,
+            "dec": 24.6649,
+            "objectId": "star_HIP95771",
+            "hip": 95771
+          },
+          "multiplier": 2.5
+        },
+        {
+          "startPoint": {
+            "ra": 295.8543,
+            "dec": 22.495,
+            "objectId": "star_HIP97050",
+            "hip": 97050
+          },
+          "endPoint": null,
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 295.8543,
+            "dec": 22.495,
+            "objectId": "star_HIP97050",
+            "hip": 97050
+          },
+          "endPoint": {
+            "ra": 297.7889583333333,
+            "dec": 22.65919444444444,
+            "objectId": "double_WDS19515+2240",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 299.7939,
+            "dec": 23.1013,
+            "objectId": "star_HIP98375",
+            "hip": 98375
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 299.7939,
+            "dec": 23.1013,
+            "objectId": "star_HIP98375",
+            "hip": 98375
+          },
+          "endPoint": {
+            "ra": 299.90158333333335,
+            "dec": 22.721027777777778,
+            "objectId": "dso_M027"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-12T23:39:44.572Z"
+    }
+  },
+  "dso_M037": {
+    "28380": {
+      "steps": [
+        {
+          "startPoint": {
+            "ra": 87.8725,
+            "dec": 39.1485,
+            "objectId": "star_HIP27673",
+            "hip": 27673
+          },
+          "endPoint": {
+            "ra": 87.7804,
+            "dec": 37.2783,
+            "objectId": "star_t2_87.7804_37.2783",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 86.98466666666667,
+            "dec": 35.159277777777774,
+            "objectId": "double_WDS05479+3510",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 88.1306,
+            "dec": 33.9548,
+            "objectId": "star_t2_88.1306_33.9548",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 88.07645833333333,
+            "dec": 32.553,
+            "objectId": "dso_M037"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-13T00:16:39.568Z"
+    }
+  },
+  "dso_M036": {
+    "28380": {
+      "steps": [
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 87.7417,
+            "dec": 37.3482,
+            "objectId": "star_t2_87.7417_37.3482",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 86.98466666666667,
+            "dec": 35.159277777777774,
+            "objectId": "double_WDS05479+3510",
+            "hip": null
+          },
+          "multiplier": 1
+        },
+        {
+          "startPoint": {
+            "ra": 88.1671,
+            "dec": 33.9175,
+            "objectId": "star_HIP27778",
+            "hip": 27778
+          },
+          "endPoint": {
+            "ra": 86.278,
+            "dec": 33.6263,
+            "objectId": "star_HIP27123",
+            "hip": 27123
+          },
+          "multiplier": 2
+        },
+        {
+          "startPoint": null,
+          "endPoint": {
+            "ra": 84.07391666666666,
+            "dec": 34.14075,
+            "objectId": "dso_M036"
+          },
+          "multiplier": 1,
+          "final": true
+        }
+      ],
+      "updatedAt": "2026-08-13T00:19:42.206Z"
+    }
+  }
+}
