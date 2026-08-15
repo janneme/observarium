@@ -300,13 +300,21 @@ def _upload_one_mag(mag: int, storage: backend.Backend) -> dict:
     total_size = 0
     if stars_t1_zip.exists():
         total_size += stars_t1_zip.stat().st_size
-        _sync_file(stars_t1_zip, stars_t1_zip.name, "T1 stars", t1_stats["stars"], storage)
+        _sync_file(
+            stars_t1_zip,
+            f"app-data/{stars_t1_zip.name}",
+            "T1 stars",
+            t1_stats["stars"],
+            storage,
+        )
     total_size += objects_zip.stat().st_size
-    _sync_file(objects_zip, objects_zip.name, "sources", len(objects), storage)
+    _sync_file(
+        objects_zip, f"app-data/{objects_zip.name}", "sources", len(objects), storage
+    )
     for name, zones in t2_chunks:
         chunk_path = TMP_DIR / name
         total_size += chunk_path.stat().st_size
-        _sync_file(chunk_path, name, "T2 zones", len(zones), storage)
+        _sync_file(chunk_path, f"app-data/{name}", "T2 zones", len(zones), storage)
 
     set_entry: dict = {
         "mag": mag,
@@ -364,7 +372,7 @@ def main() -> int:
     num_images = sum(1 for p in IMAGES_DIR.rglob("*") if p.is_file()) if IMAGES_DIR.exists() else 0
     print("\nBuilding images.zip...")
     _write_images_zip(images_zip)
-    _sync_file(images_zip, "images.zip", "images", num_images, storage)
+    _sync_file(images_zip, "app-data/images.zip", "images", num_images, storage)
 
     sets = []
     for mag in mags:
@@ -379,8 +387,8 @@ def main() -> int:
     manifest_path.write_bytes(manifest_bytes)
     manifest_hash_path.write_text(hashlib.sha256(manifest_bytes).hexdigest())
 
-    _sync_file(manifest_path, "manifest.json", "entries", len(sets), storage)
-    _sync_file(manifest_hash_path, "manifest.hash", "hash", 0, storage)
+    _sync_file(manifest_path, "app-data/manifest.json", "entries", len(sets), storage)
+    _sync_file(manifest_hash_path, "app-data/manifest.hash", "hash", 0, storage)
 
     print(f"\nDone. Uploaded {len(sets)} magnitude set(s): {[s['mag'] for s in sets]}")
     return 0

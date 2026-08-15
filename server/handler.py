@@ -121,7 +121,8 @@ def handle_data_hash() -> dict:
     """Return SHA-256 of manifest.json from data bucket."""
     backend = storage_backend.get_backend()
     try:
-        manifest_hash = backend.read_bytes("manifest.hash").decode("utf-8").strip()
+        raw = backend.read_bytes("app-data/manifest.hash")
+        manifest_hash = raw.decode("utf-8").strip()
         return {"hash": manifest_hash}
     except Exception:
         return {"hash": None}
@@ -131,7 +132,7 @@ def handle_images_hash() -> dict:
     """Return content hash of images.zip from storage backend."""
     backend = storage_backend.get_backend()
     try:
-        return {"hash": backend.get_hash("images.zip")}
+        return {"hash": backend.get_hash("app-data/images.zip")}
     except Exception:
         return {"hash": None}
 
@@ -151,19 +152,20 @@ MANIFEST_URL_EXPIRES_SECONDS = 3600
 def handle_manifest(mag: int | None = None) -> dict:
     """Read manifest.json; inject presigned URLs for `mag` set when mag is given."""
     backend = storage_backend.get_backend()
-    manifest = json.loads(backend.read_bytes("manifest.json"))
+    manifest = json.loads(backend.read_bytes("app-data/manifest.json"))
     if mag is not None:
         for s in manifest.get("sets", []):
             if s.get("mag") == mag:
                 s["stars_t1"]["url"] = backend.generate_presigned_get(
-                    s["stars_t1"]["filename"], MANIFEST_URL_EXPIRES_SECONDS
+                    f"app-data/{s['stars_t1']['filename']}",
+                    MANIFEST_URL_EXPIRES_SECONDS,
                 )
                 s["objects"]["url"] = backend.generate_presigned_get(
-                    s["objects"]["filename"], MANIFEST_URL_EXPIRES_SECONDS
+                    f"app-data/{s['objects']['filename']}", MANIFEST_URL_EXPIRES_SECONDS
                 )
                 for chunk in s.get("t2_chunks", []):
                     chunk["url"] = backend.generate_presigned_get(
-                        chunk["filename"], MANIFEST_URL_EXPIRES_SECONDS
+                        f"app-data/{chunk['filename']}", MANIFEST_URL_EXPIRES_SECONDS
                     )
                 break
     return manifest
@@ -240,14 +242,18 @@ def _get_username_from_event(event: dict) -> str:
         claims = verify_jwt(token)
     except Exception as exc:
         raise PermissionError("Invalid token") from exc
-    sub = claims.get("sub")
-    if not sub:
-        raise PermissionError("Invalid token: missing sub")
-    return sub
+    # Cognito access tokens carry both `sub` (opaque UUID) and `username`
+    # (human-readable login name) - storage is keyed by the latter (see
+    # users/{username}/... below), not the UUID, so per-user data is
+    # readable/browsable/git-backupable without a Cognito lookup.
+    username = claims.get("username")
+    if not username:
+        raise PermissionError("Invalid token: missing username")
+    return username
 
 
 def _observations_key_for_user(username: str) -> str:
-    return f"observations/{username}.json"
+    return f"users/{username}/observations.json"
 
 
 def _read_json_or_default(backend, key: str, default):
@@ -447,7 +453,7 @@ def _route_presign(path: str, method: str, event: dict):
             logger.warning("[auth] token rejected: %s", exc)
             return build_response(401, {"error": "Invalid token"})
         try:
-            out = handle_presign_key("images.zip")
+            out = handle_presign_key("app-data/images.zip")
             return build_response(200, out)
         except Exception:
             traceback.print_exc()
@@ -505,7 +511,7 @@ def _route_data_hash(path: str, method: str, _event: dict):
 
 
 def _finding_paths_key_for_user(username: str) -> str:
-    return f"finding-paths/{username}.json"
+    return f"users/{username}/finding-paths.json"
 
 
 def handle_get_finding_paths(event: dict) -> dict:
@@ -633,11 +639,11 @@ def _route_finding_paths(path: str, method: str, event: dict):
 
 
 def _telescopes_key_for_user(username: str) -> str:
-    return f"telescopes/{username}.json"
+    return f"users/{username}/telescopes.json"
 
 
 def _eyepieces_key_for_user(username: str) -> str:
-    return f"eyepieces/{username}.json"
+    return f"users/{username}/eyepieces.json"
 
 
 def _handle_get_flat_list(event: dict, key_fn) -> dict:
@@ -724,7 +730,7 @@ def _route_eyepieces(path: str, method: str, event: dict):
 
 
 def _lists_key_for_user(username: str) -> str:
-    return f"lists/{username}.json"
+    return f"users/{username}/lists.json"
 
 
 def _route_lists(path: str, method: str, event: dict):
@@ -750,7 +756,7 @@ def _route_observations(path: str, method: str, event: dict):
     return None
 
 
-USAGE_STATS_KEY = "performance/events.json"
+USAGE_STATS_KEY = "users/_anonymized/performance.json"
 PERF_RETENTION_DAYS = int(os.environ.get("PERF_RETENTION_DAYS", "7"))
 
 

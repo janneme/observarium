@@ -19,14 +19,14 @@ def test_save_usage_stats_requires_auth():
 
 
 def test_save_usage_stats_rejects_malformed_body(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user1"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user1"})
     ev = make_event_with_token("tok", body=json.dumps({"events": "not-a-list"}))
     res = handler.handle_save_usage_stats(ev)
     assert res["statusCode"] == 400
 
 
 def test_save_usage_stats_does_not_persist_username(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "realuser"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "realuser"})
 
     saved: dict = {}
 
@@ -54,7 +54,7 @@ def test_save_usage_stats_does_not_persist_username(monkeypatch):
     res = handler.handle_save_usage_stats(ev)
     assert res["statusCode"] == 200
     assert json.loads(res["body"]) == {"stored": 1}
-    assert saved["key"] == "performance/events.json"
+    assert saved["key"] == handler.USAGE_STATS_KEY
     stored = json.loads(saved["data"])
     # One batch, client info attached once - not duplicated onto the event.
     assert len(stored) == 1
@@ -70,7 +70,7 @@ def test_save_usage_stats_does_not_persist_username(monkeypatch):
 
 
 def test_save_usage_stats_appends_and_prunes_old_batches(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user2"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user2"})
     monkeypatch.setattr(handler, "PERF_RETENTION_DAYS", 7)
 
     # Retention prunes whole batches (each upload is stamped with one

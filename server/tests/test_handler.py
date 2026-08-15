@@ -4,6 +4,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+import pytest
 import python_lib.storage.backend as storage_backend
 
 import handler
@@ -28,6 +29,24 @@ def test_get_bearer_token_from_event_variants():
     assert handler._get_bearer_token_from_event(ev) is None
 
 
+def test_get_username_from_event_uses_username_claim(monkeypatch):
+    # Storage is keyed by the human-readable Cognito `username` claim, not
+    # `sub` (the opaque UUID) - even when both are present, `username` wins.
+    claims = {"sub": "uuid-123", "username": "alice"}
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: claims)
+    ev = {"headers": {"Authorization": "Bearer tok"}}
+    assert handler._get_username_from_event(ev) == "alice"
+
+
+def test_get_username_from_event_requires_username_claim(monkeypatch):
+    # A token with only `sub` (no `username`) must be rejected, not silently
+    # fall back to the UUID - see _get_username_from_event's docstring.
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "uuid-123"})
+    ev = {"headers": {"Authorization": "Bearer tok"}}
+    with pytest.raises(PermissionError):
+        handler._get_username_from_event(ev)
+
+
 def test_handle_presign_key(monkeypatch):
     monkeypatch.setattr(handler, "DATA_BUCKET", "test-bucket")
 
@@ -47,7 +66,7 @@ def test_handle_presign_key(monkeypatch):
 def test_handle_data_hash(monkeypatch):
     class DummyBackend:
         def read_bytes(self, key):
-            if key == "manifest.hash":
+            if key == "app-data/manifest.hash":
                 return b"abc123\n"
             raise FileNotFoundError(key)
 
@@ -73,7 +92,7 @@ def test_handle_data_hash_missing(monkeypatch):
 def test_handle_images_hash(monkeypatch):
     class DummyBackend:
         def get_hash(self, key):
-            assert key == "images.zip"
+            assert key == "app-data/images.zip"
             return "img123"
 
     monkeypatch.setattr(storage_backend, "get_backend", lambda: DummyBackend())
@@ -88,7 +107,7 @@ def test_route_images_hash_requires_auth():
 
 
 def test_route_images_hash_success(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "u"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "u"})
     monkeypatch.setattr(handler, "handle_images_hash", lambda: {"hash": "img123"})
     event = {"headers": {"Authorization": "Bearer token"}}
 

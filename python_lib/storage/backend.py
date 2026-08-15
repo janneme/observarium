@@ -35,6 +35,10 @@ class Backend:
     def write_bytes(self, key: str, data: bytes) -> None:
         raise NotImplementedError()
 
+    def delete_bytes(self, key: str) -> None:
+        """Delete `key`. Must not raise if it doesn't exist."""
+        raise NotImplementedError()
+
     def read_json(self, key: str) -> Any:
         return json.loads(self.read_bytes(key).decode("utf-8"))
 
@@ -98,6 +102,10 @@ class LocalBackend(Backend):
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("wb") as fh:
             fh.write(data)
+
+    def delete_bytes(self, key: str) -> None:
+        p = self._path(key)
+        p.unlink(missing_ok=True)
 
     def exists(self, key: str) -> bool:
         return self._path(key).exists()
@@ -166,6 +174,11 @@ class S3Backend(Backend):
     def write_bytes(self, key: str, data: bytes) -> None:
         self.client.put_object(Bucket=self.bucket, Key=key, Body=data)
 
+    def delete_bytes(self, key: str) -> None:
+        # delete_object is idempotent - S3 returns 204 whether or not the key
+        # existed, so no existence check needed first.
+        self.client.delete_object(Bucket=self.bucket, Key=key)
+
     def exists(self, key: str) -> bool:
         try:
             self.client.head_object(Bucket=self.bucket, Key=key)
@@ -231,6 +244,10 @@ def read_bytes(key: str) -> bytes:
 
 def write_bytes(key: str, data: bytes) -> None:
     return get_backend().write_bytes(key, data)
+
+
+def delete_bytes(key: str) -> None:
+    return get_backend().delete_bytes(key)
 
 
 def read_json(key: str) -> Any:

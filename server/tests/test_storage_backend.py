@@ -28,6 +28,11 @@ def test_local_backend_write_read(tmp_path):
     p = Path(url[len("file://"):])
     assert base in p.parents or p.parent == base
 
+    # delete_bytes removes the file; deleting a missing key doesn't raise
+    b.delete_bytes("objects.zip")
+    assert not b.exists("objects.zip")
+    b.delete_bytes("objects.zip")
+
 
 def test_s3_backend_calls(monkeypatch):
     calls = {}
@@ -44,6 +49,9 @@ def test_s3_backend_calls(monkeypatch):
 
         def put_object(self, Bucket, Key, Body):
             calls["put"] = (Bucket, Key, Body)
+
+        def delete_object(self, Bucket, Key):
+            calls["delete"] = (Bucket, Key)
 
         def head_object(self, Bucket, Key):
             if Key == "objects.zip":
@@ -66,6 +74,9 @@ def test_s3_backend_calls(monkeypatch):
 
     s3.write_bytes("new.zip", b"x")
     assert "put" in calls and calls["put"][1] == "new.zip"
+
+    s3.delete_bytes("old.zip")
+    assert "delete" in calls and calls["delete"][1] == "old.zip"
 
     assert s3.exists("objects.zip") is True
     assert s3.get_hash("objects.zip") == "etag-val"

@@ -13,7 +13,7 @@ def make_event_with_token(token: str, body: str | None = None):
 
 
 def test_get_observations_not_found(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user1"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user1"})
 
     class DummyBackend:
         def exists(self, key):
@@ -28,7 +28,7 @@ def test_get_observations_not_found(monkeypatch):
 
 
 def test_save_observations_success(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user2"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user2"})
 
     saved: dict = {}
 
@@ -43,7 +43,7 @@ def test_save_observations_success(monkeypatch):
     ev = make_event_with_token("tok", body=json.dumps(arr))
     res = handler.handle_save_observations(ev)
     assert res["statusCode"] == 200
-    assert saved["key"] == "observations/user2.json"
+    assert saved["key"] == "users/user2/observations.json"
     assert json.loads(saved["data"]) == arr
 
 
@@ -65,7 +65,7 @@ def test_delete_observation(monkeypatch):
 
     backend = DummyBackend()
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user3"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user3"})
 
     ev = make_event_with_token("tok")
     res = handler.handle_delete_observation(ev, "2026-01-01")

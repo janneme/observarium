@@ -27,7 +27,7 @@ class DummyBackend:
 
 
 def test_merge_observations_delete_wins_over_newer_server_edit(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user1"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user1"})
     initial = [
         {
             "date": "2026-01-01",
@@ -41,7 +41,7 @@ def test_merge_observations_delete_wins_over_newer_server_edit(monkeypatch):
         },
     ]
     backend = DummyBackend(
-        {"observations/user1.json": json.dumps(initial).encode("utf-8")}
+        {"users/user1/observations.json": json.dumps(initial).encode("utf-8")}
     )
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -53,12 +53,12 @@ def test_merge_observations_delete_wins_over_newer_server_edit(monkeypatch):
 
 
 def test_merge_observations_newest_upsert_wins(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user2"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user2"})
     initial = [
         {"date": "2026-01-01", "note": "old", "updatedAt": "2026-01-01T00:00:00.000Z"}
     ]
     backend = DummyBackend(
-        {"observations/user2.json": json.dumps(initial).encode("utf-8")}
+        {"users/user2/observations.json": json.dumps(initial).encode("utf-8")}
     )
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -75,7 +75,7 @@ def test_merge_observations_newest_upsert_wins(monkeypatch):
 
 
 def test_merge_observations_older_upsert_dropped(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user3"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user3"})
     initial = [
         {
             "date": "2026-01-01",
@@ -84,7 +84,7 @@ def test_merge_observations_older_upsert_dropped(monkeypatch):
         }
     ]
     backend = DummyBackend(
-        {"observations/user3.json": json.dumps(initial).encode("utf-8")}
+        {"users/user3/observations.json": json.dumps(initial).encode("utf-8")}
     )
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -101,7 +101,7 @@ def test_merge_observations_older_upsert_dropped(monkeypatch):
 
 
 def test_merge_observations_no_existing_data(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user4"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user4"})
     backend = DummyBackend()
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -117,7 +117,7 @@ def test_merge_observations_no_existing_data(monkeypatch):
 
 
 def test_merge_finding_paths_delete_and_upsert(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user5"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user5"})
     initial = {
         "dso_M042": {
             "677": {
@@ -131,7 +131,7 @@ def test_merge_finding_paths_delete_and_upsert(monkeypatch):
         }
     }
     backend = DummyBackend(
-        {"finding-paths/user5.json": json.dumps(initial).encode("utf-8")}
+        {"users/user5/finding-paths.json": json.dumps(initial).encode("utf-8")}
     )
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -156,14 +156,14 @@ def test_merge_finding_paths_delete_and_upsert(monkeypatch):
 
 
 def test_merge_finding_paths_delete_last_entry_removes_object(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user6"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user6"})
     initial = {
         "dso_M042": {
             "677": {"steps": [{"final": True}], "updatedAt": "2026-01-01T00:00:00.000Z"}
         }
     }
     backend = DummyBackend(
-        {"finding-paths/user6.json": json.dumps(initial).encode("utf-8")}
+        {"users/user6/finding-paths.json": json.dumps(initial).encode("utf-8")}
     )
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -174,12 +174,12 @@ def test_merge_finding_paths_delete_last_entry_removes_object(monkeypatch):
 
 
 def test_merge_telescopes(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user7"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user7"})
     initial = [
         {"id": "tel1", "name": "8in Dob", "updatedAt": "2026-01-01T00:00:00.000Z"}
     ]
     backend = DummyBackend(
-        {"telescopes/user7.json": json.dumps(initial).encode("utf-8")}
+        {"users/user7/telescopes.json": json.dumps(initial).encode("utf-8")}
     )
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -200,7 +200,7 @@ def test_merge_telescopes(monkeypatch):
 
 
 def test_get_and_save_eyepieces(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user8"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user8"})
     backend = DummyBackend()
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 
@@ -217,11 +217,12 @@ def test_get_and_save_eyepieces(monkeypatch):
         "Eyepieces",
     )
     assert save_res["statusCode"] == 200
-    assert backend.store["eyepieces/user8.json"] == json.dumps(items).encode("utf-8")
+    expected = json.dumps(items).encode("utf-8")
+    assert backend.store["users/user8/eyepieces.json"] == expected
 
 
 def test_routes_registered_for_new_endpoints(monkeypatch):
-    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"sub": "user9"})
+    monkeypatch.setattr(handler, "verify_jwt", lambda token: {"username": "user9"})
     backend = DummyBackend()
     monkeypatch.setattr(storage_backend, "get_backend", lambda: backend)
 

@@ -2,7 +2,7 @@
 AWS_PROFILE   ?= personal
 MAG           ?= 9
 
-.PHONY: help deploy deploy-infra deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test test-visual-range perf-report perf-report-local
+.PHONY: help deploy deploy-infra deploy-lambda deploy-client dev dev-server dev-client data-prep data-upload-local data-upload-s3 lint test test-visual-range perf-report perf-report-local migrate-storage user-export user-import
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -53,6 +53,26 @@ perf-report-local: ## Print performance percentiles from local storage backend
 perf-report: ## Print performance percentiles from S3 (DATA_BUCKET auto-detected from Terraform if unset)
 	@_bucket=$${DATA_BUCKET:-$$(cd infra && tofu output -raw data_bucket_name)}; \
 	cd server && STORAGE=s3 DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python perf_report.py
+
+migrate-storage: ## One-off, idempotent migration to the users/app-data storage layout (STORAGE=local|s3, default s3)
+	@cd server; \
+	if [ -f .env ]; then export $$(grep -v '^#' .env | xargs); fi; \
+	_bucket=$${DATA_BUCKET:-$$(cd ../infra && AWS_PROFILE=$(AWS_PROFILE) tofu output -raw data_bucket_name)}; \
+	AWS_PROFILE=$(AWS_PROFILE) STORAGE=$${STORAGE:-s3} DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python migrate_storage.py
+
+user-export: ## Export one user's data (observations/finding-paths/telescopes/eyepieces/lists) to ./users/USER/ - requires USER=<username> (STORAGE=local|s3, default s3)
+	@if [ "$(origin USER)" != "command line" ]; then echo "Usage: make user-export USER=<username>"; exit 1; fi
+	@cd server; \
+	if [ -f .env ]; then export $$(grep -v '^#' .env | xargs); fi; \
+	_bucket=$${DATA_BUCKET:-$$(cd ../infra && AWS_PROFILE=$(AWS_PROFILE) tofu output -raw data_bucket_name)}; \
+	AWS_PROFILE=$(AWS_PROFILE) STORAGE=$${STORAGE:-s3} DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python user_export.py --user $(USER)
+
+user-import: ## Import one user's data from ./users/USER/, OVERWRITING what's currently stored - requires USER=<username> (STORAGE=local|s3, default s3)
+	@if [ "$(origin USER)" != "command line" ]; then echo "Usage: make user-import USER=<username>"; exit 1; fi
+	@cd server; \
+	if [ -f .env ]; then export $$(grep -v '^#' .env | xargs); fi; \
+	_bucket=$${DATA_BUCKET:-$$(cd ../infra && AWS_PROFILE=$(AWS_PROFILE) tofu output -raw data_bucket_name)}; \
+	AWS_PROFILE=$(AWS_PROFILE) STORAGE=$${STORAGE:-s3} DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python user_import.py --user $(USER)
 
 lint: ## Run ruff, pylint, eslint, prettier, and svelte-check on all packages
 	@printf '\033[1;36m==> Linting server\033[0m\n'
