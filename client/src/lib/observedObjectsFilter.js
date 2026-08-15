@@ -52,21 +52,18 @@ export function catalogLabel(obj) {
   return fallbackLabelFromId(obj.id)
 }
 
-function dsLetterCount(pairs) {
-  if (!Array.isArray(pairs)) return 0
-  const letters = new Set()
-  for (const p of pairs) for (const c of String(p.comp || '')) if (c >= 'A' && c <= 'Z') letters.add(c)
-  return letters.size
-}
-
 // Object Type filter categories — mirrors the symbol-kind categorization
 // already duplicated across ListsScreen/ObservationsScreen/FinderPanel/etc.
+// Double stars are a single category regardless of how many components WDS
+// catalogues for the system - a WDS entry frequently lists a very faint,
+// wide, unrelated-looking extra companion alongside the pair someone
+// actually observes, so splitting on component count made a "Double Star"
+// filter miss stars people plainly logged as simple doubles.
 export function objectTypeKind(obj) {
   if (!obj) return 'generic'
   if (obj.type === 'moon_feature') return 'moon'
-  if (obj.type === 'double_star') return dsLetterCount(obj.pairs) > 2 ? 'double_star_multi' : 'double_star'
+  if (obj.type === 'double_star') return 'double_star'
   if (obj.type === 'star') {
-    if (obj.dbl === 'm') return 'double_star_multi'
     if (obj.dbl) return 'double_star'
     return 'star'
   }
@@ -86,7 +83,6 @@ export function objectTypeKind(obj) {
 export const OBJECT_TYPE_LABELS = {
   star: 'Star',
   double_star: 'Double Star',
-  double_star_multi: 'Multiple Star',
   open_cluster: 'Open Cluster',
   globular_cluster: 'Globular Cluster',
   planetary_nebula: 'Planetary Nebula',

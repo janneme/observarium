@@ -41,7 +41,7 @@
   ]
 
   const OBS_COUNT_OPTIONS = [
-    { value: null, label: 'Any' },
+    { value: null, label: '—' },
     { value: 1, label: '1' },
     { value: 2, label: '2' },
     { value: 3, label: '3' },
@@ -170,13 +170,10 @@
   $: availableYears = [...new Set([...statsById.values()].flatMap((s) => [...s.countsByYear.keys()]))].sort(
     (a, b) => b - a,
   )
-  $: yearOptions = [{ value: null, label: 'Any' }, ...availableYears.map((y) => ({ value: y, label: String(y) }))]
-  $: telescopeOptions = [
-    { value: null, label: 'Any telescope' },
-    ...telescopes.map((t) => ({ value: t.id, label: t.name })),
-  ]
+  $: yearOptions = [{ value: null, label: '—' }, ...availableYears.map((y) => ({ value: y, label: String(y) }))]
+  $: telescopeOptions = [{ value: null, label: '—' }, ...telescopes.map((t) => ({ value: t.id, label: t.name }))]
   $: objectTypeOptions = [
-    { value: null, label: 'Any' },
+    { value: null, label: '—' },
     ...Object.entries(OBJECT_TYPE_LABELS).map(([value, label]) => ({ value, label })),
   ]
 

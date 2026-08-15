@@ -623,21 +623,12 @@
     dispatch('guidepath', { object: $selectedObject, startHip })
   }
 
-  function dsLetterCount(pairs) {
-    if (!Array.isArray(pairs)) return 0
-    const letters = new Set()
-    for (const p of pairs) for (const c of String(p.comp || '')) if (c >= 'A' && c <= 'Z') letters.add(c)
-    return letters.size
-  }
-
+  // Double stars use the standard star symbol in the finder view - the star
+  // field itself already renders them plain (showDoubleStarSymbols={false}
+  // on SkyCanvas below), so the selected-object icon should match.
   function objectSymbolKind(obj) {
     if (!obj) return 'generic'
-    if (obj.type === 'double_star') return dsLetterCount(obj.pairs) > 2 ? 'double_star_multi' : 'double_star'
-    if (obj.type === 'star') {
-      if (obj.dbl === 'm') return 'double_star_multi'
-      if (obj.dbl) return 'double_star'
-      return 'star'
-    }
+    if (obj.type === 'double_star' || obj.type === 'star') return 'star'
     if (obj.type === 'solar_system_body') return String(obj.name || '').toLowerCase() || 'generic'
 
     const type = String(obj.dsoType || '').toLowerCase()
