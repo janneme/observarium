@@ -49,3 +49,27 @@ def test_group_durations_ignores_malformed_entries():
     assert grouped["a"] == [10.0, 20.0]
     assert grouped["b"] == [5.0]
     assert set(grouped.keys()) == {"a", "b"}
+
+
+def test_print_report_includes_p99_and_max(capsys):
+    events = [{"name": "a", "durationMs": d} for d in [1, 2, 3, 4, 5, 6, 7, 8, 9, 1000]]
+    perf_report.print_report(events)
+    out = capsys.readouterr().out
+    assert "p99" in out
+    assert "max" in out
+    assert "1000ms" in out  # the spike survives into the max column
+
+
+def test_print_raw_events_orders_by_duration_desc(capsys):
+    events = [
+        {"ts": "t1", "name": "slow", "durationMs": 500, "data": {"x": 1}},
+        {"ts": "t2", "name": "fast", "durationMs": 10, "data": {}},
+        {"ts": "t3", "name": "medium", "durationMs": 100, "data": {}},
+    ]
+    perf_report.print_raw_events(events, top_n=2)
+    out_lines = capsys.readouterr().out.splitlines()
+    body = [line for line in out_lines if "data=" in line]
+    assert "slow" in body[0]
+    assert "medium" in body[1]
+    # top_n=2 excludes the third-slowest
+    assert not any("fast" in line for line in body)

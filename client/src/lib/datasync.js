@@ -26,6 +26,7 @@ import {
   clearCompletedChunks,
   clearAllStarAndObjectData,
 } from './db.js'
+import { recordPerfEvent } from './perf.js'
 
 // Pulling the user's previously-synced data (observations, finding paths,
 // telescopes, eyepieces) down during the first-time catalogue download is
@@ -248,6 +249,7 @@ async function maybeRefreshImages(onImagesProgress) {
  * Returns { objectsSize, imagesSize, userDataSize } in bytes.
  */
 export async function runSync({ mag, onObjectsProgress, onImagesProgress, onUserDataDone } = {}) {
+  const t0 = performance.now()
   const objProg = onObjectsProgress || (() => {})
   const imgProg = onImagesProgress || (() => {})
   const userDataDone = onUserDataDone || (() => {})
@@ -293,6 +295,12 @@ export async function runSync({ mag, onObjectsProgress, onImagesProgress, onUser
   const userDataSize = LOAD_USER_DATA_ON_INIT ? await pullUserData() : 0
   userDataDone()
 
+  recordPerfEvent('data_sync_full', performance.now() - t0, {
+    mag,
+    objectsSize: totalBytes,
+    imagesSize,
+    userDataSize,
+  })
   return { objectsSize: totalBytes, imagesSize, userDataSize }
 }
 
@@ -306,6 +314,7 @@ export async function runSync({ mag, onObjectsProgress, onImagesProgress, onUser
  * - Does not overwrite observations during update-data flow.
  */
 export async function runUpdateSync({ mag, onObjectsProgress, onImagesProgress, onObservationsDone } = {}) {
+  const t0 = performance.now()
   const objProg = onObjectsProgress || (() => {})
   const imgProg = onImagesProgress || (() => {})
   const obsDone = onObservationsDone || (() => {})
@@ -424,6 +433,14 @@ export async function runUpdateSync({ mag, onObjectsProgress, onImagesProgress, 
     if (remoteImagesHash) await setMeta('imagesHash', remoteImagesHash)
   }
   obsDone()
+  recordPerfEvent('data_sync_update', performance.now() - t0, {
+    mag,
+    objectsSize: totalBytes,
+    imagesSize,
+    starsChanged,
+    objectsZipChanged,
+    changedChunks: changedChunks.length,
+  })
   return {
     objectsSize: totalBytes,
     imagesSize,

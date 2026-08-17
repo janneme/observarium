@@ -6,10 +6,14 @@ data_prep/data_upload.py talks to it - not through the Lambda HTTP API.
 Usage:
     STORAGE=local PYTHONPATH=.. uv run python perf_report.py
     STORAGE=s3 DATA_BUCKET=... PYTHONPATH=.. uv run python perf_report.py
+    STORAGE=s3 DATA_BUCKET=... PYTHONPATH=.. uv run python perf_report.py --raw [N]
+        (also print the N slowest individual events with their data payload,
+        default N=20)
 """
 from __future__ import annotations
 
 import math
+import sys
 from collections import defaultdict
 
 from python_lib.storage import backend as storage_backend
@@ -54,26 +58,66 @@ def group_durations(events: list[dict]) -> dict[str, list[float]]:
 
 
 def print_report(events: list[dict]) -> None:
-    """Print count and p10/p50/p90 duration per event name."""
+    """Print count and p10/p50/p90/p99/max duration per event name.
+
+    p90 alone hides real spikes - two events sharing the same p50/p90 can
+    have very different worst cases, and it's the worst case (not the
+    median) that a user actually notices as "serious lag". p99/max make
+    those spikes visible instead of silently averaged away.
+    """
     if not events:
         print("No performance events stored.")
         return
     grouped = group_durations(events)
-    print(f"{'event':<28} {'count':>7} {'p10':>9} {'p50':>9} {'p90':>9}")
+    print(
+        f"{'event':<28} {'count':>7} {'p10':>9} {'p50':>9}",
+        f"{'p90':>9} {'p99':>9} {'max':>9}",
+    )
     for name in sorted(grouped):
         values = sorted(grouped[name])
         p10 = percentile(values, 10)
         p50 = percentile(values, 50)
         p90 = percentile(values, 90)
-        print(f"{name:<28} {len(values):>7} {p10:>8.0f}ms {p50:>8.0f}ms {p90:>8.0f}ms")
+        p99 = percentile(values, 99)
+        worst = values[-1]
+        print(
+            f"{name:<28} {len(values):>7} {p10:>8.0f}ms {p50:>8.0f}ms "
+            f"{p90:>8.0f}ms {p99:>8.0f}ms {worst:>8.0f}ms"
+        )
+
+
+def print_raw_events(events: list[dict], top_n: int) -> None:
+    """Print the top_n slowest individual events, with their `data` payload,
+    for digging into what made a specific spike slow."""
+    ranked = sorted(events, key=lambda e: e.get("durationMs", 0), reverse=True)
+    print(f"\n=== Top {top_n} slowest individual events ===")
+    for event in ranked[:top_n]:
+        print(
+            f"{event.get('ts')}  {event.get('name'):<26} "
+            f"{event.get('durationMs'):>7}ms  data={event.get('data')}"
+        )
 
 
 def main() -> None:
-    """Read the shared usage-stats blob from the active backend and report."""
+    """Read the shared usage-stats blob from the active backend and report.
+
+    Pass --raw [N] to also print the N (default 20) slowest individual
+    events with their data payload, for investigating specific spikes.
+    """
+    raw_n = None
+    if "--raw" in sys.argv:
+        idx = sys.argv.index("--raw")
+        raw_n = 20
+        if idx + 1 < len(sys.argv) and sys.argv[idx + 1].isdigit():
+            raw_n = int(sys.argv[idx + 1])
+
     backend = storage_backend.get_backend()
     batches = _read_json_or_default(backend, USAGE_STATS_KEY, [])
     print(f"Source: {backend.get_location(USAGE_STATS_KEY)}")
-    print_report(flatten_batches(batches))
+    events = flatten_batches(batches)
+    print_report(events)
+    if raw_n is not None:
+        print_raw_events(events, raw_n)
 
 
 def _read_json_or_default(backend, key: str, default):

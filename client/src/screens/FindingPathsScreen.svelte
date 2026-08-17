@@ -331,6 +331,7 @@
   }
 
   async function init() {
+    const t0 = performance.now()
     objectCtx = contextObject || get(selectedObject)
     if (!objectCtx?.id || !objectCtx?.pos) {
       statusMsg = 'Select an object first.'
@@ -338,10 +339,23 @@
     }
     finderRa0 = objectCtx.pos[0]
     finderDec0 = objectCtx.pos[1]
-    await Promise.all([loadLabels(), loadPaths()])
-    if (initialStartHip != null) {
-      const hip = String(initialStartHip)
-      if (pathsByStart[hip]) {
+    // try/finally so a slow-then-erroring open still gets timed - the case
+    // most worth capturing - instead of silently skipping the event.
+    try {
+      await Promise.all([loadLabels(), loadPaths()])
+      if (initialStartHip != null) {
+        const hip = String(initialStartHip)
+        if (pathsByStart[hip]) {
+          expandedStartHip = hip
+          const path = pathsByStart[hip]
+          if (path?.steps?.length) {
+            activeStepIndex = 0
+            centerOn(stepAnchor(path, 0))
+          }
+        }
+      }
+      if (initialEditHip != null) {
+        const hip = String(initialEditHip)
         expandedStartHip = hip
         const path = pathsByStart[hip]
         if (path?.steps?.length) {
@@ -349,17 +363,14 @@
           centerOn(stepAnchor(path, 0))
         }
       }
+      await loadFinderObjects()
+    } finally {
+      recordPerfEvent('finding_paths_open', performance.now() - t0, {
+        catalogueSize: labelById.size,
+        pathsCount: Object.keys(pathsByStart).length,
+        objects: objects.length,
+      })
     }
-    if (initialEditHip != null) {
-      const hip = String(initialEditHip)
-      expandedStartHip = hip
-      const path = pathsByStart[hip]
-      if (path?.steps?.length) {
-        activeStepIndex = 0
-        centerOn(stepAnchor(path, 0))
-      }
-    }
-    await loadFinderObjects()
   }
 
   $: {

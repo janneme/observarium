@@ -47,12 +47,12 @@ data-upload-s3: ## Bundle and upload data to S3 (DATA_BUCKET auto-detected from 
 	@_bucket=$${DATA_BUCKET:-$$(cd infra && tofu output -raw data_bucket_name)}; \
 	cd data_prep && STORAGE=s3 DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python data_upload.py $(if $(findstring command line,$(origin MAG)),--mag $(MAG),)
 
-perf-report-local: ## Print performance percentiles from local storage backend
-	cd server && STORAGE=local PYTHONPATH=.. uv run python perf_report.py
+perf-report-local: ## Print performance percentiles from local storage backend (ARGS="--raw 10" to also dump the slowest events)
+	cd server && STORAGE=local PYTHONPATH=.. uv run python perf_report.py $(ARGS)
 
-perf-report: ## Print performance percentiles from S3 (DATA_BUCKET auto-detected from Terraform if unset)
+perf-report: ## Print performance percentiles from S3 (DATA_BUCKET auto-detected from Terraform if unset; ARGS="--raw 10" to also dump the slowest events)
 	@_bucket=$${DATA_BUCKET:-$$(cd infra && tofu output -raw data_bucket_name)}; \
-	cd server && STORAGE=s3 DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python perf_report.py
+	cd server && STORAGE=s3 DATA_BUCKET=$$_bucket PYTHONPATH=.. uv run python perf_report.py $(ARGS)
 
 migrate-storage: ## One-off, idempotent migration to the users/app-data storage layout (STORAGE=local|s3, default s3)
 	@cd server; \

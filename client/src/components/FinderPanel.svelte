@@ -26,6 +26,7 @@
     resolveObservationDateKey,
   } from '../lib/db.js'
   import { getListsForObject, removeObjectFromLists } from '../lib/lists.js'
+  import { recordPerfEvent } from '../lib/perf.js'
   import { get } from 'svelte/store'
 
   const dispatch = createEventDispatcher()
@@ -152,6 +153,10 @@
   let showObservedListRemoval = false
   let observedListRemovalCandidates = []
 
+  // Fires once on mount (prevObjId starts undefined, so even an unchanged
+  // $selectedObject counts as a change) - that first run is what generates
+  // the finder view for the newly opened panel; later runs fire again each
+  // time the target object changes while it's already open.
   let prevObjId = undefined
   $: {
     const obj = $selectedObject
@@ -165,10 +170,16 @@
         finderRa0 = obj.pos[0]
         finderDec0 = obj.pos[1]
       }
-      void loadObjects()
-      void checkPath()
-      void refreshObservedStatus()
-      void refreshListMemberships()
+      void loadFinderView()
+    }
+  }
+
+  async function loadFinderView() {
+    const t0 = performance.now()
+    try {
+      await Promise.all([loadObjects(1), checkPath(), refreshObservedStatus(), refreshListMemberships()])
+    } finally {
+      recordPerfEvent('finder_view_open', performance.now() - t0, { objects: objects.length })
     }
   }
 
@@ -238,8 +249,14 @@
     (p) => Array.isArray(p?.steps) && p.steps.length > 0 && p.steps[p.steps.length - 1]?.final === true,
   ).length
 
-  async function loadObjects() {
-    const margin = effectiveFov * 2
+  // marginMultiplier=2 (the default, used for pan/zoom refetches) pre-fetches
+  // headroom around the visible circle so a small pan afterward doesn't need
+  // an immediate refetch. The very first load (opening the finder) doesn't
+  // benefit from that headroom yet - it just delays first paint fetching sky
+  // the user isn't looking at - so it's called with marginMultiplier=1
+  // instead, below.
+  async function loadObjects(marginMultiplier = 2) {
+    const margin = effectiveFov * marginMultiplier
     // A flat RA margin only spans a narrow wedge of sky near the pole (RA
     // lines converge there) - widen it in RA to actually cover the visible
     // circle. See raSearchSpan.

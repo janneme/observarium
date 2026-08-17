@@ -8,7 +8,7 @@
     getDoubleStarNear,
     getSearchIndex,
   } from '../lib/db.js'
-  import { rawDifficulty, difficultyCategory } from '../lib/listDifficulty.js'
+  import { rawDifficulty, difficultyCategory, doubleStarDifficultyBounds } from '../lib/listDifficulty.js'
   import { naturalCompare } from '../lib/naturalSort.js'
   import {
     catalogLabel,
@@ -56,24 +56,33 @@
   let computingDifficulty = false
   let catalogBounds = new Map()
 
-  // Per-category {min, max} raw difficulty across the WHOLE catalogue (not
-  // just observed objects) — the Difficulty column must read 10 for the
-  // hardest object we know about, even if it's never been observed, not for
-  // merely the hardest *observed* object (which made showpiece targets like
-  // M81 read as "10/10" when the observed set skewed easy). Star-primaries
-  // whose double-star pairs need an external position lookup are skipped
-  // here (scoring the whole catalogue that way would mean one lookup per
-  // such star) — the direct `double_star` catalogue records already give
-  // full, representative coverage of that category's real range.
+  // Per-category {min, max} raw difficulty used to normalize the Difficulty
+  // column (1-10 scale) onto the WHOLE catalogue's range (not just observed
+  // objects) — the column must read 10 for the hardest object we know
+  // about, even if it's never been observed, not for merely the hardest
+  // *observed* object (which made showpiece targets like M81 read as
+  // "10/10" when the observed set skewed easy).
+  //
+  // Only DSOs are actually scanned here. Double-star bounds come from
+  // doubleStarDifficultyBounds() instead — its formula's inputs are exactly
+  // what data_prep's import filter already constrains, so the range is
+  // derived analytically rather than by scanning every `double_star` record.
+  // Plain stars are excluded entirely: a star's own point-source magnitude
+  // isn't a meaningful "difficulty" the way a faint double or diffuse DSO
+  // is, so they're left unscored (rawToScale returns null with no bound to
+  // normalize against, and the Difficulty column already renders '—' for
+  // that). Together this turns an O(catalogue) scan (280k+ objects at
+  // mag14) into one over just the DSOs.
   function computeCatalogBounds(allObjects) {
     const bounds = new Map()
+    const selectedMag = Number(localStorage.getItem('selectedMag')) || null
+    bounds.set('doubleStar', doubleStarDifficultyBounds(selectedMag))
     for (const obj of allObjects) {
-      if (obj.type === 'star' && obj.dbl && !Array.isArray(obj.dbl)) continue
-      const category = difficultyCategory(obj)
+      if (obj.type !== 'dso') continue
       const raw = rawDifficulty(obj, null)
       if (!Number.isFinite(raw)) continue
-      const b = bounds.get(category)
-      if (!b) bounds.set(category, { min: raw, max: raw })
+      const b = bounds.get('dso')
+      if (!b) bounds.set('dso', { min: raw, max: raw })
       else {
         if (raw < b.min) b.min = raw
         if (raw > b.max) b.max = raw

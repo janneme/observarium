@@ -22,6 +22,29 @@
 const DOUBLE_STAR_K1 = 0.3 // weight of magnitude difference between components
 const DOUBLE_STAR_K2 = 0.15 // weight of the primary's own magnitude
 
+// data_prep's double-star import filter (double_stars.py's _load_systems):
+// both components must be <= the catalogue's magnitude limit, separation
+// must fall in [min_sep, 60"]. doubleStarDifficulty()'s inputs (separation,
+// magDiff, primaryMag) are exactly what this filter already constrains, so
+// its min/max can be derived from the filter directly instead of scanning
+// every double_star record in the catalogue just to find two endpoints.
+const DOUBLE_STAR_IMPORT_MIN_SEP = 2 // arcsec (data_prep's --min-double-star-sep default)
+const DOUBLE_STAR_IMPORT_MAX_SEP = 60 // arcsec (hardcoded ceiling in data_prep/double_stars.py)
+
+// catalogueMag: the active magnitude set's limit (e.g. localStorage's
+// 'selectedMag') - assumes data_prep's --double-max-mag wasn't overridden
+// separately from --max-mag (its default is to match), so this is also the
+// double-star magnitude limit for that set.
+export function doubleStarDifficultyBounds(catalogueMag) {
+  const maxMag = Number.isFinite(catalogueMag) ? catalogueMag : 14
+  return {
+    // Easiest: widest separation, a bright, evenly-matched pair.
+    min: -Math.log10(DOUBLE_STAR_IMPORT_MAX_SEP),
+    // Hardest: tightest separation allowed, both components at the faint limit.
+    max: -Math.log10(DOUBLE_STAR_IMPORT_MIN_SEP) + DOUBLE_STAR_K1 * maxMag + DOUBLE_STAR_K2 * maxMag,
+  }
+}
+
 const MIN_DSO_AXIS_ARCMIN = 1
 
 function scalarMag(mag) {

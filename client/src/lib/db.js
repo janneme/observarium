@@ -100,6 +100,14 @@ async function getDB() {
 
 let _tier1Cache = null // null until loaded; [] means loaded but empty
 
+// getSearchIndex() result cache - it's a full catalogue scan (hundreds of
+// thousands of rows on mag14), so screens that call it on every mount
+// (FindingPathsListScreen, ObservedObjectsScreen) would otherwise pay that
+// cost repeatedly for data that never changed. Invalidated by every write
+// path that can change the catalogue: storeTier1Blob, bulkPutZoneT2Blobs,
+// bulkPutObjects, clearAllStarAndObjectData.
+let _searchIndexCache = null
+
 function _parseMag(raw) {
   if (raw.includes(':')) {
     const [a, b] = raw.split(':')
@@ -229,6 +237,7 @@ export async function storeTier1Blob(csvText) {
   const db = await getDB()
   await db.put('meta', { key: 'stars_t1', value: csvText })
   _tier1Cache = null // invalidate cache so next query re-parses
+  _searchIndexCache = null
 }
 
 export async function bulkPutZoneT2Blobs(items) {
@@ -244,6 +253,7 @@ export async function bulkPutZoneT2Blobs(items) {
   }
   await Promise.all(puts)
   await tx.done
+  if (hasNamed) _searchIndexCache = null
 }
 
 // --------------------------------------------------------------------------
@@ -278,6 +288,7 @@ export async function clearAllStarAndObjectData() {
   await tx.done
   await db.delete('meta', 'stars_t1')
   _tier1Cache = null
+  _searchIndexCache = null
   await setMeta('completedChunks', [])
   await db.delete('meta', 'dataManifest')
 }
@@ -444,6 +455,7 @@ export async function bulkPutObjects(items) {
   const tx = db.transaction('objects', 'readwrite')
   await Promise.all(items.map((item) => tx.store.put(item)))
   await tx.done
+  _searchIndexCache = null
   const counts = {}
   for (const item of items) {
     const key = item.type === 'dso' ? item.dsoType || 'unknown' : item.type
@@ -805,6 +817,7 @@ export async function getObjectsByIds(ids) {
 // Returns T1 stars, DSOs/double-stars, and named T2 stars (those with HIP/HD).
 // Used by SearchPanel to build its index.
 export async function getSearchIndex() {
+  if (_searchIndexCache) return _searchIndexCache
   await _ensureTier1Loaded()
   const db = await getDB()
   const [stored, namedT2] = await Promise.all([
@@ -812,10 +825,11 @@ export async function getSearchIndex() {
     db.objectStoreNames.contains('stars_named') ? db.getAll('stars_named') : Promise.resolve([]),
   ])
   const all = [..._tier1Cache, ...stored, ...namedT2]
-  return all.map((obj) => {
+  _searchIndexCache = all.map((obj) => {
     const aliases = SEARCH_ALIASES[obj.id]
     return aliases ? { ...obj, aliases } : obj
   })
+  return _searchIndexCache
 }
 
 export async function getObservationByDate(date) {
