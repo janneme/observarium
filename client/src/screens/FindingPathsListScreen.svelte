@@ -11,6 +11,7 @@
   import { naturalCompare } from '../lib/naturalSort.js'
   import { recordPerfEvent } from '../lib/perf.js'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
+  import ObjectActionsTooltip from '../components/ObjectActionsTooltip.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
   import CustomInput from '../components/CustomInput.svelte'
@@ -26,6 +27,28 @@
   export let initialStartChip = null
 
   const dispatch = createEventDispatcher()
+
+  // Object-actions tooltip - only ever targets the TARGET object of a path
+  // (whichever table column currently shows it - it swaps between column 1
+  // and column 2 depending on sortMode, see the template). The "Start" star
+  // keeps its old click-to-open-path role everywhere.
+  let tooltipObj = null
+  let tooltipAnchor = null
+
+  function openTooltip(obj, e) {
+    if (!obj || obj.type === 'moon_feature') return
+    if (tooltipObj?.id === obj.id) {
+      closeTooltip()
+      return
+    }
+    tooltipObj = obj
+    tooltipAnchor = e.currentTarget
+  }
+
+  function closeTooltip() {
+    tooltipObj = null
+    tooltipAnchor = null
+  }
 
   let allPaths = {}
   let objById = new Map()
@@ -470,14 +493,16 @@
                 <button
                   class="target-btn"
                   type="button"
-                  on:click={() =>
-                    dispatch('openpath', {
-                      contextObject: row.items[0]?.obj,
-                      initialSelectStart: false,
-                      initialStartHip: row.items[0]?.startHip ?? null,
-                      targetChip,
-                      startChip,
-                    })}
+                  on:click={(e) =>
+                    row.primaryKind === 'target'
+                      ? openTooltip(row.obj, e)
+                      : dispatch('openpath', {
+                          contextObject: row.items[0]?.obj,
+                          initialSelectStart: false,
+                          initialStartHip: row.items[0]?.startHip ?? null,
+                          targetChip,
+                          startChip,
+                        })}
                 >
                   <ObservationObjectSymbol kind={objectSymbolKind(row.obj)} />
                   <strong>{row.label}</strong>{#if row.const}&nbsp;({row.const}){/if}
@@ -490,14 +515,16 @@
                       ><button
                         class="star-link"
                         type="button"
-                        on:click={() =>
-                          dispatch('openpath', {
-                            contextObject: item.obj,
-                            initialSelectStart: false,
-                            initialStartHip: item.startHip,
-                            targetChip,
-                            startChip,
-                          })}
+                        on:click={(e) =>
+                          row.primaryKind === 'start'
+                            ? openTooltip(item.obj, e)
+                            : dispatch('openpath', {
+                                contextObject: item.obj,
+                                initialSelectStart: false,
+                                initialStartHip: item.startHip,
+                                targetChip,
+                                startChip,
+                              })}
                         >{#if row.primaryKind === 'start'}<span class="item-symbol"
                             ><ObservationObjectSymbol kind={objectSymbolKind(item.obj)} /></span
                           >{/if}<strong>{row.primaryKind === 'start' ? item.targetLabel : item.starLabel}</strong
@@ -588,6 +615,25 @@
     on:close={() => {
       addSearchOpen = false
     }}
+  />
+{/if}
+
+{#if tooltipObj}
+  <ObjectActionsTooltip
+    anchor={tooltipAnchor}
+    on:skyview={() => {
+      dispatch('gotoskyview', { object: tooltipObj })
+      closeTooltip()
+    }}
+    on:finder={() => {
+      dispatch('gotofinder', { object: tooltipObj })
+      closeTooltip()
+    }}
+    on:about={() => {
+      dispatch('openabout', { targetChip, startChip, obj: tooltipObj })
+      closeTooltip()
+    }}
+    on:close={closeTooltip}
   />
 {/if}
 

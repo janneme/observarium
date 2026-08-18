@@ -81,6 +81,30 @@ export function handleKeyDown(e) {
   // Global rule: when custom keyboard is active, consume all key strokes here.
   // Esc closes the keyboard only.
   if (cur) {
+    // Let an OS-level dead-key/IME compose sequence run its course (e.g.
+    // Czech "Š" via a caron dead key + "s") - a composing keydown's e.key is
+    // only the not-yet-composed base character, so intercepting it here and
+    // then blocking the event (as below) would insert the wrong plain
+    // letter and kill the sequence before the real character is produced.
+    // Do nothing at all - no preventDefault, no insertChar - so the event
+    // reaches the focused element and the browser can finish composing;
+    // the final character arrives via a native compositionend/input event
+    // instead (see CustomInput.svelte). Checked both ways since browsers
+    // differ on when isComposing actually flips true: e.key === 'Dead'
+    // covers the dead-key press itself (before composition is reported as
+    // started), isComposing covers every keystroke once it has.
+    if (e.isComposing || e.key === 'Dead') return
+
+    // Let native clipboard/select-all shortcuts through unblocked, same
+    // reasoning as composition above: paste/copy/cut/select-all are browser
+    // default actions tied to the keydown itself (Ctrl/Cmd+V only actually
+    // pastes if the browser gets to run its default handling), so
+    // intercepting and preventDefault-ing them here - as every other key is
+    // below - would silently break them. The resulting paste still lands as
+    // a normal native `input` event, handled by CustomInput.svelte's
+    // existing onNativeInput the same as typing/composition/autofill.
+    if ((e.ctrlKey || e.metaKey) && ['v', 'c', 'x', 'a'].includes(e.key.toLowerCase())) return
+
     if (e.key === 'Escape') {
       clearTarget()
       e.preventDefault()

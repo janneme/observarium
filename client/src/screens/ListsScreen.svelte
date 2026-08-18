@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { getObjectsByIds, getDoubleStarNear } from '../lib/db.js'
   import {
     getAllLists,
@@ -22,6 +22,7 @@
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import SearchPanel from '../components/SearchPanel.svelte'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
+  import ObjectActionsTooltip from '../components/ObjectActionsTooltip.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
   import PlusIcon from '../icons/PlusIcon.svelte'
   import EditIcon from '../icons/EditIcon.svelte'
@@ -34,6 +35,40 @@
   import StrikeOverlayIcon from '../icons/StrikeOverlayIcon.svelte'
 
   export let onClose = () => {}
+  export let onOpenObject = () => {}
+  export let onGotoSkyView = () => {}
+  export let onGotoFinder = () => {}
+  // Object id to scroll into view (re-expanding its containing list first)
+  // once data has loaded - set by MainScreen when returning here from a
+  // tooltip navigation, so the tapped object stays visible instead of the
+  // screen coming back scrolled to the top with every list collapsed.
+  export let scrollToObjectId = null
+
+  // Object-actions tooltip - one shared instance for the whole screen (not
+  // per-row), opened by clicking any object's name. See
+  // ObjectActionsTooltip.svelte.
+  let tooltipObj = null
+  let tooltipAnchor = null
+
+  function openTooltip(obj, e) {
+    if (!obj) return
+    // Moon features carry selenographic lat/lon, not sky RA/Dec (see
+    // moonMap.js's flattenMoonFeatures) - none of the tooltip's three actions
+    // are meaningful for them, so skip it entirely rather than opening with
+    // dead buttons (matches ObservationsScreen's existing exclusion).
+    if (obj.type === 'moon_feature') return
+    if (tooltipObj?.id === obj.id) {
+      closeTooltip()
+      return
+    }
+    tooltipObj = obj
+    tooltipAnchor = e.currentTarget
+  }
+
+  function closeTooltip() {
+    tooltipObj = null
+    tooltipAnchor = null
+  }
 
   const SORT_TYPES = [
     { key: 'name', label: 'Name' },
@@ -173,6 +208,14 @@
 
   onMount(async () => {
     await loadData()
+    if (scrollToObjectId) {
+      const containingList = lists.find((l) => (l.objects || []).some((o) => o.id === scrollToObjectId))
+      if (containingList) expandedListIds = new Set(expandedListIds).add(containingList.id)
+      await tick()
+      requestAnimationFrame(() => {
+        document.getElementById(`list-object-row-${scrollToObjectId}`)?.scrollIntoView({ block: 'center' })
+      })
+    }
   })
 
   function toggleExpand(listId) {
@@ -469,13 +512,14 @@
                   {#each sortedObjectEntries(list) as entry (entry.id)}
                     {@const obj = objectById.get(entry.id)}
                     <div
+                      id={`list-object-row-${entry.id}`}
                       class="object-row"
                       class:editing={objectEdit && objectEdit.listId === list.id && objectEdit.objectId === entry.id}
                     >
                       <div class="object-main">
                         <span class="obj-symbol"><ObservationObjectSymbol kind={objectSymbolKind(obj)} /></span>
-                        <span class="object-name"
-                          ><strong>{listObjectLabel(obj).bold}</strong>{listObjectLabel(obj).rest}</span
+                        <button type="button" class="object-name" on:click={(e) => openTooltip(obj, e)}
+                          ><strong>{listObjectLabel(obj).bold}</strong>{listObjectLabel(obj).rest}</button
                         >
                         <span class="object-actions">
                           {#if list.sortType === 'manual'}
@@ -548,6 +592,25 @@
   on:confirm={confirmAction}
   on:cancel={cancelConfirm}
 />
+
+{#if tooltipObj}
+  <ObjectActionsTooltip
+    anchor={tooltipAnchor}
+    on:skyview={() => {
+      onGotoSkyView(tooltipObj)
+      closeTooltip()
+    }}
+    on:finder={() => {
+      onGotoFinder(tooltipObj)
+      closeTooltip()
+    }}
+    on:about={() => {
+      onOpenObject(tooltipObj)
+      closeTooltip()
+    }}
+    on:close={closeTooltip}
+  />
+{/if}
 
 {#if addObjectListId}
   <SearchPanel
@@ -834,6 +897,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 1;
+    border: none;
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
   }
 
   .object-actions {

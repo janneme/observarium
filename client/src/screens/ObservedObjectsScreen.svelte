@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import {
     getAllObservedObjectIds,
     getObservationStatsByObject,
@@ -26,10 +26,42 @@
   import CustomInput from '../components/CustomInput.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
+  import ObjectActionsTooltip from '../components/ObjectActionsTooltip.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
 
   export let onClose = () => {}
   export let onOpenObject = () => {}
+  export let onGotoSkyView = () => {}
+  export let onGotoFinder = () => {}
+  // Row id to scroll into view once the (freshly remounted) table has
+  // rendered - set by MainScreen when returning here from a tooltip
+  // navigation (About/Finder/Sky View), so the object the user tapped stays
+  // visible instead of the screen coming back scrolled to the top.
+  export let scrollToObjectId = null
+
+  // Object-actions tooltip - one shared instance for the whole screen, see
+  // ObjectActionsTooltip.svelte.
+  let tooltipObj = null
+  let tooltipAnchor = null
+
+  function openTooltip(obj, e) {
+    if (!obj) return
+    // Moon features carry selenographic lat/lon, not sky RA/Dec (see
+    // moonMap.js's flattenMoonFeatures) - none of the tooltip's three actions
+    // are meaningful for them.
+    if (obj.type === 'moon_feature') return
+    if (tooltipObj?.id === obj.id) {
+      closeTooltip()
+      return
+    }
+    tooltipObj = obj
+    tooltipAnchor = e.currentTarget
+  }
+
+  function closeTooltip() {
+    tooltipObj = null
+    tooltipAnchor = null
+  }
 
   const SORT_OPTIONS = [
     { value: 'name', label: 'Name' },
@@ -111,6 +143,12 @@
       observedCount: ids.size,
     })
     loading = false
+    if (scrollToObjectId) {
+      await tick()
+      requestAnimationFrame(() => {
+        document.getElementById(`observed-row-${scrollToObjectId}`)?.scrollIntoView({ block: 'center' })
+      })
+    }
   })
 
   // Icon symbol kind — separate from objectTypeKind (which groups broadly for
@@ -343,14 +381,9 @@
         </thead>
         <tbody>
           {#each sortedRows as row (row.id)}
-            <tr>
+            <tr id={`observed-row-${row.id}`}>
               <td class="object-cell">
-                <button
-                  class="object-btn"
-                  type="button"
-                  on:click={() => row.obj && onOpenObject(row.obj)}
-                  disabled={!row.obj}
-                >
+                <button class="object-btn" type="button" on:click={(e) => openTooltip(row.obj, e)} disabled={!row.obj}>
                   <ObservationObjectSymbol kind={symbolKind(row.obj)} />
                   <span>{row.label}</span>
                 </button>
@@ -367,6 +400,25 @@
   </div>
 
   {#if $keyboardActive}<OnScreenKeyboard />{/if}
+
+  {#if tooltipObj}
+    <ObjectActionsTooltip
+      anchor={tooltipAnchor}
+      on:skyview={() => {
+        onGotoSkyView(tooltipObj)
+        closeTooltip()
+      }}
+      on:finder={() => {
+        onGotoFinder(tooltipObj)
+        closeTooltip()
+      }}
+      on:about={() => {
+        onOpenObject(tooltipObj)
+        closeTooltip()
+      }}
+      on:close={closeTooltip}
+    />
+  {/if}
 </div>
 
 <style>

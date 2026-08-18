@@ -44,8 +44,30 @@ export const solarSystemPositions = writable([]) // current computed positions, 
 export const finderViewActive = writable(false)
 export const searchViewActive = writable(false)
 export const objectDetailsActive = writable(false)
-export const pendingFocus = writable(null) // {ra, dec} — consumed by MainScreen to re-centre
+// {ra, dec, fov?} — consumed by MainScreen to re-centre (and, when fov is
+// given, re-zoom) the sky view. fov is optional so existing pan-only callers
+// (FinderPanel's search, SearchPanel) are unaffected.
+export const pendingFocus = writable(null)
 export const pendingChanges = writable(0)
+
+// "Return to where I came from" for the object-actions tooltip (Lists/
+// Observations/Observed Objects/Finding Paths target) and the pre-existing
+// About/Finder navigation they now share a mechanism with. Each destination
+// gets its own independent slot rather than one shared store, because
+// e.g. opening About *from* Finder clears/sets state in the same tick as
+// leaving Finder - sharing one slot between "return after Finder closes" and
+// "return after About closes" would collide right at that transition.
+//
+// Origin values: 'lists' | 'observations' | 'observedObjects' |
+// 'findingPaths' | 'findingPathsList' | 'finder' (the last only valid for
+// aboutReturnOrigin, matching the pre-existing Finder->About flow). Always
+// exactly one level deep, same as the boolean flags this replaces.
+export const aboutReturnOrigin = writable(null) // string | null
+export const finderReturnOrigin = writable(null) // string | null
+// {screen, objectId} | null - objectId is snapshotted so MainScreen can tell
+// "the user is still looking at the object they navigated to" (pan/zoom/swipe
+// don't change it) apart from "the user selected something else" (does).
+export const skyViewReturnOrigin = writable(null)
 
 // Per-list local-only preferences, keyed by list id — deliberately kept out
 // of the synced `getMeta('lists')` record (see lists.js) since this is a

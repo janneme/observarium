@@ -20,6 +20,17 @@
 
   let cursor = 0
   let inputEl
+  // True between compositionstart and compositionend, i.e. while an OS-level
+  // dead-key/IME sequence (e.g. Czech "Š" via a caron dead key + "s") is in
+  // progress on the real native input below. Real keydown is normally
+  // blocked entirely (see on:keydown below) since typing goes through
+  // insertChar/execCommand instead, but a composing keydown's e.key is only
+  // the not-yet-composed base character - blocking it there would insert the
+  // wrong plain letter and prevent the compose sequence from ever
+  // completing. While composing, keydown is left alone so the browser's
+  // native composition can finish on inputEl; the result arrives via the
+  // ordinary on:input handler below once compositionend fires.
+  let composing = false
 
   // Fallback path when execCommand is unsupported/fails: a plain scripted
   // .value assignment, which fires no trusted input event at all.
@@ -114,14 +125,43 @@
     unregister(api)
   }
 
-  // Real DOM `input` events on the native element — fires both for
-  // insertChar/backspace's own execCommand calls (see above) and for
+  // Real keydown is blocked *except* while composing (see `composing`
+  // above) - letting a compose sequence's keydowns through unblocked is
+  // what allows the browser to actually finish composing on inputEl.
+  // e.key === 'Dead' also covers the dead-key press itself, before
+  // `composing` flips true. Native clipboard/select-all shortcuts
+  // (Ctrl/Cmd+V/C/X/A) are exempted too - paste in particular only works if
+  // the browser gets to run its default action on this keydown; the result
+  // lands via the ordinary onNativeInput path below either way. Mirrors
+  // stores/keyboard.js's global handler, which exempts the same keys.
+  function onKeyDown(e) {
+    if (composing || e.key === 'Dead') return
+    if ((e.ctrlKey || e.metaKey) && ['v', 'c', 'x', 'a'].includes(e.key.toLowerCase())) return
+    e.preventDefault()
+  }
+
+  function onCompositionStart() {
+    composing = true
+  }
+
+  // The composed character(s) are already in inputEl.value by now - the
+  // native `input` event that immediately follows compositionend is handled
+  // by the ordinary onNativeInput path below, same as any other real input
+  // event, so nothing further is needed here beyond clearing the flag.
+  function onCompositionEnd() {
+    composing = false
+  }
+
+  // Real DOM `input` events on the native element — fires for
+  // insertChar/backspace's own execCommand calls (see above), for a
+  // completed compose sequence (see onCompositionEnd above), and for
   // browser/password-manager autofill, which sets .value directly. Either
   // way, the native element's own value/selection is the source of truth
   // here (autofill has no notion of our tracked `cursor` to preserve, and
-  // execCommand already moved the real caret to the right place) — physical
-  // keydown typing is blocked (see the input's on:keydown below), so this
-  // never needs to reconcile a real caret against a stale tracked one.
+  // execCommand/composition already moved the real caret to the right
+  // place) — physical keydown typing is otherwise blocked (see the input's
+  // on:keydown below), so this never needs to reconcile a real caret
+  // against a stale tracked one.
   function onNativeInput() {
     value = inputEl.value
     setCursor(inputEl.selectionStart ?? value.length)
@@ -160,9 +200,12 @@
        off-screen input that browsers/password managers ignore). Real
        keystrokes are blocked (preventDefault on keydown) since text entry
        is meant to go through the app's own nightly-safe on-screen keyboard
-       only — inputmode="none" additionally tells mobile browsers not to pop
-       up their own on-screen keyboard when this gets focus. Visually
-       transparent; the decorative spans below are what's actually seen. -->
+       only — except while a dead-key/IME compose sequence is in progress,
+       which needs the real keydowns to reach the browser to complete (see
+       `composing` above) — inputmode="none" additionally tells mobile
+       browsers not to pop up their own on-screen keyboard when this gets
+       focus. Visually transparent; the decorative spans below are what's
+       actually seen. -->
   <input
     bind:this={inputEl}
     {id}
@@ -176,7 +219,9 @@
     on:focus={onFocus}
     on:blur={onBlur}
     on:input={onNativeInput}
-    on:keydown|preventDefault
+    on:keydown={onKeyDown}
+    on:compositionstart={onCompositionStart}
+    on:compositionend={onCompositionEnd}
   />
 
   <div class="display" aria-hidden="true">

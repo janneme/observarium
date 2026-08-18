@@ -421,6 +421,15 @@
       const obs = (await getObservationByDate(dateKey)) ?? { date: dateKey, objects: [], startedAt: time.toISOString() }
       if (!Array.isArray(obs.objects)) obs.objects = []
       obs.notes = obs.notes ? `${obs.notes}\n${note}` : note
+      // Visual range measurements don't add an observed object, so the
+      // telescope used wouldn't otherwise show up anywhere structured (only
+      // as a name inside the free-text note above) - tracked separately so
+      // ObservationsScreen's header line can still show its diameter.
+      if (telescope?.id) {
+        const ids = new Set(Array.isArray(obs.visualRangeTelescopeIds) ? obs.visualRangeTelescopeIds : [])
+        ids.add(telescope.id)
+        obs.visualRangeTelescopeIds = [...ids]
+      }
       await putObservation(obs)
       logConfirmMsg = `Added: "${note}"`
       resultLogged = true

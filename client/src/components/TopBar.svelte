@@ -1,13 +1,14 @@
 <script>
   import { createEventDispatcher, onMount, onDestroy } from 'svelte'
   import { selectedObject } from '../stores/selectedObject.js'
-  import { searchViewActive, finderViewActive } from '../stores/ui.js'
+  import { searchViewActive, finderViewActive, skyViewReturnOrigin } from '../stores/ui.js'
   import { theme, toggleTheme } from '../stores/theme.js'
   import ObservationObjectSymbol from './ObservationObjectSymbol.svelte'
   import HamburgerIcon from '../icons/HamburgerIcon.svelte'
   import SearchIcon from '../icons/SearchIcon.svelte'
   import FinderViewIcon from '../icons/FinderViewIcon.svelte'
   import NightModeIcon from '../icons/NightModeIcon.svelte'
+  import BackIcon from '../icons/BackIcon.svelte'
   import { getDoubleStarNear } from '../lib/db.js'
 
   export let time = new Date()
@@ -368,16 +369,29 @@
   </div>
 
   {#if $selectedObject && !menuOpen && !$searchViewActive && !finderMode}
-    <div
-      class="row2"
-      role="button"
-      tabindex="0"
-      on:click={() => dispatch('objectdetails')}
-      on:keydown={(e) => e.key === 'Enter' && dispatch('objectdetails')}
-    >
-      <span class="obj-icon"><ObservationObjectSymbol kind={objectSymbolKind($selectedObject)} /></span>
-      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-      <span class="obj-name">{@html selectedObjLabel($selectedObject, linkedDs)}</span>
+    <div class="row2">
+      {#if $skyViewReturnOrigin}
+        <button
+          class="back-icon"
+          type="button"
+          aria-label="Back"
+          title="Back"
+          on:click|stopPropagation={() => dispatch('backtoorigin')}
+        >
+          <BackIcon size="1rem" aria-hidden="true" />
+        </button>
+      {/if}
+      <div
+        class="row2-obj"
+        role="button"
+        tabindex="0"
+        on:click={() => dispatch('objectdetails')}
+        on:keydown={(e) => e.key === 'Enter' && dispatch('objectdetails')}
+      >
+        <span class="obj-icon"><ObservationObjectSymbol kind={objectSymbolKind($selectedObject)} /></span>
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        <span class="obj-name">{@html selectedObjLabel($selectedObject, linkedDs)}</span>
+      </div>
     </div>
   {/if}
 </div>
@@ -484,20 +498,41 @@
   .row2 {
     display: inline-flex;
     align-items: center;
-    gap: 0.1rem;
     height: 2rem;
-    padding: 0 0.6rem 0 0.35rem;
     background: var(--surface-bg);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border-radius: 0 0 8px 0;
     font-size: 0.82rem;
-    cursor: pointer;
     pointer-events: auto;
     max-width: calc(100vw - 1rem);
   }
 
-  .row2:hover {
+  .back-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 0 0.35rem 0 0.5rem;
+    background: none;
+    border: none;
+    color: var(--fg);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .row2-obj {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    height: 100%;
+    padding: 0 0.6rem 0 0.35rem;
+    font-size: inherit;
+    cursor: pointer;
+    min-width: 0;
+  }
+
+  .row2-obj:hover {
     background: var(--surface-bg);
     filter: brightness(1.08);
   }

@@ -56,6 +56,9 @@
     skyPollution,
     applySkyPollution,
     observedObjectsState,
+    aboutReturnOrigin,
+    finderReturnOrigin,
+    skyViewReturnOrigin,
   } from '../stores/ui.js'
   import { get } from 'svelte/store'
   import { toggleTheme } from '../stores/theme.js'
@@ -149,8 +152,6 @@
   let findingPathsStateVersion = 0
   let findingPathsStartHip = null
   let findingPathsEditHip = null
-  let returnToObservationsFromObjectDetails = false
-  let returnToObservedObjectsFromObjectDetails = false
   let showFindingPathsList = false
   let findingPathsListTargetChip = null
   let showVisualRange = false
@@ -184,8 +185,28 @@
   let showMoonMap = false
   let findingPathsListStartChip = null
   let returnToFindingPathsListFromFinder = false
-  let returnToFindingPathsListFromAbout = false
-  let returnToFinderFromAbout = false
+  // Object id to scroll into view in whichever of Lists/Observations/Observed
+  // Objects the user returns to after a tooltip navigation - passed through
+  // as a prop, each screen re-expands its own containing group and scrolls.
+  // Set right before closing the screen (see the tooltip handlers below);
+  // cleared on that screen's own close so a stale value never leaks into an
+  // unrelated later open.
+  let scrollToObjectId = null
+
+  // Reopens the screen a tooltip/About/Finder navigation came from - shared
+  // by aboutReturnOrigin, finderReturnOrigin, and skyViewReturnOrigin's
+  // consumption below. 'finder' (FinderPanel) and 'findingPathsList' are only
+  // ever valid for aboutReturnOrigin (the pre-existing Finder->About and
+  // FindingPathsListScreen->About flows this generalizes); the other four
+  // are the tooltip's own origins.
+  function reopenScreen(origin) {
+    if (origin === 'lists') showLists = true
+    else if (origin === 'observations') showObservations = true
+    else if (origin === 'observedObjects') showObservedObjects = true
+    else if (origin === 'findingPaths') showFindingPaths = true
+    else if (origin === 'findingPathsList') showFindingPathsList = true
+    else if (origin === 'finder') finderViewActive.set(true)
+  }
 
   // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
   // Ceiling ensures loaded ≥ rendered for every FOV value.
@@ -545,28 +566,42 @@
   $: if ($pendingFocus) {
     ra0 = $pendingFocus.ra
     dec0 = $pendingFocus.dec
+    if ($pendingFocus.fov != null) fov = $pendingFocus.fov
     pendingFocus.set(null)
     maybeReload()
   }
 
-  $: if (!$objectDetailsActive && returnToObservationsFromObjectDetails) {
-    returnToObservationsFromObjectDetails = false
-    showObservations = true
+  $: if (!$objectDetailsActive && $aboutReturnOrigin) {
+    const origin = $aboutReturnOrigin
+    aboutReturnOrigin.set(null)
+    reopenScreen(origin)
   }
 
-  $: if (!$objectDetailsActive && returnToObservedObjectsFromObjectDetails) {
-    returnToObservedObjectsFromObjectDetails = false
-    showObservedObjects = true
+  $: if (!$finderViewActive && $finderReturnOrigin) {
+    const origin = $finderReturnOrigin
+    finderReturnOrigin.set(null)
+    reopenScreen(origin)
   }
 
-  $: if (!$objectDetailsActive && returnToFindingPathsListFromAbout) {
-    returnToFindingPathsListFromAbout = false
-    showFindingPathsList = true
+  // Sky View back icon (TopBar) - persists through pan/zoom/swipe (ra0/dec0/
+  // fov changes don't touch it), clears when the user selects a different
+  // object or opens any other screen/overlay - see stores/ui.js.
+  $: if ($skyViewReturnOrigin && $selectedObject?.id !== $skyViewReturnOrigin.objectId) {
+    skyViewReturnOrigin.set(null)
   }
-
-  $: if (!$objectDetailsActive && returnToFinderFromAbout) {
-    returnToFinderFromAbout = false
-    finderViewActive.set(true)
+  $: if (
+    $skyViewReturnOrigin &&
+    (menuOpen ||
+      $searchViewActive ||
+      $objectDetailsActive ||
+      $finderViewActive ||
+      showObservations ||
+      showObservedObjects ||
+      showLists ||
+      showFindingPaths ||
+      showFindingPathsList)
+  ) {
+    skyViewReturnOrigin.set(null)
   }
 
   // "q" followed shortly by m/s/c/d launches a quiz directly (Moon/Star/
@@ -1098,6 +1133,12 @@
     on:objectdetails={() => {
       objectDetailsActive.set(true)
     }}
+    on:backtoorigin={() => {
+      const origin = $skyViewReturnOrigin
+      if (!origin) return
+      skyViewReturnOrigin.set(null)
+      reopenScreen(origin.screen)
+    }}
   />
 
   <MenuPanel
@@ -1266,38 +1307,96 @@
   {#if showObservations}
     <ObservationsScreen
       {time}
+      {scrollToObjectId}
       onClose={() => {
         showObservations = false
-        returnToObservationsFromObjectDetails = false
+        if (get(aboutReturnOrigin) === 'observations') aboutReturnOrigin.set(null)
+        scrollToObjectId = null
       }}
       onOpenObject={(obj) => {
-        returnToObservationsFromObjectDetails = true
+        aboutReturnOrigin.set('observations')
+        scrollToObjectId = obj.id
         showObservations = false
         selectedObject.set(obj)
         objectDetailsActive.set(true)
+      }}
+      onGotoSkyView={(obj) => {
+        skyViewReturnOrigin.set({ screen: 'observations', objectId: obj.id })
+        scrollToObjectId = obj.id
+        showObservations = false
+        selectedObject.set(obj)
+        pendingFocus.set({ ra: obj.pos[0], dec: obj.pos[1], fov: 45 })
+      }}
+      onGotoFinder={(obj) => {
+        finderReturnOrigin.set('observations')
+        scrollToObjectId = obj.id
+        showObservations = false
+        selectedObject.set(obj)
+        finderViewActive.set(true)
       }}
     />
   {/if}
 
   {#if showLists}
     <ListsScreen
+      {scrollToObjectId}
       onClose={() => {
         showLists = false
+        if (get(aboutReturnOrigin) === 'lists') aboutReturnOrigin.set(null)
+        scrollToObjectId = null
+      }}
+      onOpenObject={(obj) => {
+        aboutReturnOrigin.set('lists')
+        scrollToObjectId = obj.id
+        showLists = false
+        selectedObject.set(obj)
+        objectDetailsActive.set(true)
+      }}
+      onGotoSkyView={(obj) => {
+        skyViewReturnOrigin.set({ screen: 'lists', objectId: obj.id })
+        scrollToObjectId = obj.id
+        showLists = false
+        selectedObject.set(obj)
+        pendingFocus.set({ ra: obj.pos[0], dec: obj.pos[1], fov: 45 })
+      }}
+      onGotoFinder={(obj) => {
+        finderReturnOrigin.set('lists')
+        scrollToObjectId = obj.id
+        showLists = false
+        selectedObject.set(obj)
+        finderViewActive.set(true)
       }}
     />
   {/if}
 
   {#if showObservedObjects}
     <ObservedObjectsScreen
+      {scrollToObjectId}
       onClose={() => {
         showObservedObjects = false
-        returnToObservedObjectsFromObjectDetails = false
+        if (get(aboutReturnOrigin) === 'observedObjects') aboutReturnOrigin.set(null)
+        scrollToObjectId = null
       }}
       onOpenObject={(obj) => {
-        returnToObservedObjectsFromObjectDetails = true
+        aboutReturnOrigin.set('observedObjects')
+        scrollToObjectId = obj.id
         showObservedObjects = false
         selectedObject.set(obj)
         objectDetailsActive.set(true)
+      }}
+      onGotoSkyView={(obj) => {
+        skyViewReturnOrigin.set({ screen: 'observedObjects', objectId: obj.id })
+        scrollToObjectId = obj.id
+        showObservedObjects = false
+        selectedObject.set(obj)
+        pendingFocus.set({ ra: obj.pos[0], dec: obj.pos[1], fov: 45 })
+      }}
+      onGotoFinder={(obj) => {
+        finderReturnOrigin.set('observedObjects')
+        scrollToObjectId = obj.id
+        showObservedObjects = false
+        selectedObject.set(obj)
+        finderViewActive.set(true)
       }}
     />
   {/if}
@@ -1332,7 +1431,7 @@
         finderViewActive.set(false)
         selectedObject.set(obj)
         objectDetailsActive.set(true)
-        returnToFinderFromAbout = true
+        aboutReturnOrigin.set('finder')
       }}
     />
   {/if}
@@ -1358,6 +1457,7 @@
         showFindingPathsList = false
         findingPathsListTargetChip = null
         findingPathsListStartChip = null
+        if (get(aboutReturnOrigin) === 'findingPathsList') aboutReturnOrigin.set(null)
       }}
       on:openpath={(e) => {
         findingPathsListTargetChip = e.detail.targetChip
@@ -1376,7 +1476,23 @@
         showFindingPathsList = false
         selectedObject.set(e.detail.obj)
         objectDetailsActive.set(true)
-        returnToFindingPathsListFromAbout = true
+        aboutReturnOrigin.set('findingPathsList')
+      }}
+      on:gotoskyview={(e) => {
+        const obj = e.detail?.object
+        if (!obj) return
+        skyViewReturnOrigin.set({ screen: 'findingPathsList', objectId: obj.id })
+        showFindingPathsList = false
+        selectedObject.set(obj)
+        pendingFocus.set({ ra: obj.pos[0], dec: obj.pos[1], fov: 45 })
+      }}
+      on:gotofinder={(e) => {
+        const obj = e.detail?.object
+        if (!obj) return
+        finderReturnOrigin.set('findingPathsList')
+        showFindingPathsList = false
+        selectedObject.set(obj)
+        finderViewActive.set(true)
       }}
     />
   {/if}
@@ -1397,10 +1513,36 @@
         findingPathsStartHip = null
         findingPathsEditHip = null
         findingPathsStateVersion += 1
+        if (get(aboutReturnOrigin) === 'findingPaths') aboutReturnOrigin.set(null)
+        if (get(finderReturnOrigin) === 'findingPaths') finderReturnOrigin.set(null)
         if (returnToFindingPathsListFromFinder) {
           returnToFindingPathsListFromFinder = false
           showFindingPathsList = true
         }
+      }}
+      on:gotoskyview={(e) => {
+        const obj = e.detail?.object
+        if (!obj) return
+        skyViewReturnOrigin.set({ screen: 'findingPaths', objectId: obj.id })
+        showFindingPaths = false
+        selectedObject.set(obj)
+        pendingFocus.set({ ra: obj.pos[0], dec: obj.pos[1], fov: 45 })
+      }}
+      on:gotofinder={(e) => {
+        const obj = e.detail?.object
+        if (!obj) return
+        finderReturnOrigin.set('findingPaths')
+        showFindingPaths = false
+        selectedObject.set(obj)
+        finderViewActive.set(true)
+      }}
+      on:openabout={(e) => {
+        const obj = e.detail?.object
+        if (!obj) return
+        aboutReturnOrigin.set('findingPaths')
+        showFindingPaths = false
+        selectedObject.set(obj)
+        objectDetailsActive.set(true)
       }}
     />
   {/if}

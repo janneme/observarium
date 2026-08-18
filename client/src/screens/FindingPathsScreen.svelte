@@ -6,6 +6,7 @@
   import SearchPanel from '../components/SearchPanel.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import MultiplierSelect from '../components/MultiplierSelect.svelte'
+  import ObjectActionsTooltip from '../components/ObjectActionsTooltip.svelte'
   import {
     getFindingPathsForObject,
     saveFindingPathForObject,
@@ -88,6 +89,30 @@
   let expandedStartHip = null
   let activeStepIndex = null
   let statusMsg = ''
+
+  // Object-actions tooltip on the target object's name in the title - see
+  // ObjectActionsTooltip.svelte. Only ever targets objectCtx (this screen has
+  // exactly one "target" object, unlike the list-style screens).
+  let tooltipOpen = false
+  let tooltipAnchor = null
+
+  function openTargetTooltip(e) {
+    // Moon features carry selenographic lat/lon, not sky RA/Dec - not a
+    // realistic case here (Finding Paths targets are always catalogue
+    // stars/DSOs), but guarded for consistency with the other screens.
+    if (!objectCtx || objectCtx.type === 'moon_feature') return
+    if (tooltipOpen) {
+      closeTooltip()
+      return
+    }
+    tooltipOpen = true
+    tooltipAnchor = e.currentTarget
+  }
+
+  function closeTooltip() {
+    tooltipOpen = false
+    tooltipAnchor = null
+  }
 
   let starsByHip = new Map()
   let labelById = new Map()
@@ -1092,13 +1117,16 @@
     </button>
     <div class="title">
       {#if recordingStartHip && recordingStartLabel}
-        Path {recordingStartLabel} ⇒ {objectFullLabel(objectCtx)}
+        Path {recordingStartLabel} ⇒
+        <button type="button" class="target-name" on:click={openTargetTooltip}>{objectFullLabel(objectCtx)}</button>
       {:else if initialSelectStart}
         Select start (bright star)
       {:else if expandedStartLabel}
-        Path {expandedStartLabel}<span class="title-arrow">⇒</span>{objectFullLabel(objectCtx)}
+        Path {expandedStartLabel}<span class="title-arrow">⇒</span>
+        <button type="button" class="target-name" on:click={openTargetTooltip}>{objectFullLabel(objectCtx)}</button>
       {:else}
-        Finding Paths · {objectLabel(objectCtx)}
+        Finding Paths ·
+        <button type="button" class="target-name" on:click={openTargetTooltip}>{objectLabel(objectCtx)}</button>
       {/if}
     </div>
     {#if guideMode}
@@ -1364,6 +1392,25 @@
       on:close={closeStartSearch}
     />
   {/if}
+
+  {#if tooltipOpen}
+    <ObjectActionsTooltip
+      anchor={tooltipAnchor}
+      on:skyview={() => {
+        dispatch('gotoskyview', { object: objectCtx })
+        closeTooltip()
+      }}
+      on:finder={() => {
+        dispatch('gotofinder', { object: objectCtx })
+        closeTooltip()
+      }}
+      on:about={() => {
+        dispatch('openabout', { object: objectCtx })
+        closeTooltip()
+      }}
+      on:close={closeTooltip}
+    />
+  {/if}
 </div>
 
 <style>
@@ -1398,6 +1445,16 @@
     white-space: nowrap;
     font-size: 0.92rem;
     font-weight: 600;
+  }
+
+  .target-name {
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline dotted;
   }
 
   .back-btn {

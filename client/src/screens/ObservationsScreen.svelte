@@ -12,6 +12,7 @@
   import { refreshActiveListObjectIds } from '../lib/lists.js'
   import { refreshObservationStats } from '../lib/observedObjectsStats.js'
   import { flattenMoonFeatures } from '../lib/moonMap.js'
+  import { naturalCompare } from '../lib/naturalSort.js'
   import { pendingChanges } from '../stores/ui.js'
   import { recordPerfEvent } from '../lib/perf.js'
   import { keyboardActive } from '../stores/keyboard.js'
@@ -19,6 +20,7 @@
   import CustomTextarea from '../components/CustomTextarea.svelte'
   import TelescopeUsageEditor from '../components/TelescopeUsageEditor.svelte'
   import ObservationObjectSymbol from '../components/ObservationObjectSymbol.svelte'
+  import ObjectActionsTooltip from '../components/ObjectActionsTooltip.svelte'
   import OnScreenKeyboard from '../components/OnScreenKeyboard.svelte'
   import ConfirmDialog from '../components/ConfirmDialog.svelte'
   import BackIcon from '../icons/BackIcon.svelte'
@@ -27,10 +29,29 @@
   import DeleteIcon from '../icons/DeleteIcon.svelte'
   import AcceptIcon from '../icons/AcceptIcon.svelte'
   import CloseIcon from '../icons/CloseIcon.svelte'
+  import CopyIcon from '../icons/CopyIcon.svelte'
+  import TickIcon from '../icons/TickIcon.svelte'
 
   export let onClose = () => {}
   export let onOpenObject = () => {}
+  export let onGotoSkyView = () => {}
+  export let onGotoFinder = () => {}
   export let time = new Date()
+  // Object id to scroll into view (re-expanding its containing date first)
+  // once data has loaded - set by MainScreen when returning here from a
+  // tooltip navigation, so the tapped object stays visible instead of the
+  // screen coming back scrolled to the top with every date collapsed.
+  export let scrollToObjectId = null
+
+  // Object-actions tooltip - one shared instance for the whole screen, see
+  // ObjectActionsTooltip.svelte.
+  let tooltipObj = null
+  let tooltipAnchor = null
+
+  function closeTooltip() {
+    tooltipObj = null
+    tooltipAnchor = null
+  }
 
   let observations = []
   let expandedDates = new Set()
@@ -58,17 +79,6 @@
     const d = new Date(`${dateText}T00:00:00`)
     if (Number.isNaN(d.getTime())) return dateText
     return `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`
-  }
-
-  function trimList(items, maxLen = 46) {
-    if (!items.length) return ''
-    let out = ''
-    for (let i = 0; i < items.length; i += 1) {
-      const part = i === 0 ? items[i] : `, ${items[i]}`
-      if ((out + part).length > maxLen) return `${out}, ...`
-      out += part
-    }
-    return out
   }
 
   function fallbackLabelFromId(id) {
@@ -167,24 +177,83 @@
     return first === last ? first : `${first}-${last}`
   }
 
-  function observationDateTimeLabel(obs) {
-    const timeLabel = observationTimeLabel(obs)
-    return timeLabel ? `${normalizeDate(obs.date)} ${timeLabel}` : normalizeDate(obs.date)
-  }
-
   function observationHeaderLocationName(obs) {
     return String(obs?.location?.name || '').trim()
   }
 
-  function observationHeaderObjectsPart(obs) {
-    const entries = obs.objects || []
+  // Natural-order display copy of obs.objects (e.g. "M 4" before "M 27") -
+  // never mutates obs.objects itself, which stays in logged/insertion order
+  // for saving. Used by both the expanded per-object rows and (via
+  // headerObjectSummaryEntries below) the collapsed summary line.
+  function sortedObservationObjects(obs) {
+    return [...(obs.objects || [])].sort((a, b) =>
+      naturalCompare(
+        labelByObjectId.get(a.id) || fallbackLabelFromId(a.id),
+        labelByObjectId.get(b.id) || fallbackLabelFromId(b.id),
+      ),
+    )
+  }
+
+  // Individually clickable object-name entries (each opens the tooltip) for
+  // the full observed-objects line - shown only while collapsed (that's the
+  // caller's job, see the template), and never part of the expand/collapse
+  // toggle button itself (that's obs-toggle, scoped to just the caret +
+  // date/time/location/telescopes). Unlike the old truncated header summary
+  // this always includes every object - no character budget/ellipsis.
+  function headerObjectSummaryEntries(obs) {
+    const entries = sortedObservationObjects(obs)
     const moonCount = entries.filter((entry) => objectById.get(entry.id)?.type === 'moon_feature').length
-    const names = entries
-      .filter((entry) => objectById.get(entry.id)?.type !== 'moon_feature')
-      .map((entry) => labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id))
-    const parts = [trimList(names)].filter(Boolean)
-    if (moonCount > 0) parts.push(`Moon ${moonCount}×`)
-    return parts.join(', ')
+    const shown = []
+    for (const entry of entries) {
+      const object = objectById.get(entry.id)
+      if (!object || object.type === 'moon_feature') continue
+      const label = labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id)
+      shown.push({ id: entry.id, label })
+    }
+    return { entries: shown, moonCount }
+  }
+
+  // Visual range notes recorded before visualRangeTelescopeIds existed only
+  // embedded the telescope's *name* as free text (see
+  // VisualRangeMeasureScreen.svelte's note format: "Visual range (NAME,
+  // EYEPIECE): mag ..."). Parsed here as a fallback, matched by exact name
+  // against the current telescope list, so historical records still show a
+  // diameter. Fragile (a renamed/deleted telescope won't match) but better
+  // than nothing for data logged before that field existed.
+  function visualRangeTelescopeNamesFromNotes(obs) {
+    const names = []
+    for (const line of String(obs?.notes || '').split('\n')) {
+      const m = /^Visual range \(([^,]+),/.exec(line.trim())
+      if (m) names.push(m[1].trim())
+    }
+    return names
+  }
+
+  // Diameters of every telescope actually seen through (telescopeResults[].seen
+  // === true) across all objects in the observation, formatted e.g. `12", 6"`,
+  // widest first - for the collapsed header line.
+  function observationTelescopeDiametersLabel(obs) {
+    const ids = new Set()
+    for (const entry of obs.objects || []) {
+      for (const r of entry.telescopeResults || []) {
+        if (r?.seen === true && r.telescopeId) ids.add(r.telescopeId)
+      }
+    }
+    // Visual range measurements (VisualRangeMeasureScreen's "Add to
+    // observation") don't log an observed object, so their telescope
+    // wouldn't otherwise be picked up above - an observation can be nothing
+    // but a visual range reading with zero objects.
+    for (const id of obs.visualRangeTelescopeIds || []) ids.add(id)
+    const telescopesByName = new Map([...telescopeById.values()].map((t) => [t.name, t.id]))
+    for (const name of visualRangeTelescopeNamesFromNotes(obs)) {
+      const id = telescopesByName.get(name)
+      if (id) ids.add(id)
+    }
+    const diameters = [...ids]
+      .map((id) => telescopeById.get(id)?.diameterInches)
+      .filter((d) => d != null)
+      .sort((a, b) => b - a)
+    return diameters.map((d) => `${d}"`).join(', ')
   }
 
   function observationLocationLabel(obs) {
@@ -219,6 +288,27 @@
     if (String(value ?? '').trim() === '') return null
     const n = Number(String(value).trim())
     return Number.isFinite(n) ? n : null
+  }
+
+  // Copies whatever's currently in the Latitude/Longitude fields (the draft
+  // being edited, not necessarily saved yet) as "lat,lon" - a plain
+  // clipboard-friendly format for pasting into maps/GPS apps.
+  let coordsCopied = false
+  let coordsCopiedTimer = null
+  async function copyCoords() {
+    const lat = String(observationEdit?.draftLat ?? '').trim()
+    const lon = String(observationEdit?.draftLon ?? '').trim()
+    if (!lat || !lon || !navigator.clipboard) return
+    try {
+      await navigator.clipboard.writeText(`${lat},${lon}`)
+    } catch {
+      return
+    }
+    coordsCopied = true
+    if (coordsCopiedTimer) clearTimeout(coordsCopiedTimer)
+    coordsCopiedTimer = setTimeout(() => {
+      coordsCopied = false
+    }, 1200)
   }
 
   function telescopeNeedsEyepiece(telescope) {
@@ -335,12 +425,17 @@
     e?.stopPropagation?.()
     const object = objectById.get(objectId)
     if (!object) return
-    // Moon features have no "About object" screen (that's the sky view's
-    // ObjectDetails, built for stars/DSOs/solar-system bodies) — the Moon
-    // Map is a browsing screen, not a details view, so there's nowhere
-    // sensible to navigate to here.
+    // Moon features carry selenographic lat/lon, not sky RA/Dec (see
+    // moonMap.js's flattenMoonFeatures) - none of the tooltip's three actions
+    // (sky view, finder view, About) are meaningful for them, so skip the
+    // tooltip entirely rather than opening it with dead buttons.
     if (object.type === 'moon_feature') return
-    onOpenObject(object)
+    if (tooltipObj?.id === object.id) {
+      closeTooltip()
+      return
+    }
+    tooltipObj = object
+    tooltipAnchor = e?.currentTarget ?? null
   }
 
   function cancelObjectEdit() {
@@ -739,6 +834,20 @@
 
   onMount(async () => {
     await loadData()
+    if (scrollToObjectId) {
+      const containingObs = observations.find((obs) =>
+        (obs.objects || []).some((entry) => entry.id === scrollToObjectId),
+      )
+      if (containingObs) {
+        const next = new Set(expandedDates)
+        next.add(containingObs.date)
+        expandedDates = next
+      }
+      await tick()
+      requestAnimationFrame(() => {
+        document.getElementById(`obs-object-row-${scrollToObjectId}`)?.scrollIntoView({ block: 'center' })
+      })
+    }
   })
 </script>
 
@@ -764,21 +873,19 @@
       <div class="hint">No observations yet.</div>
     {:else}
       {#each observations as obs}
+        {@const summary = headerObjectSummaryEntries(obs)}
+        {@const telescopesLabel = observationTelescopeDiametersLabel(obs)}
         <section class="obs-card">
           <div class="obs-header">
             <button class="obs-toggle" on:click={() => toggleDate(obs.date)}>
               <span class="caret">{expandedDates.has(obs.date) ? '▾' : '▸'}</span>
-              <span class="obs-title">
-                <span class="obs-date-location"
-                  ><span class="obs-date">{observationDateTimeLabel(obs)}</span
-                  >{#if observationHeaderLocationName(obs)}<span class="obs-location"
-                      >, {observationHeaderLocationName(obs)}</span
-                    >{/if}</span
-                >{#if observationHeaderObjectsPart(obs)}{' '}<span class="obs-objects"
-                    >({observationHeaderObjectsPart(obs)})</span
-                  >
-                {/if}
-              </span>
+              <span class="obs-line1"
+                ><span class="obs-date">{normalizeDate(obs.date)}</span>{#if observationTimeLabel(obs)}{' '}<span
+                    class="obs-time">{observationTimeLabel(obs)}</span
+                  >{/if}{#if observationHeaderLocationName(obs)}<span class="obs-location"
+                    >, {observationHeaderLocationName(obs)}</span
+                  >{/if}{#if telescopesLabel}{' '}<span class="obs-telescopes">{telescopesLabel}</span>{/if}</span
+              >
             </button>
             <span class="header-actions">
               <button
@@ -799,6 +906,17 @@
               </button>
             </span>
           </div>
+
+          {#if !expandedDates.has(obs.date) && (summary.entries.length || summary.moonCount)}
+            <div class="obs-objects-line">
+              {#each summary.entries as e, i}{#if i > 0},
+                {/if}<button
+                  type="button"
+                  class="object-name-inline"
+                  on:click={(ev) => openObjectFromObservation(e.id, ev)}>{e.label}</button
+                >{/each}{#if summary.moonCount > 0}{summary.entries.length ? ', ' : ''}Moon {summary.moonCount}×{/if}
+            </div>
+          {/if}
 
           {#if expandedDates.has(obs.date)}
             <div class="obs-details">
@@ -822,6 +940,24 @@
                     <div class="field-row">
                       <div class="field-label">Longitude</div>
                       <CustomInput bind:value={observationEdit.draftLon} placeholder="Longitude" />
+                    </div>
+                    <div class="field-row coords-copy-row">
+                      <div class="field-label" aria-hidden="true">&nbsp;</div>
+                      <div class="coords-copy-wrap">
+                        <button
+                          class="icon-btn coords-copy"
+                          type="button"
+                          on:click={copyCoords}
+                          title="Copy latitude,longitude"
+                          aria-label="Copy latitude,longitude"
+                        >
+                          {#if coordsCopied}
+                            <TickIcon size="1rem" aria-hidden="true" />
+                          {:else}
+                            <CopyIcon size="1rem" aria-hidden="true" />
+                          {/if}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div class="field-row">
@@ -907,8 +1043,9 @@
 
               {#if Array.isArray(obs.objects) && obs.objects.length > 0}
                 <div class="objects-list">
-                  {#each obs.objects as entry}
+                  {#each sortedObservationObjects(obs) as entry}
                     <div
+                      id={`obs-object-row-${entry.id}`}
                       class="object-row"
                       class:editing={objectEdit &&
                         objectEdit.date === obs.date &&
@@ -1012,6 +1149,25 @@
     on:confirm={confirmDelete}
     on:cancel={cancelDelete}
   />
+
+  {#if tooltipObj}
+    <ObjectActionsTooltip
+      anchor={tooltipAnchor}
+      on:skyview={() => {
+        onGotoSkyView(tooltipObj)
+        closeTooltip()
+      }}
+      on:finder={() => {
+        onGotoFinder(tooltipObj)
+        closeTooltip()
+      }}
+      on:about={() => {
+        onOpenObject(tooltipObj)
+        closeTooltip()
+      }}
+      on:close={closeTooltip}
+    />
+  {/if}
 </div>
 
 <style>
@@ -1081,12 +1237,17 @@
 
   .obs-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 0.45rem;
     padding: 0.45rem 0.55rem;
   }
 
+  /* Wraps obs-toggle and obs-objects together as one flowing line (wrapping
+     onto further lines together, same as before splitting them apart) -
+     without this shared wrapper they'd behave as two independent flex
+     columns, and a long object list either got clipped or broke the layout
+     on narrow/mobile widths instead of just wrapping. */
   .obs-toggle {
     flex: 1;
     min-width: 0;
@@ -1096,13 +1257,14 @@
     display: flex;
     justify-content: flex-start;
     gap: 0.5rem;
-    align-items: center;
+    align-items: baseline;
     text-align: left;
     cursor: pointer;
     padding: 0;
+    flex-wrap: wrap;
   }
 
-  .obs-title {
+  .obs-line1 {
     font-size: 1.032rem;
     line-height: 1.25;
   }
@@ -1110,6 +1272,37 @@
   .obs-date,
   .obs-location {
     font-weight: 600;
+  }
+
+  .obs-time {
+    font-weight: 400;
+  }
+
+  .obs-telescopes {
+    font-size: 0.75em;
+    opacity: 0.85;
+    margin-left: 0.36rem;
+  }
+
+  /* Full observed-objects list - only shown while the record is collapsed
+     (see the template), so it's a plain block line of its own rather than
+     sharing obs-toggle's line - unlike that clickable toggle, individual
+     names here each open the object-actions tooltip (see openTooltip
+     elsewhere in this file), not the expand/collapse behavior. */
+  .obs-objects-line {
+    padding: 0 0.55rem 0.45rem;
+    font-size: 1.032rem;
+    line-height: 1.25;
+    opacity: 0.85;
+  }
+
+  .object-name-inline {
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+    cursor: pointer;
   }
 
   .header-actions {
@@ -1148,8 +1341,27 @@
 
   .coords {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr auto;
     gap: 0.45rem;
+  }
+
+  /* Same field-row/field-label structure as the Latitude/Longitude columns
+     (with an invisible label) so the button naturally lines up with the
+     inputs, rather than relying on grid alignment tricks to match a
+     different-shaped item to their height. */
+  /* Centers the button within a box the same height as CustomInput's own
+     rendered box (2rem min-height + 0.5rem padding + ~2px border, see
+     CustomInput.svelte), so it lines up with the Latitude/Longitude text
+     inside those inputs rather than with the inputs' own top/bottom edges. */
+  .coords-copy-row {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .coords-copy-wrap {
+    display: flex;
+    align-items: center;
+    min-height: 2.65rem;
   }
 
   .date-location-row {
