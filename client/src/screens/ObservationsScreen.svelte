@@ -1090,42 +1090,37 @@
                         <div class="object-notes">{entry.notes}</div>
                       {/if}
                     </div>
+                    {#if objectEdit && objectEdit.date === obs.date && String(objectEdit.objectId) === String(entry.id)}
+                      <div class="object-edit">
+                        <div class="field-label object-edit-title">
+                          Editing: {labelByObjectId.get(entry.id) || fallbackLabelFromId(entry.id)}
+                        </div>
+                        {#if objectEditError}
+                          <div class="object-edit-error">{objectEditError}</div>
+                        {/if}
+                        {#if telescopesForSelection().length === 0}
+                          <div class="hint small">No telescopes defined yet.</div>
+                        {:else}
+                          {#key safeStringify(objectEdit.telescopeStates)}
+                            <TelescopeUsageEditor
+                              telescopes={telescopesForSelection()}
+                              eyepieces={eyepiecesForSelection()}
+                              telescopeStates={objectEdit.telescopeStates}
+                              {telescopeNeedsEyepiece}
+                              onToggleTelescope={toggleObjectTelescope}
+                              onToggleEyepiece={toggleObjectEyepiece}
+                            />
+                          {/key}
+                        {/if}
+                        <CustomTextarea bind:value={objectEdit.draftNotes} placeholder="Object notes..." />
+                        <div class="edit-actions">
+                          <button class="btn" type="button" on:click={saveObjectEdit}>Accept</button>
+                          <button class="btn ghost" type="button" on:click={cancelObjectEdit}>Cancel</button>
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
                 </div>
-
-                {@const editedEntry =
-                  objectEdit && objectEdit.date === obs.date
-                    ? (obs.objects || []).find((oEntry) => String(oEntry.id) === String(objectEdit.objectId)) || null
-                    : null}
-                {#if editedEntry}
-                  <div class="object-edit">
-                    <div class="field-label object-edit-title">
-                      Editing: {labelByObjectId.get(editedEntry.id) || fallbackLabelFromId(editedEntry.id)}
-                    </div>
-                    {#if objectEditError}
-                      <div class="object-edit-error">{objectEditError}</div>
-                    {/if}
-                    {#if telescopesForSelection().length === 0}
-                      <div class="hint small">No telescopes defined yet.</div>
-                    {:else}
-                      {#key safeStringify(objectEdit.telescopeStates)}
-                        <TelescopeUsageEditor
-                          telescopes={telescopesForSelection()}
-                          eyepieces={eyepiecesForSelection()}
-                          telescopeStates={objectEdit.telescopeStates}
-                          {telescopeNeedsEyepiece}
-                          onToggleTelescope={toggleObjectTelescope}
-                          onToggleEyepiece={toggleObjectEyepiece}
-                        />
-                      {/key}
-                    {/if}
-                    <CustomTextarea bind:value={objectEdit.draftNotes} placeholder="Object notes..." />
-                    <div class="edit-actions">
-                      <button class="btn" type="button" on:click={saveObjectEdit}>Accept</button>
-                      <button class="btn ghost" type="button" on:click={cancelObjectEdit}>Cancel</button>
-                    </div>
-                  </div>
-                {/if}
               {:else}
                 <div class="hint small">No objects in this observation.</div>
               {/if}

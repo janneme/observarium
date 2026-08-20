@@ -53,14 +53,17 @@
   const TELESCOPE_LIMIT_MAG_BASE = 2.1
   const TELESCOPE_LIMIT_MAG_SLOPE = 5
   const INCHES_TO_MM = 25.4
-  // Same log-linear rendering-depth formula as SkyCanvas's own
-  // adaptiveMagLimit (duplicated here - it's component-local there too -
-  // so the TopBar figure matches what SkyCanvas actually renders when no
-  // telescope magLimitOverride is active).
-  const FOV_MAG5 = 120
-  const FOV_MAG14 = 2
+  // Same rendering-depth formula as SkyCanvas's own adaptiveMagLimit
+  // (duplicated here - it's component-local there too - so the TopBar
+  // figure matches what SkyCanvas actually renders when no telescope
+  // magLimitOverride is active) - least-squares fit through three
+  // real-world reference points (naked eye 120°→mag5.5, 8x50 finder
+  // 7.5°→mag10, 6" scope at 30x 2°→mag13). See MainScreen.svelte's copy
+  // for the full rationale.
+  const MAG_LIMIT_INTERCEPT = 13.9967 // mag at fov=1° (log2(1)=0)
+  const MAG_LIMIT_SLOPE = 1.24749 // mag lost per doubling of FOV
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
+    return Math.min(14, Math.max(5, MAG_LIMIT_INTERCEPT - MAG_LIMIT_SLOPE * Math.log2(fovDeg)))
   }
   // RA degrees needed to cover an angular radius at a given declination - a
   // degree of RA covers much less real sky near the poles (RA lines

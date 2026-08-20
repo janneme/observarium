@@ -179,15 +179,20 @@
     return (MIN_R_VMIN + (MAX_R_VMIN - MIN_R_VMIN) * t) * vmin * starRadiusScale * nightlyScale
   }
 
-  // Log-linear interpolation: mag 5 at FOV_MAG5, mag 14 at FOV_MAG14.
-  const FOV_MAG5 = 120 // FOV (°) where rendering depth floor is mag 5
-  const FOV_MAG14 = 2 // FOV (°) where rendering depth ceiling is mag 14
+  // Least-squares fit (in log2(FOV) space) through three real-world
+  // reference points: naked eye (120° → mag 5.5), an 8x50 finder
+  // (7.5° → mag 10), and a 6" scope at 30x with a 60°-apparent eyepiece
+  // (2° → mag 13). Must stay in sync with the same formula in
+  // MainScreen/FinderPanel/FindingPathsScreen/stores/ui.js (each keeps its
+  // own local copy) - see MainScreen.svelte's copy for the full rationale.
+  const MAG_LIMIT_INTERCEPT = 13.9967 // mag at fov=1° (log2(1)=0)
+  const MAG_LIMIT_SLOPE = 1.24749 // mag lost per doubling of FOV
 
   // Use the shorter viewport dimension's FOV so rendering depth matches the TopBar display.
   $: minDimFov = H > 0 ? (fov * Math.min(W, H)) / H : fov
 
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
+    return Math.min(14, Math.max(5, MAG_LIMIT_INTERCEPT - MAG_LIMIT_SLOPE * Math.log2(fovDeg)))
   }
 
   // ── Solar system ──────────────────────────────────────────────────────────────

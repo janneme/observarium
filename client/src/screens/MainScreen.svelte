@@ -208,15 +208,42 @@
     else if (origin === 'finder') finderViewActive.set(true)
   }
 
-  // Must stay in sync with adaptiveMagLimit in SkyCanvas (same FOV_MAG5=120, FOV_MAG14=2 anchors).
-  // Ceiling ensures loaded ≥ rendered for every FOV value.
-  function fovToMagLimit(f) {
-    return Math.min(14, Math.ceil(Math.max(5, 5 + (9 * Math.log2(120 / f)) / Math.log2(60))))
-  }
+  // Least-squares fit (in log2(FOV) space) through three real-world
+  // reference points rather than a simple two-point anchor: naked eye
+  // (120° → mag 5.5), an 8x50 finder (7.5° → mag 10, realistic dark-sky
+  // limit for a 50mm aperture), and a 6" scope at 30x with a 60°-apparent
+  // eyepiece (750mm/25mm → 2° FOV → mag 13). The three points aren't
+  // exactly colinear in log2(FOV) (slope -1.125 mag/octave from 120°→7.5°
+  // vs -1.573 mag/octave from 7.5°→2°), so this single line doesn't hit any
+  // of them exactly - closest miss is +0.37 mag at the finder point - but it
+  // stays within ~0.4 mag of all three, which was judged an acceptable
+  // trade for keeping one simple formula instead of a piecewise one.
+  // Must stay in sync with the same formula in SkyCanvas/FinderPanel/
+  // FindingPathsScreen/stores/ui.js (each keeps its own local copy).
+  const MAG_LIMIT_INTERCEPT = 13.9967 // mag at fov=1° (log2(1)=0)
+  const MAG_LIMIT_SLOPE = 1.24749 // mag lost per doubling of FOV
 
   function adaptiveMagLimit(f) {
-    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(120 / f)) / Math.log2(60)))
+    return Math.min(14, Math.max(5, MAG_LIMIT_INTERCEPT - MAG_LIMIT_SLOPE * Math.log2(f)))
   }
+
+  // Fetch depth for loadObjects() below - includes sky pollution (not just
+  // render-time mainMagLimit did before) so a degraded sky-quality setting
+  // also reduces how much gets fetched/parsed, not just how much gets
+  // drawn afterward; still ceiling-rounded so loaded ≥ rendered for every
+  // FOV value.
+  function fovToMagLimit(f, pollution) {
+    return Math.min(14, Math.ceil(applySkyPollution(adaptiveMagLimit(f), pollution)))
+  }
+
+  // How far past the visible viewport loadObjects() fetches, as a multiple
+  // of the current fov - pan-ahead headroom so a small pan doesn't need an
+  // immediate refetch. Was 1.5 (a ~9x-visible-area buffer, both RA and Dec
+  // margins); tightened to 1.0 (~4x) since the wider buffer's fetch/parse
+  // cost was the real driver behind multi-second stalls on slow devices at
+  // shallow FOV in dense fields, not per-frame draw cost (SkyCanvas already
+  // culls to mainMagLimit regardless of how much extra was fetched).
+  const PAN_AHEAD_MARGIN_MULTIPLIER = 1.0
 
   function computeViewportMagRange(objs, magLimit, centerRa, centerDec, hFovDeg, vFovDeg) {
     let min = Infinity,
@@ -241,7 +268,7 @@
     if (fetching) return
     fetching = true
     currentLoadPromise = (async () => {
-      const margin = fov * 1.5
+      const margin = fov * PAN_AHEAD_MARGIN_MULTIPLIER
       // Near the celestial poles, cos(dec) → 0, so a fixed RA margin covers an
       // ever-shrinking sliver of the actual visible sky — stars just outside
       // that narrow RA window get excluded even though they're angularly close
@@ -253,13 +280,13 @@
         ra0 + raMargin,
         dec0 - margin,
         dec0 + margin,
-        fovToMagLimit(minDimFov),
+        fovToMagLimit(minDimFov, $skyPollution),
       )
       loadRa0 = ra0
       loadDec0 = dec0
       loadMargin = margin
       loadRaMargin = raMargin
-      loadMagLimit = fovToMagLimit(minDimFov)
+      loadMagLimit = fovToMagLimit(minDimFov, $skyPollution)
     })()
     await currentLoadPromise
     fetching = false
@@ -293,8 +320,8 @@
     if (
       dRa > loadRaMargin * 0.5 ||
       dDec > loadMargin * 0.5 ||
-      fov > loadMargin / 1.5 ||
-      fovToMagLimit(minDimFov) > loadMagLimit
+      fov > loadMargin / PAN_AHEAD_MARGIN_MULTIPLIER ||
+      fovToMagLimit(minDimFov, $skyPollution) > loadMagLimit
     ) {
       loadObjects()
     }
@@ -530,7 +557,7 @@
       loupeFov = fov / 5
       loupeRa0 = centRa
       loupeDec0 = centDec
-      loupeMagLim = applySkyPollution(fovToMagLimit(fov), $skyPollution)
+      loupeMagLim = fovToMagLimit(fov, $skyPollution)
       // Loupe needs its own tappable candidates for solar-system bodies —
       // `visibleObjects` only holds the star/DSO catalog, so without this a
       // planet among the ambiguous hits could never be selected in the

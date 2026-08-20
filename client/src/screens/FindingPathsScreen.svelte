@@ -41,10 +41,10 @@
   // Same generic FOV→limiting-magnitude formula as SkyCanvas's own default
   // (duplicated component-local there too — see its comment) — needed here
   // so the "Sky pollution" reduction can be applied on top of it.
-  const FOV_MAG5 = 120
-  const FOV_MAG14 = 2
+  const MAG_LIMIT_INTERCEPT = 13.9967 // mag at fov=1° (log2(1)=0)
+  const MAG_LIMIT_SLOPE = 1.24749 // mag lost per doubling of FOV
   function adaptiveMagLimit(fovDeg) {
-    return Math.min(14, Math.max(5, 5 + (9 * Math.log2(FOV_MAG5 / fovDeg)) / Math.log2(FOV_MAG5 / FOV_MAG14)))
+    return Math.min(14, Math.max(5, MAG_LIMIT_INTERCEPT - MAG_LIMIT_SLOPE * Math.log2(fovDeg)))
   }
 
   // RA degrees needed to cover an angular radius at a given declination - a

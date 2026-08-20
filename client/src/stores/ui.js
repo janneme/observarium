@@ -114,13 +114,13 @@ const NAKED_EYE_MAX_MAG = 2.5 // pollution=100: big-city naked-eye limit
 // MainScreen (each keeps its own local copy - see comments there) - used
 // here only to compute the finder view's theoretical limit for the default
 // below, not for any actual rendering decision.
-const _FOV_MAG5 = 120
-const _FOV_MAG14 = 2
+const _MAG_LIMIT_INTERCEPT = 13.9967 // mag at fov=1° (log2(1)=0)
+const _MAG_LIMIT_SLOPE = 1.24749 // mag lost per doubling of FOV
 function _adaptiveMagLimit(fovDeg) {
-  return Math.min(14, Math.max(5, 5 + (9 * Math.log2(_FOV_MAG5 / fovDeg)) / Math.log2(_FOV_MAG5 / _FOV_MAG14)))
+  return Math.min(14, Math.max(5, _MAG_LIMIT_INTERCEPT - _MAG_LIMIT_SLOPE * Math.log2(fovDeg)))
 }
 
-// Default chosen so the finder view (whose own theoretical limit is ~11.1)
+// Default chosen so the finder view (whose own theoretical limit is ~10.37)
 // renders down to exactly mag 9 out of the box.
 const SKY_POLLUTION_DEFAULT_TARGET_MAG = 9
 export const DEFAULT_SKY_POLLUTION =
